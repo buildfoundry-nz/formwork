@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-go-static-analysis.sh (WI-58 #7).
+#
+# Runs `staticcheck -tags=integration ./...` (pinned v0.7.0) against the
+# freightworks Go module and fails on any S/SA/ST-class finding (or any
+# non-empty output). It also draws an environment-vs-verdict split: a
+# PDFium-unresolvable environment SKIPs locally but hard-fails (exit 2) under
+# CHECK_GO_STATICCHECK_FORCE=1, and a runner-out-of-disk failure is a broken
+# gate (exit 2), never a fabricated lint verdict.
+#
+# This fundamentally runs the staticcheck binary (fetched from the network,
+# pinned) against a compiling cgo module — an external tool, not reproducible
+# in a self-contained fixture — so it maps to the `command` escape hatch.
+# params.cmd is the real gate; expect.exit 0.
+rules:
+  - id: m06-go-staticcheck
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-go-static-analysis.sh — the validating
+      target's own gate script, which this corpus does not carry and cannot:
+      it is written in that tree's vocabulary, and this repository tracks no
+      shell scripts at all. In a fixture tree bash would exit 127 in the fire
+      tree and the pass tree alike, so the fire proof would be satisfied by
+      the detector NOT EXISTING and the pass proof would report that same
+      missing-detector exit as a finding. What the port asserts here is the
+      SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-go-static-analysis.sh
+      expect:
+        exit: 0
+    cure: "Fix the reported staticcheck S/SA/ST finding (SA1019 deprecated-API usage included — the canonical staticcheck.conf enables every check). Do not disable a check to pass; correct the code."
+    origin: scripts/check-go-static-analysis.sh

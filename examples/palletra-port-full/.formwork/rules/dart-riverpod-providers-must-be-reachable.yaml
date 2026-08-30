@@ -1,0 +1,66 @@
+# Ported from Palletra scripts/check-dart-riverpod-providers-must-be-reachable.sh (#5348).
+#
+# Dead-symbol reachability. The .sh delegates to a Dart-aware python scanner
+# (scripts/dev/find-dead-dart-symbols.py) that flags two symbol classes; this
+# port faithfully reproduces the FIRST, cleanest, mechanically-decidable class:
+# a @riverpod provider — keyed on the generated `final <name>Provider`
+# identifier in the sibling *.g.dart (riverpod_generator rewrites the annotated
+# symbol's name, so the .g.dart is the source of truth) — is DEAD iff that
+# identifier appears in no non-test, non-generated Dart file. (The second class,
+# dead public *Repository methods under **/data/**, is a documented partial
+# gap of this port; see skipped notes.) There is no declarative formwork type
+# for "identifier declared in a generated file, referenced nowhere live", so
+# this is the command escape hatch: a self-contained python that harvests the
+# generated provider identifiers and proves each has a live consumer. Scope-
+# level finding; fire-1 has a dead provider, pass-1 has every provider used.
+rules:
+  - id: dart-riverpod-providers-must-be-reachable
+    type: command
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import os, re, sys
+          skip_dirs = {".dart_tool", "build", "node_modules", ".git"}
+          def is_test(p):
+              return "/test/" in p or "/integration_test/" in p or p.endswith("_test.dart")
+          providers = {}   # name -> declaring .g.dart path
+          live_files = []  # (path, text) for non-generated, non-test dart
+          for root, dirs, files in os.walk("."):
+              dirs[:] = [d for d in dirs if d not in skip_dirs]
+              for fn in files:
+                  if not fn.endswith(".dart"):
+                      continue
+                  path = os.path.join(root, fn)
+                  try:
+                      text = open(path, errors="ignore").read()
+                  except OSError:
+                      continue
+                  if fn.endswith(".g.dart"):
+                      for m in re.finditer(r"final\s+(\w+Provider)\s*=", text):
+                          providers[m.group(1)] = path
+                      continue
+                  if fn.endswith(".freezed.dart"):
+                      continue
+                  if is_test(path):
+                      continue
+                  live_files.append((path, text))
+          dead = []
+          for name in sorted(providers):
+              if not any(re.search(r"\b%s\b" % re.escape(name), t) for _, t in live_files):
+                  dead.append((name, providers[name]))
+          if dead:
+              for name, path in dead:
+                  sys.stderr.write("dead @riverpod provider %s (declared in %s, no live consumer)\n" % (name, path))
+              sys.exit(1)
+          sys.exit(0)
+      expect:
+        exit: 0
+    cure: "Delete the dead provider and its @riverpod source function (and re-run build_runner to drop the stale *.g.dart entry), or wire it into a live consumer (ref.watch/read) so it is actually reachable."
+    origin: scripts/check-dart-riverpod-providers-must-be-reachable.sh

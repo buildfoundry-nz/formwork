@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-integration-tests-forbid-mocked-wire-providers.sh
+# (Phase 5 re-audit T2.1 / #6750). Integration tests must exercise the real wire
+# (GCIP auth + Go core-api over HTTP + AlloyDB); mocking the Repository / ApiClient /
+# Dio providers, swapping Dio's adapter, or planting a test-local Fake/Stub/Mock/
+# DataOnly Notifier turns the test into a widget test in disguise and masks
+# FE<->BE contract drift. The shipped gate's five pcre2 alternatives (M1-M5) are
+# all plain regex (no lookaround/backrefs), so they fold into one RE2 forbidden
+# pattern:
+#   M1 <name>Repository[Provider].overrideWith[Value]
+#   M2 apiClient / *ApiClient*Provider .overrideWith[Value]
+#   M3 class [_](DataOnly|Fake|Stub|Mock)* extends *Notifier
+#   M4 httpClientProvider / *HttpClientProvider .overrideWith[Value]
+#   M5 .httpClientAdapter =
+# APPROXIMATION: the shipped gate exempts a hit when the PRECEDING line carries a
+# bespoke `// integration-test: read-only fixture` comment. formwork markers are
+# same-line `formwork:allow`, not a preceding-line custom string, so that exact
+# carve-out is not reproduced; `except.marker: true` keeps a visible, lint-
+# enumerated escape hatch in its place (see notes).
+rules:
+  - id: integration-tests-forbid-mocked-wire-providers
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/integration_test/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+        - "**/*.pbgrpc.dart"
+    except:
+      marker: true
+    params:
+      pattern: '[A-Za-z_][A-Za-z0-9_]*Repository(Provider)?(\([^)]*\))?\.overrideWith(Value)?|(wireClientProvider|[A-Za-z_]*ApiClient[A-Za-z]*Provider)\.overrideWith(Value)?|class\s+_?(DataOnly|Fake|Stub|Mock)[A-Za-z0-9_]*\s+extends\s+[A-Za-z_][A-Za-z0-9_]*Notifier\b|(httpClientProvider|[A-Za-z_][A-Za-z0-9_]*HttpClientProvider)\.overrideWith(Value)?|\.httpClientAdapter\s*='
+    cure: "Hit the real wire — integration tests run against the dev core-api + AlloyDB and exercise the actual contract; do not override Repository/ApiClient/Dio providers, swap the Dio adapter, or plant a Fake/Stub/Mock/DataOnly Notifier (#6750)."
+    origin: scripts/check-integration-tests-forbid-mocked-wire-providers.sh

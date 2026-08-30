@@ -1,0 +1,46 @@
+# Ported from Palletra scripts/check-no-fe-backend-section-policy-drift.sh (audit L4 / B1).
+# FP FIX: two scope divergences made the disjoint set-relation fire on clean
+# develop.
+#   1. The .sh scans ONLY frontend/lib + packages/*/lib for Dart and derives its
+#      canonical code set from PRODUCTION Go (go_src_files excludes *_test.go).
+#      The port scanned `packages/**/*.dart` (pulling in packages/*/test/** — e.g.
+#      plot_sidebar_harness.dart's `case 'shelving':`, a test fixture) and all
+#      approve/*.go incl. _test.go (which contributed junk codes a/b/c). A is now
+#      scoped to packages/*/lib + frontend/lib; _test.go/_test.dart are excluded.
+#   2. The .sh strips comment lines (strip_comment_hits) before matching; the port
+#      matched inside `///` doc comments (toolpanel_providers.dart's
+#      `activeTab === "ribs"`, partition_height_item.dart's `== 'partition_height'`).
+#      preprocess: decomment-go blanks // and /* */ comments (Dart shares Go's
+#      comment syntax) so those doc-comment literals no longer enter set A, while
+#      real `case '<code>':` / `== '<code>'` code branches survive and still fire.
+rules:
+  - id: no-fe-backend-section-policy-drift
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+        - "freightworks/services/core-api/internal/workflow/approve/**/*.go"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.gr.dart"
+        - "**/generated/**"
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      a:
+        files:
+          - "packages/*/lib/**/*.dart"
+          - "frontend/lib/**/*.dart"
+        pattern: '(?:case |==\s*|!=\s*|\.contains\()[''"]([a-z_]+)[''"]'
+        group: 1
+      b:
+        files:
+          - "freightworks/services/core-api/internal/workflow/approve/**/*.go"
+        pattern: 'SectionTag:\s*"([a-z_]+)"'
+        group: 1
+      relation: disjoint
+    cure: "Do not branch the FE on a canonical segment_code. Read section.identificationEndpoint / canAuthorize / reason from the server-provided WorkflowPagePanel and branch on those — audit B1."
+    origin: scripts/check-no-fe-backend-section-policy-drift.sh

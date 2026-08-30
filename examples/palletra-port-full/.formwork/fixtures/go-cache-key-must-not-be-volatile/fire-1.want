@@ -1,0 +1,3 @@
+# Scope-level: the detector echoes the offending `grep -n` hit, and the volatile
+# ${{ github.sha }} in the restore key is the whole finding.
+- key: go-checks-${{ runner.os }}-${{ github.sha }}

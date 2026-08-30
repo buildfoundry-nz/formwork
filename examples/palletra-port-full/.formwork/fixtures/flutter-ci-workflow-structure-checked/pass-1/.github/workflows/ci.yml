@@ -1,0 +1,32 @@
+name: CI
+on:
+  pull_request:
+jobs:
+  flutter-analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: bash scripts/check-dart-analyzer-clean.sh
+      - run: bash scripts/check-dart-generated-code-fresh.sh
+      - run: flutter analyze
+  flutter-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: dart run melos exec --include-dependents --diff=origin/develop -- flutter test
+      - run: bash scripts/check-flutter-tests-compile.sh
+  flutter-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - run: flutter build web --release
+  go-test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: go test ./...

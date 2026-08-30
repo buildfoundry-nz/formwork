@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-routes-goroutine-requires-async-marker.sh (#2000).
+# On Cloud Run a goroutine spawned to outlive the request has NO delivery
+# guarantee (the #4234 data-loss shape). Every goroutine-LAUNCH statement in a
+# non-test routes/ file must carry an `// async-ok(<category>): <reason>` marker
+# classifying its durability. The marker IS the allowlist. Three launch shapes
+# are matched at statement position (line-start after indent, OR right after a
+# `{`/`;` separator):
+#   - the `go` keyword:  `go func` / `go <recv>.method(` / `go <pkg>.Func(`
+#   - errgroup-style:    `<grp>.Go(func()…)`
+#   - worker-pool-style: `<pool>.Submit(func()…)`
+#
+# FALSE-POSITIVE FIX: the .sh honours the async-ok marker on the launch line
+# itself OR anywhere in the contiguous `//` comment block immediately ABOVE the
+# launch (a blank line or code breaks adjacency). The original port was per-line
+# and recognized ONLY the inline form, so on clean develop it fired on every
+# routes goroutine that carries its marker on the line(s) above — the dominant
+# committed shape (gofmt pushes the marker into the preceding comment block, e.g.
+# mail_intake.go / projects_recycle_bitmaps.go). That is a false positive on
+# correctly-classified code.
+#
+# The rule now runs `multiline: true` with `syntax: regexp2` over whole-file
+# content. A launch statement fires only when NEITHER (a) the launch line carries
+# an inline `async-ok(` marker — the `(?![^\n]*async-ok\()` lookahead — NOR (b)
+# the contiguous `//` comment block immediately above it contains one — the
+# variable-length negative lookbehind, which matches a run of comment lines ending
+# at the launch line with at least one `async-ok(` among them. This reproduces the
+# .sh's above-marker allowance while STILL catching the named regression: a NEW
+# unmarked goroutine (no inline marker, no marker comment block above) fires.
+rules:
+  - id: routes-goroutine-requires-async-marker
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      syntax: regexp2
+      multiline: true
+      pattern: '(?<=^|\n)(?<!\n(?:[ \t]*//[^\n]*\n)*[ \t]*//[^\n]*async-ok\([^\n]*\n(?:[ \t]*//[^\n]*\n)*)(?![^\n]*async-ok\()(?:[ \t]*|[^\n]*[{;][ \t]*)(?:go[ \t]+(?:func|[A-Za-z_][A-Za-z0-9_.]*\()|[A-Za-z_][A-Za-z0-9_.]*\.(?:Go|Submit)\()'
+    cure: "Classify the goroutine and add a marker on the launch line or in the contiguous comment block immediately above it — // async-ok(within-request): joined by wg.Wait before the response | // async-ok(best-effort): loss is a harmless no-op — <why> | // async-ok(reaper-recovered): swept by <recovery path> — <why>. If none fits, the work is durable and must move to Cloud Tasks / a swept table, not a goroutine (#2000)."
+    origin: scripts/check-routes-goroutine-requires-async-marker.sh

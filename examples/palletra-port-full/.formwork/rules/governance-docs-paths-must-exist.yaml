@@ -1,0 +1,46 @@
+# Ported from Palletra scripts/check-governance-docs-paths-must-exist.sh (#6131) —
+# the doc-honesty gate's sibling for the NORMATIVE contributor guides
+# (docs/TDD.md, docs/flutter-standards.md). Every repo-source path token a
+# normative doc names must exist on disk.
+#
+# FP FIX: the .sh captures a path token INCLUDING glob/placeholder chars
+# (* < > { } : %), then walks it segment-by-segment and TRIMS to the longest
+# CONCRETE prefix — it stops at the first segment carrying a placeholder and
+# drops that (partial) segment entirely, then SKIPS the result if it is a bare
+# top-level dir (no "/"). So `packages/feature_<name>/lib/data/total.dart` trims
+# to bare `packages` → skipped; `scripts/check-*.sh` trims to `scripts` →
+# skipped; `frontend/lib/**` trims to `frontend/lib` (a real dir) → OK. The
+# port's char-class stopped the capture MID-segment at the placeholder, yielding
+# the partial segments `packages/feature_` and `scripts/check-` — real dead
+# paths that fired on clean develop (docs/TDD.md's `<name>` template paths).
+#
+# doc-path-exists stats capture-group 1 with Go RE2 (no lookahead/atomic). The
+# pattern therefore captures group 1 LAZILY (`(?:/seg)+?`, ≥1 segment so a bare
+# dir never matches — the .sh's skip-the-bare-dir arm) and then MANDATORILY
+# consumes one of: a `/partial-segment` that carries a placeholder (so a
+# placeholder immediately after a slash, like `/**`, trims the prefix to the
+# slash boundary — `frontend/lib`), a real non-path boundary char, or end of
+# line. Because group 1 is lazy, it grows only until that boundary is reachable:
+# a mid-segment placeholder (`feature_<name>`) leaves no slash-led placeholder
+# and no boundary before the `<`, so the token simply does NOT match there (no
+# finding) — exactly the .sh's "trim to bare `packages`, then skip". A fully
+# concrete path grows group 1 to the real boundary and validates the WHOLE path
+# including the leaf, so a genuine ghost like `packages/ghostdir/x.dart` (dir
+# present, ghostdir absent) still fires — the rule keeps its teeth.
+#
+# DIVERGENCE (noted): a mid-segment-placeholder token is dropped by not matching
+# rather than by matching-then-trimming-to-a-bare-dir; both yield no finding, so
+# the observable behavior is identical to the .sh (which skips the trimmed bare
+# dir).
+rules:
+  - id: governance-docs-paths-must-exist
+    type: doc-path-exists
+    severity: error
+    scope:
+      include:
+        - "docs/TDD.md"
+        - "docs/flutter-standards.md"
+    params:
+      pattern: '((?:frontend|packages|freightworks|scripts|docs|schema|shared|client|tests|\.github|\.husky|\.claude)(?:/[A-Za-z0-9_.-]+)+?)(?:/[A-Za-z0-9_.-]*[*<>{}:%]|[^A-Za-z0-9_.*<>{}:%/-]|$)'
+    cure: "Rewrite the normative doc to the real location. A ghost path in a guide sends contributors to grep the wrong subtree (the #6131 trap: FE code is in packages/, NOT frontend/lib/features; the React client/src tree is DELETED). To cite a moved/deleted location, describe it — do not write the dead literal, and do not create the directory to satisfy the gate."
+    origin: scripts/check-governance-docs-paths-must-exist.sh

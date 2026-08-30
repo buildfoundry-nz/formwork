@@ -1,0 +1,9 @@
+name: patrol-tests
+on:
+  pull_request:
+    paths: ['scripts/ci/**']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: go test ./scripts/ci/...

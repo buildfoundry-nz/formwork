@@ -1,0 +1,34 @@
+# Ported from Palletra scripts/check-proto-deprecated-field-has-anchor-comment.sh
+# (sweep-15 #23 gate). Every `[deprecated = true]` field option in
+# schema/proto/**.proto must carry an anchor in its comment: a successor
+# ("replaced by / superseded by / use the <x> field / moved to / canonical
+# column") or a concrete removal ("removed in <commit-sha>"). Without one, a
+# deprecated field is a permanent zombie surface — bindings keep generating,
+# consumers keep being tempted — violating feedback-no-deferral.
+#
+# Ported as pair-consistency: a proto file with a `[deprecated = true]` field
+# (trigger) MUST carry an anchor phrase (requires). preprocess: raw — the anchor
+# lives in a `//` comment, so it must NOT be stripped (decommenting would erase
+# every anchor and fail everything).
+#
+# NOTE (fidelity): the .sh binds each deprecated field to the CONTIGUOUS comment
+# block immediately above it, and rejects vague "removed in the next bump"
+# rackings. pair-consistency couples deprecated <-> anchor at file grain: it
+# catches the named regression (a deprecated field with no anchor anywhere) but
+# not a multi-field file where one field is anchored and another is not. The
+# requires pattern accepts only concrete forms (successor phrases, or "removed
+# in <sha>"), so a vague "removed in next bump" comment still fires — the same
+# reject the .sh makes, incidentally preserved.
+rules:
+  - id: proto-deprecated-field-has-anchor-comment
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "schema/proto/**/*.proto"
+    preprocess: raw
+    params:
+      trigger: '\[deprecated\s*=\s*true\]'
+      requires: '(?i)(replaced\s+(by|with)|superseded\s+by|removed\s+in\s+(commit\s+)?[0-9a-f]{7,}|\buse\s+the\s+\w+\s+(field|column|message)|moved\s+to\s+\w+|canonical\s+(column|field|model))'
+    cure: "Give every [deprecated = true] field a concrete anchor in its comment: `// Deprecated — superseded by <successor>` or `// Deprecated — removed in <commit-sha>` (sweep-15 #23)."
+    origin: scripts/check-proto-deprecated-field-has-anchor-comment.sh

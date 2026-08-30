@@ -1,0 +1,1 @@
+- FAIL long-running migration body without backfill sentinel: freightworks/services/core-api/migrations/0066_backfill_areas.up.sql

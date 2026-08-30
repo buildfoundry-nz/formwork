@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-sku-link-columns-retired.sh (#3370).
+# No production Go SQL may reference the retired columns option_map or
+# default_priced_line_id; post-#3370 readers reconstruct the legacy shapes via
+# the sanctioned SQL functions palletra.line_variant_map /
+# palletra.item_default_rate_line. Full-line // comments are exempt
+# (decomment-go), *_test.go and gatetests are excluded.
+#
+# RE2 approximation of the .sh's strip-then-match: the .sh removes the sanctioned
+# function names, THEN looks for a bare column token. RE2 has no lookbehind, so
+# instead \b anchors the token: `\boption_map` cannot match inside
+# `line_variant_map` (the char before is `_`, a word char, so no boundary), and
+# `default_priced_line_id` is not a substring of `item_default_rate_line` at
+# all. camelCase in-memory identifiers (optionMap, ComposeVariantMap) and the
+# GetDefaultRatedSkuId getter never match (no underscore / wrong case).
+rules:
+  - id: sku-link-columns-retired
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/gatetests/**"
+    preprocess: decomment-go
+    params:
+      pattern: '\b(option_map|default_priced_line_id)\b'
+    cure: "Read the bank via palletra.line_variant_map(item_id) and the default via palletra.item_default_rate_line(item_id); never reference the retired columns (#3370)."
+    origin: scripts/check-sku-link-columns-retired.sh

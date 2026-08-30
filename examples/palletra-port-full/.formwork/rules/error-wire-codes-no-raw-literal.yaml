@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-error-wire-codes-no-raw-literal.sh (#1878).
+# The apiv1.ErrorCode enum is the single source of truth for BE<->FE wire codes;
+# every emission derives its wire string from the enum (apierr.Wire /
+# shared.WriteError). A wire code that is part of the enum must NEVER appear as a
+# raw quoted string literal in production code — a raw literal is exactly the
+# drift the epic closes (rename/mistype on either side silently drops the copy).
+#
+# Ported as a forbidden-pattern over the PRODUCTION Go surface, banning the wire
+# codes as quoted literals. Comment lines are exempt via decomment-go (matching
+# the .sh's pure-comment-line skip); the definition site internal/apierr/apierr.go
+# and all *_test.go are scope-excluded.
+#
+# DIVERGENCE (noted): (1) the .sh DERIVES the banned list from error_code.proto
+# so a new value is covered automatically; formwork's forbidden-pattern cannot
+# read a sibling file to build its pattern, so the codes are enumerated inline —
+# a new enum value needs a one-line pattern edit (reviewed change to this rule).
+# (2) The .sh also scans production Dart (packages/**, minus error_code.dart);
+# that half needs a decomment-dart preprocessor formwork does not yet ship, so
+# only the Go half is ported here. Both are faithful restatements of the same
+# ban for their surface.
+rules:
+  - id: error-wire-codes-no-raw-literal
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/apierr/apierr.go"
+    preprocess: decomment-go
+    params:
+      pattern: '"(revision_conflict|capability_disabled|resource_locked|scale_pending|session_closed|invitee_email_mismatch|shelving_type_required)"'
+    cure: "Emit via shared.WriteError(apierr.<Code>) / apierr.Wire (Go) and compare the typed ErrorCode; never free-type the wire string (#1878)."
+    origin: scripts/check-error-wire-codes-no-raw-literal.sh

@@ -1,0 +1,2 @@
+# Scope-level: the 5xx boundary is re-encoded in a second middleware file, outside IsFailureStatus.
+- freightworks/services/core-api/middleware/tracing.go: if status >= http.StatusInternalServerError {

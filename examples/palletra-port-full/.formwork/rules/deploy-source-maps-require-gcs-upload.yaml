@@ -1,0 +1,43 @@
+rules:
+  # Port of scripts/check-deploy-source-maps-require-gcs-upload.sh
+  # (epic #5848 C3-6). A deploy workflow that builds the Flutter web bundle with
+  # `--source-maps` MUST upload the map to GCS (a `gcloud storage cp`/`gsutil cp`
+  # whose destination is a gs://...main.dart.js.map object); a swallowed upload
+  # strands every stack trace from that build.
+  #
+  # FP FIX (was: pair-consistency with a LINE-based `requires` regex
+  # `(gcloud storage cp|gsutil cp)\b.*gs://\S*main\.dart\.js\.map`). Two reasons
+  # deploy-dev.yml false-fired:
+  #   (a) the real upload splits the verb and its gs:// destination across a
+  #       `\`-continued line — the .sh joins continuations before matching, but a
+  #       per-line requires never sees them on one line; and
+  #   (b) the gs:// path carries `${{ github.sha }}` (embedded spaces), which
+  #       `\S*` cannot cross — the .sh uses `[^;&|=]*`, which tolerates spaces.
+  # Recast as a linear-RE2 forbidden-pattern: `--source-maps` is the line-anchored
+  # trigger and the coupled upload is a whole-file require_absent (fire iff the
+  # upload is missing), tolerating the continuation and the ${{ }} spaces via
+  # [^;&|=]. Tooth (b) of the .sh (the continue-on-error ban) remains out of scope
+  # as before. Silent on develop's deploy-dev.yml, still fires on the fire-1
+  # fixture (no upload).
+  - id: deploy-source-maps-require-gcs-upload
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/*.yml"
+        - ".github/workflows/*.yaml"
+    params:
+      # Origin (tooth a): a --source-maps workflow must contain a coupled GCS upload
+      # of the map (an upload verb whose gs://…main.dart.js.map is the destination) —
+      # an order-independent whole-file presence check. `--source-maps` is the
+      # line-anchored trigger (anchors on that line = fixture want-marker); the upload
+      # command is a whole-file require_absent (fire iff the upload is missing). Linear
+      # RE2 replaces the regexp2 forward-only `(?![\s\S]*…)` lookahead; require_absent
+      # is whole-file, matching the origin's order-independent grep, and `[^;&|=]`
+      # tolerates the ${{ }} and the `\`-continuation the origin joined.
+      prefilter: '--source-maps'
+      pattern: '--source-maps'
+      require_absent:
+        - '(?:gcloud storage (?:cp|rsync)|gsutil(?: -m)? (?:cp|rsync))[^;&|=]*gs://[^;&|=]*main\.dart\.js\.map'
+    cure: "A --source-maps build must upload its map: add a `gcloud storage cp build/web/main.dart.js.map gs://<bucket>/<build>/main.dart.js.map` step, and never gate the deploy behind continue-on-error (a swallowed upload strands every stack from that build)."
+    origin: scripts/check-deploy-source-maps-require-gcs-upload.sh

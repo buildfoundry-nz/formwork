@@ -1,0 +1,179 @@
+name: CI
+
+# THE MERGE GATE IS A REPOSITORY SETTING, AND THE TREE CANNOT TURN IT ON.
+# Everything below reports; nothing below refuses. What makes a red merge
+# impossible is a ruleset on main, and no workflow can create one — GITHUB_TOKEN
+# carries no `administration` scope, so a workflow cannot even READ branch
+# protection, let alone set it. What the tree can hold is the instruction, and
+# it does: the command below, and the tests that keep it in step with the jobs.
+#
+# THE DECISION, AND ITS REVERSAL (#281). The private repository this tree was
+# cut from ran with no protection at all — `branches/main/protection` answered
+# 404 and `rulesets` answered `[]` — and that was a deliberate call: with a
+# small team, a required-checks ruleset makes a flaky darwin leg a hard block
+# rather than a re-run. It cost what it was always going to cost. PR #254 was
+# merged eight seconds after `verify (darwin)` reported FAILURE and ninety-six
+# after `verify (linux)` did, on a head whose internal/publication test was
+# failing on both legs; main went red and stayed red for 34 minutes until
+# hotfix #257. Nothing stopped it, and nothing here could.
+#
+# Going public reverses it, because the argument for leaving it off does not
+# survive the audience change: a public repository takes pull requests from
+# people who are not on the team and hold no write access, and "read the checks
+# before merging" is a social mitigation that only binds people who are inside
+# the social group. main now requires a PULL REQUEST, APPROVED BY A CODE OWNER,
+# with all three contexts green.
+#
+# The three contexts main's ruleset must require are exactly:
+#
+#     verify (linux)
+#     verify (darwin)
+#     release-config (validate build)
+#
+# and the whole gate is one call, made by someone holding admin:
+#
+#   gh api -X POST repos/buildfoundry-nz/formwork/rulesets --input - <<'JSON'
+#   {
+#     "name": "main",
+#     "target": "branch",
+#     "enforcement": "active",
+#     "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+#     "bypass_actors": [],
+#     "rules": [
+#       { "type": "deletion" },
+#       { "type": "non_fast_forward" },
+#       { "type": "pull_request",
+#         "parameters": {
+#           "required_approving_review_count": 1,
+#           "require_code_owner_review": true,
+#           "dismiss_stale_reviews_on_push": true,
+#           "require_last_push_approval": false,
+#           "required_review_thread_resolution": false,
+#           "allowed_merge_methods": ["merge", "squash", "rebase"]
+#         } },
+#       { "type": "required_status_checks",
+#         "parameters": {
+#           "strict_required_status_checks_policy": true,
+#           "do_not_enforce_on_create": false,
+#           "required_status_checks": [
+#             { "context": "verify (linux)" },
+#             { "context": "verify (darwin)" },
+#             { "context": "release-config (validate build)" }
+#           ]
+#         } }
+#     ]
+#   }
+#   JSON
+#
+# A JSON BODY AND NOT `gh api -f/-F`, AND THAT IS NOT A STYLE CHOICE. What
+# stood here was the -F form, and it does not work — it was committed as the
+# actionable half of #281 and never run:
+#
+#   Invalid property /bypass_actors: `"[]"` is not of type `array`.
+#   Invalid property /rules/0: data matches no possible input.
+#   ... /rules/1 through /rules/6 ...                            (HTTP 422)
+#
+# `gh`'s bracket syntax appends a NEW array element at every `rules[]`, so two
+# rules written across seven flag lines arrive as seven objects, each holding
+# one fragment of a rule and matching no schema; `bypass_actors=[]` arrives as
+# the two-character string. The JSON above is the body that was actually POSTed
+# to this repository (as `enforcement: disabled`, then deleted) and came back
+# with all three contexts and `require_code_owner_review: true` in place.
+#
+# `require_code_owner_review` resolves against .github/CODEOWNERS, and it is
+# satisfied by nobody on any path that file does not cover — so the two halves
+# are one gate, and internal/repoproof/codeowners_test.go holds the tree half.
+# `bypass_actors=[]` is not decoration: a bypass list containing the admin who
+# created the ruleset reproduces the #254 merge exactly, with a ruleset in place
+# and a green `gh api rulesets` to point at.
+#
+# internal/repoproof/ci_contexts_test.go owns those three strings, fails if this
+# file's jobs stop expanding to exactly them, fails if this file stops
+# triggering on pull_request or on push to main, fails if the command above
+# drifts from the jobs in either direction, and fails if it stops requiring a
+# code-owner-reviewed pull request. So a rename cannot silently unpin the
+# ruleset, and neither can a rewrite of this comment.
+#
+# One more trap, unrelated to protection: `allow_auto_merge` is off by default
+# on a new repository, and with it off `gh pr merge --auto` does not queue
+# behind the checks — it merges immediately. #254 was merged with
+# `autoMergeRequest: null`.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    # NAMED BY PLATFORM, NOT BY RUNNER, so a runner move does not rename the
+    # contexts the ruleset above pins (#117, #207, #281).
+    name: verify (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # LINUX MOVED (#183) — on the CPU symptom, and only that one. On run
+          # 31969746419 internal/rules/sqlparse — the most CPU-bound package in
+          # the suite, since it compiles the PostgreSQL grammar as WASM on
+          # wazero — ran 749s on the GitHub-hosted machine and hit Go's
+          # 11-minute test timeout, against 21s on macos-latest in that same
+          # run and 11.4s/16.4s on the merges either side of it. A red main and
+          # a manual re-run, caused by nothing in the change. It runs in ~13s
+          # here.
+          #
+          # #183 ALSO read that run's module-cache restore failure as this
+          # machine degrading. That half was false when it was written and is
+          # corrected here rather than left to rot: the restore failed
+          # identically on all three jobs across three runner vendors in that
+          # same run, and kept failing on Blacksmith after the move, green runs
+          # included. Its cause was the `toolchain` vs `go` directive collision
+          # fixed in .github/actions/setup-go (#282) — never the machine.
+          #
+          # This label is already proven here: release-config has run on it
+          # with setup-go and cache: true since #181.
+          - platform: linux
+            runner: blacksmith-4vcpu-ubuntu-2404
+          # DARWIN DELIBERATELY STAYS GITHUB-HOSTED. There is no Blacksmith
+          # macOS runner, and the tempting simplification — drop darwin so
+          # everything sits on one runner — is the fail-open this matrix exists
+          # to prevent: GoReleaser publishes darwin tarballs, and a darwin-only
+          # failure must red-gate them rather than ship behind a linux green.
+          # Leaving darwin here is a fine outcome; deleting it is not.
+          - platform: darwin
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/setup-go
+      - name: make verify
+        run: make verify
+
+  release-config:
+    name: release-config (validate build)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/setup-go
+      - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          version: "~> v2"
+          install-only: true
+      - name: goreleaser check
+        run: goreleaser check
+      - name: goreleaser build (snapshot, no publish)
+        run: goreleaser build --snapshot --clean
+      # The stamped-and-trusted assertion is load-bearing (see CLAUDE.md) and
+      # shared with release.yml, which runs it against the real tagged build
+      # before publishing — one command so the two workflows cannot drift.
+      #
+      # That sharing is CHECKED, not assumed:
+      # internal/repoproof/release_stamp_test.go fails any job in either
+      # workflow that runs a goreleaser build or release without also running
+      # this command. Deleting this step used to leave the whole repository
+      # green, with the sentence above still claiming it was here (#281).
+      - name: assert release build is version-stamped and trusted
+        run: go run ./cmd/assert-trusted-stamp

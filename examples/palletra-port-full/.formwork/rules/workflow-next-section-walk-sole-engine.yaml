@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-workflow-next-section-walk-sole-engine.sh (sweep-1 #5 + #1450).
+# progress.UpcomingNavigation is the ONE next-section engine. The deleted legacy
+# page-kind / slots walk symbols must not reappear in any non-test .go under
+# routes/workflow/**. Each file is de-commented first (decomment-go) so a doc
+# comment naming a deleted symbol ("we removed UpcomingStepSectionAfter") is not a
+# live reference and cannot false-positive.
+rules:
+  - id: workflow-next-section-walk-sole-engine
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/workflow/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'composePageKindSteps|deriveNextSectionAndPage\b|collectNextSectionInputs|UpcomingStepSectionAfter|workflowstrategy\.UpcomingSectionAfter|slots\.UpcomingSection\b|slots\.UpcomingMaskAfter\b|deriveNextSectionAndPageBySlots|advanceSlotNextSection'
+    cure: "Advance via the ONE progress engine — progress.UpcomingNavigation / progress.Gather / progress.GatherUsing. The slot is required."
+    origin: scripts/check-workflow-next-section-walk-sole-engine.sh

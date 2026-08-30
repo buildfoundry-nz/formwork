@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-priced-items-embedding-vector-written-every-path.sh
+# (#7401 PH-5 RS-6). platform.priced_lines.embedding vector(768) is the write-time
+# mirror of the gemini-embedding-001 vector the plan side stores; the read-time
+# ratecard matcher's embedding tier cosines an extracted sku's centroid
+# against this column once the exact tiers miss, so a priced_lines row committed
+# with a NULL — or STALE — embedding can never match by similarity: the product is
+# silently mis-priceable and nothing reports the gap. embedding is derived from
+# canonical_label (itself derived from `description`), one link further down
+# the same derivation chain as the #1990 canonical sibling. RULE A: every
+# `INSERT INTO platform.priced_lines` in non-test Go must name `embedding` in its
+# column list.
+#
+# Ported as a sql/statement-predicate: it selects each SQL statement (reassembled
+# from Go string literals) whose text is an INSERT INTO platform.priced_lines and
+# requires the token `embedding`. A statement that omits it yields one finding on
+# the string literal's line. Tests are excluded (a test may seed a partial
+# NULL-embedding row on purpose), matching the .sh's *_test.go skip.
+#
+# DIVERGENCE (noted): (1) the .sh scopes the token to the column list between the
+# table and the first VALUES/SELECT; the predicate requires it anywhere in the
+# selected INSERT — both catch the primary defect (a new INSERT omitting the
+# column) identically. (2) The .sh also carries RULE B (an UPDATE that SETs
+# `canonical_label` must SET `embedding` too); that conditional-UPDATE rule
+# needs a different statement selector, so it is not carried here — RULE A, every
+# write path naming the column, is the load-bearing half this port encodes.
+rules:
+  - id: priced-items-embedding-vector-written-every-path
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      table: 'INSERT\s+INTO\s+platform\.priced_lines'
+      require:
+        - 'embedding'
+    cure: "Name the `embedding` column in the INSERT INTO platform.priced_lines column list and bind the vector from skuextract.EmbedPriceSourceLabels / EmbedNormalizedTexts (fail-closed, before the tx) — a NULL/stale embedding can never match an extracted sku by similarity, so the row is silently mis-priceable (#7401 PH-5 RS-6)."
+    origin: scripts/check-priced-items-embedding-vector-written-every-path.sh

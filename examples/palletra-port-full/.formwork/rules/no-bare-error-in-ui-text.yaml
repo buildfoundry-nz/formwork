@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-no-bare-error-in-ui-text.sh (Phase 5 audit
+# B2). A raw error variable ($err/$error/$exception/$ex/$throwable/$t/$stack,
+# ${err...}, or err.toString()) must not be interpolated inside a Text( string
+# under frontend/lib + packages/*/lib (users must never see Dio envelopes /
+# stack frames — the fix is explainError(err)). The translator file and the
+# observability surfaces are exempt by path.
+# APPROXIMATION: the .sh is a multi-line PCRE2 scan with a balanced-paren Text(
+# context that also spans SnackBar(content: Text( and child: Text(. RE2 is
+# line-oriented and has no balanced-paren support, so this catches the
+# single-line form  Text( ... $err | err.toString() ... )  — the common
+# regression shape. Multi-line SnackBar blocks are not caught. Noted.
+rules:
+  - id: no-bare-error-in-ui-text
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+        - "**/plt_core/lib/network/customer_facing_error.dart"
+        - "**/plt_core/lib/observability/**"
+    params:
+      pattern: 'Text\(.*(\$\{?(error|err|exception|ex|throwable|stack|t)\b|(error|err|exception|ex|throwable|stack|t)\.toString\(\))'
+    cure: "Wrap the error in explainError(err) from packages/plt_core/lib/network/customer_facing_error.dart so users see canonical short copy, not a Dio envelope / stack frame (audit B2)."
+    origin: scripts/check-no-bare-error-in-ui-text.sh

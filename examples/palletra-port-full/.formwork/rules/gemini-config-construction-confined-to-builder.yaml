@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-gemini-config-construction-confined-to-builder.sh.
+# Every Vertex/Gemini call must carry a hard output-token ceiling — an uncapped
+# GenerateContentConfig runs to the model's 65,536-token maximum (the failure
+# that burned a four-figure overnight bill on runaway sku-extraction calls).
+# The .sh has two clauses:
+#   A. a genai.GenerateContentConfig may be CONSTRUCTED only inside the shared
+#      builders in .../internal/gemini — every feature reaches the model through
+#      gemini.Client, inheriting the ceiling by construction. Keyed on the BARE
+#      type token so a `var cfg genai.GenerateContentConfig` / `new(...)`
+#      field-by-field assembly (no brace-literal) is caught too.
+#   B. every config literal in internal/gemini sets MaxOutputTokens to a POSITIVE
+#      value (0 is the unbounded default written out).
+#
+# Ported as a forbidden-pattern of clause A (the structural funnel): the bare
+# `genai.GenerateContentConfig` token is banned everywhere under freightworks
+# EXCEPT the sanctioned gemini home and the *_test.go files (the .sh exempts
+# both). decomment-go drops a Go comment that merely names the type so prose
+# can neither fire nor mask a real construction.
+#
+# DIVERGENCE (noted): clause B (a positive MaxOutputTokens inside the builders)
+# needs balanced-brace literal parsing + a positive-value assertion that no
+# single line-oriented formwork type expresses; it is not ported here. Clause A
+# alone makes an uncapped hand-rolled config path un-introducible outside the
+# one capped home, which is the invariant's spine.
+rules:
+  - id: gemini-config-construction-confined-to-builder
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/internal/gemini/**"
+    preprocess: decomment-go
+    params:
+      pattern: 'genai\.GenerateContentConfig\b'
+    cure: "Reach the model via gemini.Client; never hand-roll a genai.GenerateContentConfig outside .../internal/gemini — it bypasses the MaxOutputTokens ceiling."
+    origin: scripts/check-gemini-config-construction-confined-to-builder.sh

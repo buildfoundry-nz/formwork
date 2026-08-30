@@ -1,0 +1,21 @@
+rules:
+  - id: extracted-facts-revision-marks-superseded
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-extracted-facts-revision-marks-superseded.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include: ["**"]
+    origin: scripts/check-extracted-facts-revision-marks-superseded.sh
+    params:
+      cmd: [bash, scripts/check-extracted-facts-revision-marks-superseded.sh]
+    cure: "Escape-hatch port: runs the original gate scripts/check-extracted-facts-revision-marks-superseded.sh (CI-verified; declarative port pending)."

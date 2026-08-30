@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-page-metric-version-single-source.sh
+# (#3194) Rule C. VALUE-scoped ban: the bare page-metric default literal "v1"
+# assigned (`=`/`:=`) to ANY derivationVersion* identifier (case-insensitive,
+# suffix wildcard) anywhere in non-test freightworks Go, except the two source-of-
+# truth files (parsewrite/persist.go, pdftrace/extractor_layout.go).
+# Distinct-domain tags (foundation-inputs-v1, ...) stay untouched — the value is
+# pinned to bare "v1". Comment-stripped (decomment-go).
+rules:
+  - id: page-metric-computation-version-v1-canonical-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/parsewrite/persist.go"
+        - "**/internal/pdftrace/extractor_layout.go"
+    preprocess: decomment-go
+    params:
+      pattern: '(?i)derivationversion[a-z0-9_]*\s*:?=\s*"v1"'
+    cure: "Reference the single source: parsewrite.DefaultAnalysisVersion. Only persist.go (SoT) and extractor_layout.go (ShapeComputationVersion) may hold a v1 literal."
+    origin: scripts/check-page-metric-version-single-source.sh

@@ -1,0 +1,115 @@
+# A heavy rule may carry no fixtures if it DECLARES why: `fixture_exempt:
+# <reason>`, so the gap is a decision instead of an accident
+# (internal/meta/fixturecoverage.go, #53). #336 is what that gate did with
+# `fixture_exempt: "   "` — three spaces flipped fixture-coverage from FAIL to
+# OK and printed `<id>: fixture-exempt (declared):` on the escape-hatch census,
+# a disclosure line with nothing disclosed.
+#
+# THE OTHER HALF IS ALREADY FIXED, AND THIS IS NOT A SECOND COPY OF IT.
+# internal/config/fixtureexempt.go refuses a content-free declaration at load
+# and exits 2, which reaches every rule file this binary is pointed at as its
+# own configuration. This rule reaches the surface no loader ever opens: a rule
+# file read as GOVERNED CONTENT. A ported corpus under examples/, a vendored
+# subproject, a downstream repository pinning an older binary — nothing parses
+# those as config, and `make check` walks them all. Measured on this tree by
+# planting the value in a real tracked corpus rule file:
+#
+#   examples/palletra-port-full/.formwork/rules/dart-format-clean.yaml
+#       fixture_exempt: "   "
+#   $ make check
+#   formwork: 4/4 rules passed, 0 finding(s)
+#   $ formwork lint -C examples/palletra-port-full
+#   formwork: config: ... rule dart-format-clean: fixture_exempt is "   ",
+#     which declares nothing
+#
+# Two commands, one worktree, one file: refused where it is loaded, invisible
+# where it is only read.
+#
+# SCOPE AND REACH, MEASURED 2026-08-27. scope.include is
+# `**/.formwork/rules/**/*.yaml`, and at this repository's root that is 636
+# tracked files — 633 under examples/, three under internal/*/testdata — of
+# which 68 carry a live `fixture_exempt`. So the class is real data on a real
+# corpus rather than a shape invented for a fixture. The walk prunes
+# `.formwork` ONLY AS A DIRECT CHILD of the walk root (internal/scan,
+# builtinSkipDir, #268), which is what makes the corpus files reachable and
+# this repository's own three rule files — including this one — not. That is
+# the right asymmetry twice over: the rule can fire neither on itself nor on
+# its own fixture trees, and its fixtures put the plant at
+# `examples/<corpus>/.formwork/rules/`, the shape a ported rule is actually
+# written at and the shape the prune does not reach. Ask the engine rather
+# than this comment: `formwork rules-for` on any corpus rule file answers
+# `fixture-exempt-declares-nothing`, and on this file it does not.
+#
+# `multiline: true` IS LOAD-BEARING, NOT A STYLE CHOICE. All 68 live
+# declarations are written as the folded block scalar `fixture_exempt: >-` with
+# the reason on the following lines. Whether such a declaration says anything
+# is a fact about the lines BELOW the key, so a per-line matcher cannot judge
+# it at all — it would hold the quoted form and read every block form as
+# innocent, which is the placebo shape of this rule.
+#
+# `syntax: regexp2` FOLLOWS FROM THAT, and is the only place in this
+# repository's own rules that leaves RE2. The block-scalar test is "no line
+# indented DEEPER THAN THE KEY carries content before the next key", and the
+# key's own indent is not a constant — it is whatever that file writes. Deciding
+# it needs the indent captured and compared against a later position, which is a
+# backreference and a lookahead: RE2 has neither. The alternative was to hardcode
+# the four-space indent all 68 declarations happen to use, which would pass every
+# fixture and silently miss a corpus that nests its rules one level differently.
+# The cost is bounded and paid on purpose: regexp2 backtracks under a 1s timeout
+# that fails the run closed rather than reporting a clean pass (#22), the pattern
+# cannot start matching without the literal `fixture_exempt:`, and scope reaches
+# 636 small YAML files. There is no `prefilter:` for the same reason there is no
+# hardcoded indent — arm 3 of prefilter-load-bearing cannot model a regexp2
+# pattern, so the gate would be resting on a literal it declined to reason about.
+#
+# WHAT IT HOLDS. A `fixture_exempt:` key whose written value carries no
+# content: a quoted scalar of spaces and tabs (`"   "`, `'  '`, `"\t"`,
+# `"\n"` — the two-character escapes only inside DOUBLE quotes, because inside
+# single quotes a backslash is literal and `'\t'` really is a two-character
+# reason), and a block-scalar header (`>`, `|`, with any chomping or explicit
+# indentation indicator) whose body holds no non-blank line before the next
+# key. The second is the 68-file idiom with its reason deleted, and it reads as
+# a declaration to every reader but the parser.
+#
+# WHAT IT DOES NOT HOLD, and the honest reason. A vocabulary net judges bytes,
+# not meaning:
+#   * `fixture_exempt: "x"` and its cousins. A one-character reason is a
+#     reason as far as any pattern can tell; so is `"-"`. A reason is prose and
+#     nothing here reads prose. The loader accepts these too, so the two halves
+#     agree, and what catches them is review.
+#   * Whitespace spelled as a numeric escape (`"\x20"`, `"\u0020"`), or as a
+#     non-ASCII space character written literally (U+00A0 and the rest of the
+#     Unicode Z category). The loader DOES hold all of these — strings.TrimSpace
+#     is Unicode-aware and refuses them at exit 2 — so they are covered
+#     wherever the file is loaded, and uncovered only on the content surface
+#     this rule was written for. Named rather than quietly missing.
+#
+# WHAT IT MUST NOT HOLD, deliberately. `fixture_exempt: ""` is NOT a finding.
+# An empty scalar and an absent key decode to the same Go value, so nothing can
+# tell them apart (internal/config/fixtureexempt.go says so in as many words),
+# and both are the undeclared state that fixture-coverage REPORTS rather than
+# refuses. A gate that called that a violation would put this repository's two
+# halves into exactly the disagreement #336 is — one surface accepting a
+# declaration the other rejects. That agreement is not left to this comment:
+# TestTheBlankDeclarationRuleAgreesWithTheLoader
+# (internal/config/fixtureexemptrule_test.go) runs the real loader and this
+# real rule over one table of declarations and fails if the rule ever flags a
+# value the loader stores as a reason, or stays silent on one the loader
+# refuses. Widen the pattern past the loader and that test goes red by name.
+#
+# NO MARKER EXEMPTION, deliberately. `except: {marker: true}` would let a
+# `formwork:allow` comment silence this rule, and a marker carries a reason
+# that nothing here checks for content — the same vacuity one level up. A
+# declaration that declares nothing gets fixed or gets deleted.
+rules:
+  - id: fixture-exempt-declares-nothing
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include: ["**/.formwork/rules/**/*.yaml"]
+    params:
+      syntax: regexp2
+      multiline: true
+      pattern: |-
+        (?m)^([ \t]*)fixture_exempt:[ \t]*(?:"(?:[ \t]|\\[tnr])+"[ \t]*(?:#[^\n]*)?$|'[ \t]+'[ \t]*(?:#[^\n]*)?$|[|>][0-9]*[-+]?[0-9]*[ \t]*(?:#[^\n]*)?\n(?:[ \t]*\n)*(?=[ \t]*\S|\z)(?!\1[ \t]))
+    cure: "This `fixture_exempt` declares nothing — it is whitespace, or a block scalar with no body under it. The field records WHY a heavy rule carries no fixtures, and the escape-hatch census prints that reason verbatim, so a blank one publishes an exemption with no stated ground. Write the reason a fixture tree cannot drive this detector, or delete the field and let fixture-coverage report the gap."

@@ -1,0 +1,33 @@
+# Ported from Palletra scripts/check-no-primary-vision-classifier.sh (Plan 3
+# Phase 9). Plan 3 moved Gemini Vision (GeminiExtractPages) from "primary
+# classifier" to "fallback when the text-first path produced an incomplete
+# answer". A regression that re-promotes vision to the primary path silently
+# burns Gemini Vision tokens on every PDF and undoes the whole vector-first cost
+# model. Every non-test call site of GeminiExtractPages under core-api MUST
+# sit inside a function whose name encodes the fallback role
+# (/[Ff]allback|[Vv]ision/, e.g. invokeVisionFallback); the gate lives at the
+# caller, so encoding it in the helper name survives helper-internal refactors.
+#
+# Ported directly onto the go/call-confined-to-func-name analyzer: a call whose
+# selector matches `symbol` may appear ONLY inside a func whose name matches
+# `allowed_func`. The definition `func GeminiExtractPages(` is a FuncDecl,
+# not a CallExpr, so it is never a call site — exactly the .sh's non-decl filter.
+#
+# DIVERGENCE (noted): the .sh's awk skips comment lines (`//`/`*`) that mention
+# the symbol; the AST analyzer only ever sees real call expressions, so a
+# commented reference is structurally excluded (a cleaner equivalent, no
+# divergence in verdict).
+rules:
+  - id: no-primary-vision-classifier
+    type: go/call-confined-to-func-name
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      symbol: 'GeminiExtractPages'
+      allowed_func: '[Ff]allback|[Vv]ision'
+    cure: "GeminiExtractPages must only be invoked from a helper whose name encodes the fallback role (e.g. invokeVisionFallback), gated at the caller (if pagesWithContent == 0 / if len(unresolvedTypes) > 0). Inline-calling the vision classifier from a primary-path function reverts Plan 3."
+    origin: scripts/check-no-primary-vision-classifier.sh

@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-approval-metrics-single-source.sh (#3986) — Rule A.
+# The ISO-week + period-window resolvers live ONCE (exported WeekStartUTC / PeriodRange)
+# in services/core-api/internal/signoffstats. A new private `func weekStartUTC(` /
+# `func periodRange(` anywhere is a re-hardcoded copy that can drift the two
+# approval dashboards' auto-rates. The single source exports the capitalised names,
+# so banning the lowercase declarations needs no directory exemption. Tests excluded.
+rules:
+  - id: approval-week-resolvers-single-sourced
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'func\s+(weekStartUTC|periodRange)\s*\('
+    cure: "Call the shared signoffstats.WeekStartUTC / PeriodRange; do not re-declare a private weekStartUTC/periodRange copy (#3986)."
+    origin: scripts/check-approval-metrics-single-source.sh

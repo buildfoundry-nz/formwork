@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-wizard-columns-step-roundtrip.sh arm 4 (sweep-3 #3).
+# The producer must stamp `UnresolvedColumns:` from SummarizeUnmappedColumns onto
+# the IngestSessionPayload literal. One of the five exists-mode anchors split from
+# the .sh.
+rules:
+  - id: wizard-producer-sets-unmapped-columns
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/stockroom/analyze/scan_session.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'UnresolvedColumns:\s*([A-Za-z_][A-Za-z0-9_]*\.)?SummarizeUnmappedColumns\b'
+      mode: exists
+    cure: "scan_session.go must assign UnresolvedColumns from SummarizeUnmappedColumns on the IngestSessionPayload literal or the wizard Columns step receives a nil slice (sweep-3 #3)."
+    origin: scripts/check-wizard-columns-step-roundtrip.sh

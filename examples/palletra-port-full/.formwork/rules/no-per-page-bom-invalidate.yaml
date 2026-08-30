@@ -1,0 +1,46 @@
+# Ported from Palletra scripts/check-no-per-page-bom-invalidate.sh (#7012).
+#
+# A multi-page write MUST invalidate the project's active BOM exactly ONCE per
+# transaction, never once per page. This gate forbids calling a BOM-invalidating
+# recompute (shared.RecomputePageRollupsInTx or
+# {shared,bomtotals}.MarkActiveBomStaleInTx) lexically INSIDE a `for` loop in
+# non-test Go under freightworks. Single-page callers (the ~30 sites that call it
+# once, not in a loop) are fine.
+#
+# PORT MAPPING: COMMAND ESCAPE. "A banned call lexically inside an open `for`
+# block" is a STRUCTURAL nesting predicate — the .sh runs a fused
+# comment/string-lexer + brace + for-nest STACK so a `for`/brace/call token
+# inside a string or comment can neither be counted nor spoof a violation, and a
+# call flags only when it sits inside an open for-frame. formwork's go/*
+# analyzers cover func-line-budget, call-confined-to-func, call-order,
+# guard-precedes-call, and per-func-count — none expresses call-inside-a-loop
+# nesting, and a line regex cannot track brace depth reliably. Not expressible
+# declaratively, so this is the spec's sanctioned escape: params.cmd runs the
+# real check, which verifies in CI. No fixture (formwork lint enumerates it).
+rules:
+  - id: no-per-page-bom-invalidate
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-no-per-page-bom-invalidate.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/**/*_test.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-no-per-page-bom-invalidate.sh
+      expect:
+        exit: 0
+    cure: "Recompute each page with shared.RecomputePageGaugesInTx and invalidate ONCE — use shared.RecomputePagesThenInvalidateBomInTx(ctx, tx, projectID, sheetIDs), or a single post-loop shared.MarkActiveBomStaleInTx. See routes/shared/page_retally.go (#7012)."
+    origin: scripts/check-no-per-page-bom-invalidate.sh

@@ -1,0 +1,10 @@
+name: gate-synth-tests
+on: [pull_request]
+jobs:
+  synths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: run synthetic-violation tests
+        working-directory: freightworks
+        run: go test -tags gate ./internal/gatetests/...

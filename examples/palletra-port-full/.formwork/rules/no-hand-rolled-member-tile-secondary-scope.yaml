@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-no-hand-rolled-crew-card.sh — TIER 2.
+# (sweep-6 #3 widened scan.) The same muted member-tile SHELL as tier 1, but the
+# WIDENED scan across all of frontend/lib + packages/*/lib. A blind widen would
+# over-fire on legitimate non-member muted tiles that share the exact shell (the
+# annotation tools sidebar, the ratecard category view), so tier 2 is gated on
+# the MEMBER-ROW invariant: a hit counts only when the SAME file ALSO references
+# a member/invite row type — `CrewSummary` or `OutstandingInvite`.
+#
+# Same-file CO-OCCURRENCE of (the shell) AND (a member-row type) -> linear-RE2
+# all_of: the shell 6-way alternation is one whole-file pattern, the member-row
+# type (CrewSummary|OutstandingInvite) a second, both order-independent over
+# the whole file (the .sh's shell-grep AND member-row-grep). all_of co-occurrence
+# is reported on line 1. The tier-1 dirs (feature_membership/ + feature_workspace/
+# presentation) and the canonical crew_tile.dart are carved out by path so tier
+# 2 covers only the OTHER feature dirs.
+rules:
+  - id: no-hand-rolled-member-tile-secondary-scope
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/crew_tile.dart"
+        - "packages/feature_membership/lib/presentation/**"
+        - "packages/feature_workspace/lib/presentation/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+    params:
+      # all_of #1 = the muted-tile shell 6-way alternation (whole-file; crosses
+      # lines via (?:.|\n){0,N}?, no lookaround); all_of #2 = a member/invite row
+      # type. BOTH must be present — the .sh's shell-grep AND member-row-grep.
+      # Replaces the regexp2 (?=[\s\S]*shell)(?=[\s\S]*rowtype) lookahead
+      # conjunction; all_of anchors the single finding on line 1 (fixture want).
+      all_of:
+        - 'BoxDecoration\((?:.|\n){0,200}?(?:surfaceContainer[A-Za-z]*|surfaceVariant|baseColors\.[A-Za-z_]+)\.withValues\(\s*alpha(?:.|\n){0,200}?cornerRadiusSm|BoxDecoration\((?:.|\n){0,200}?cornerRadiusSm(?:.|\n){0,200}?(?:surfaceContainer[A-Za-z]*|surfaceVariant|baseColors\.[A-Za-z_]+)\.withValues\(\s*alpha|ClipRRect\((?:.|\n){0,200}?cornerRadiusSm(?:.|\n){0,200}?ColoredBox\((?:.|\n){0,80}?(?:surfaceContainer[A-Za-z]*|surfaceVariant|baseColors\.[A-Za-z_]+)\.withValues\(\s*alpha|ColoredBox\((?:.|\n){0,80}?(?:surfaceContainer[A-Za-z]*|surfaceVariant|baseColors\.[A-Za-z_]+)\.withValues\(\s*alpha(?:.|\n){0,200}?ClipRRect\((?:.|\n){0,80}?cornerRadiusSm|(?:Card|Sku)\((?:.|\n){0,200}?(?:surfaceContainer[A-Za-z]*|surfaceVariant|baseColors\.[A-Za-z_]+)\.withValues\(\s*alpha(?:.|\n){0,200}?RoundedRectangleBorder\((?:.|\n){0,80}?cornerRadiusSm|(?:Card|Sku)\((?:.|\n){0,200}?RoundedRectangleBorder\((?:.|\n){0,80}?cornerRadiusSm(?:.|\n){0,200}?(?:surfaceContainer[A-Za-z]*|surfaceVariant|baseColors\.[A-Za-z_]+)\.withValues\(\s*alpha'
+        - '\b(?:CrewSummary|OutstandingInvite)\b'
+    cure: "Render the row through the shared CrewTile (packages/feature_membership/lib/presentation/crew_tile.dart): CrewTile(primary: …, secondary: …, trailing: …). Reference: sweep-2 #14 / sweep-6 #3."
+    origin: scripts/check-no-hand-rolled-crew-card.sh

@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-line-state-appearance-single-source.sh
+# (PH-5 RS-4 / #7209), Rule A. The ImpactedLineState APPEARANCE mapping — an
+# `extension <Name> on ImpactedLineState` (color/label/icon) — may be declared
+# ONLY in the canonical display file; a second copy drifts the two FE surfaces
+# (Skus rows vs pricing sidebar chips) apart. Any other declaration is a
+# forbidden-pattern hit. Generated proto Dart and test files are out of scope.
+rules:
+  - id: single-source-line-state-display-appearance
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/**/*.dart"
+        - "frontend/**/*.dart"
+      exclude:
+        - "packages/plt_skus/lib/presentation/impacted_line_state_display.dart"
+        - "**/test/**"
+        - "**/*_test.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+        - "**/*.pbgrpc.dart"
+    params:
+      pattern: 'extension\s+[A-Za-z0-9_]+\s+on\s+ImpactedLineState\b'
+    cure: "Render ImpactedLineState through the shared ImpactedLineStateDisplay in plt_skus/lib/presentation/impacted_line_state_display.dart; do not declare a second appearance extension (#7209)."
+    origin: scripts/check-line-state-appearance-single-source.sh

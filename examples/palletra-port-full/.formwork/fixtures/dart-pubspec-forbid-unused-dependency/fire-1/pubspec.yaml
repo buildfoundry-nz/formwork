@@ -1,0 +1,14 @@
+name: feature_demo
+description: Demo feature package.
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  collection: ^1.19.0
+  # intl is declared but never `package:intl/`-imported anywhere in lib/.
+  # This is the unused-dependency violation.
+  intl: ^0.19.0

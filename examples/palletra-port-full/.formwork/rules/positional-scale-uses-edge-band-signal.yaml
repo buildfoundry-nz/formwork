@@ -1,0 +1,15 @@
+# Ported from scripts/check-positional-gauge-picker.sh, invariant 3. pick.go
+# must use pdftrace.InBorderZone( — proof the picker weights placement (the
+# border-band disambiguation), not a flat 1:N regex.
+rules:
+  - id: positional-scale-uses-edge-band-signal
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/detection/scale/pick.go'
+    params:
+      pattern: 'pdftrace\.InBorderZone\('
+      mode: exists
+    cure: 'pick.go must weight placement via pdftrace.InBorderZone( (the border-band geometry signal).'
+    origin: scripts/check-positional-gauge-picker.sh

@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-request-path-bound-in-idempotency-execute.sh
+# (be-idempotency). EVERY idempotency.Params{...} composite literal (the argument
+# to idempotency.Execute) under routes/ MUST set RequestPath from the resolved
+# HTTP request path `<ident>.URL.Path`. Execute folds RequestPath into the
+# request fingerprint; the idempotency slot key (org_id, route, origin_request_id)
+# uses a CONSTANT chi pattern string, so without the resolved path a client that
+# reuses one origin_request_id across two distinct resource URLs with equal
+# bodies collapses onto one slot AND one fingerprint — resource B silently
+# replays resource A's cached 2xx and B's write is dropped. The value must be an
+# `<ident>.URL.Path` expression (the real resolved path), never a literal or a
+# body-supplied (spoofable) value.
+#
+# This is a pair-consistency over decommented Go: trigger = the idempotency.Params
+# literal opener, requires = a RequestPath bound from `<ident>.URL.Path`. Comments
+# are stripped first (decomment-go) so a `//`-commented RequestPath cannot satisfy
+# it, matching the .sh which strips `//` before its brace-depth scan.
+#
+# DIVERGENCE (noted): the .sh walks each Params literal brace-balanced and checks
+# RequestPath PER literal, so a file with two Params (one bound, one not) is
+# caught. pair-consistency is file-level — a single RequestPath binding anywhere
+# in the file satisfies every Params in it. The primary defect (a Params literal
+# that binds no resolved path) is caught identically.
+rules:
+  - id: request-path-bound-in-idempotency-execute
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      trigger: 'idempotency\.Params\{'
+      requires: 'RequestPath:\s*[A-Za-z_][A-Za-z0-9_]*\.URL\.Path'
+    cure: "Add `RequestPath: r.URL.Path,` to the idempotency.Params literal so Execute folds the concrete resolved resource path into the request fingerprint. The slot key uses a CONSTANT route pattern, so without the path a origin_request_id reused across two resource URLs replays the wrong resource's response."
+    origin: scripts/check-request-path-bound-in-idempotency-execute.sh

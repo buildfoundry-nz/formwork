@@ -1,0 +1,31 @@
+# Ported from Palletra scripts/check-migration-rejects-select-1-noop-stub.sh (sweep-17 #1).
+# A migration source file must be honest about the schema state it installs; a
+# migration that ships as `SELECT 1;` (or any equivalent no-op) diverges the
+# source of truth from the live schema — a stubbed no-op silently drops the DDL
+# it claims to install (the #5794/4d1c9aa2e revert of the extraction_attempts unique
+# index). The .sh accumulates each up.sql's whole body (stripping `-- ...` line
+# comments), collapses whitespace, and fails when the entire body reduces to
+# `SELECT 1;` (case-insensitive). A no-op stub statement in a migration is the
+# ban target — `forbidden-pattern` on a bare `SELECT 1;` statement line captures
+# it directly.
+#
+# DIVERGENCE (noted): formwork has no decomment-sql preprocessor and no
+# whole-body reduction, so this is line-level rather than whole-body. The line
+# anchor `^\s*select\s+1\s*;` matches ONLY a statement line that IS `SELECT 1;`
+# (a genuine no-op stub) and never a `-- ...SELECT 1...` comment line (the `--`
+# defeats the `^\s*select` anchor) nor `SELECT 1 FROM ...` (the `\s*;` after `1`
+# fails), so the ban does not false-fire on comment mentions. It is STRICTER
+# than the .sh only in the (never-seen-in-practice) case of a real-DDL migration
+# that also carries a stray standalone `SELECT 1;` line — the stricter direction
+# for a no-op-stub ban, not a weakening. No preprocessor is required.
+rules:
+  - id: migration-rejects-select-1-noop-stub
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.up.sql"
+    params:
+      pattern: '(?i)^\s*select\s+1\s*;'
+    cure: "A migration must install the schema state it describes — never ship a `SELECT 1;` no-op stub. Restore the real DDL, or revert the migration version entirely; a stubbed migration diverges source-of-truth from the live schema (sweep-17 #1)."
+    origin: scripts/check-migration-rejects-select-1-noop-stub.sh

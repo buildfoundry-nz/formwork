@@ -1,0 +1,52 @@
+rules:
+  # CI redesign F5: the go_touched langflag glob in scripts/ci/lang-flags.go must
+  # be a SUPERSET of the Go job's true inputs — freightworks/ plus every
+  # freightworks/go.mod `replace => ../<dir>` target the module compiles against.
+  # A narrower glob lets a change there (e.g. a proto regen into shared/generated)
+  # skip go-checks and merge a broken payload green. The real gate also validates
+  # schema_changed and dart_touched the same way; the load-bearing go_touched arm
+  # is reproduced here via the command escape hatch (it reads the LIVE marker —
+  # the `const goTouchedGlob = "..." // LANGFLAG go_touched` line — and the
+  # go.mod replace targets, exactly as the gate does).
+  - id: ci-go-changed-langflag-must-cover-replace-targets
+    type: command
+    severity: error
+    scope:
+      include: ["scripts/ci/lang-flags.go"]
+    params:
+      cmd:
+        - bash
+        - -c
+        - |
+          set -u
+          lf=scripts/ci/lang-flags.go
+          gomod=freightworks/go.mod
+          [ -f "$lf" ] || { echo "missing $lf" >&2; exit 1; }
+          # Extract the ERE from the LIVE (non-comment) `// LANGFLAG go_touched` line.
+          # CARDINALITY FIRST: CI computes go_touched from ONE expression, so
+          # exactly one live marker line may exist. Zero leaves `glob` empty and
+          # an empty ERE matches every path, which reads as total coverage; two
+          # or more make `glob` a MULTI-LINE string, and grep -E reads a
+          # multi-line pattern as an ALTERNATION, so every probe below is
+          # answered by whichever line happens to cover it and an uncovered
+          # replace target passes. Neither state is checkable, and an
+          # uncheckable state is a finding here, not a skip.
+          markers=$(grep -E '// LANGFLAG go_touched$' "$lf" | grep -vE '^[[:space:]]*//')
+          n=$(printf '%s\n' "$markers" | grep -c '[^[:space:]]')
+          [ "$n" -ne 0 ] || { echo "no live go_touched LANGFLAG marker in $lf" >&2; exit 1; }
+          [ "$n" -eq 1 ] || { echo "expected exactly one live go_touched LANGFLAG marker in $lf, found $n" >&2; exit 1; }
+          glob=$(printf '%s\n' "$markers" | sed -E 's/.*"([^"]*)".*/\1/')
+          fail=0
+          echo 'freightworks/x.go' | grep -qE "$glob" \
+            || { echo "go_touched glob does not cover freightworks/" >&2; fail=1; }
+          if [ -f "$gomod" ]; then
+            while IFS= read -r t; do
+              [ -n "$t" ] || continue
+              rel=${t#../}
+              echo "${rel}/x" | grep -qE "$glob" \
+                || { echo "go_touched glob does not cover replace target ${rel}/" >&2; fail=1; }
+            done < <(grep -oE '=>[[:space:]]*\.\./[^[:space:]]+' "$gomod" | sed -E 's/=>[[:space:]]*//')
+          fi
+          exit $fail
+    cure: "Widen the go_touched glob in scripts/ci/lang-flags.go to cover every go.mod replace target (CI redesign F5)."
+    origin: scripts/check-ci-go-changed-langflag-must-cover-replace-targets.sh

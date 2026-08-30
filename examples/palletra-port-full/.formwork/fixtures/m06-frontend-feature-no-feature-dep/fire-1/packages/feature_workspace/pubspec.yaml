@@ -1,0 +1,16 @@
+name: feature_workspace
+description: Org feature package.
+publish_to: none
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+# want: m06-frontend-feature-no-feature-dep
+dependencies:
+  flutter:
+    sdk: flutter
+  plt_core:
+    path: ../plt_core
+  feature_access:
+    path: ../feature_access
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-workflow-state-single-source.sh (#3365 PR-3).
+# Anti-vacuity guard: the deleted-registry ban above only guards a ghost if the
+# vocabulary still lives in projectterms's data.go. The .sh runs
+# `grep -Eq '\bWorkflowPhase\b'` against
+# freightworks/services/core-api/internal/projectterms/data.go and exits 2 (setup
+# error) if the token is absent — i.e. the vocabulary moved and the ban must be
+# repointed. Ported as a required-pattern (exists) so the token must remain in
+# that file for the ban to stay real.
+rules:
+  - id: workflowstatus-vocabulary-sole-home
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/projectterms/data.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\bWorkflowPhase\b'
+      mode: exists
+    cure: "The workflow-status vocabulary must keep living in projectterms/data.go (the sole home). If it moved, repoint this anchor + the deleted-registry ban so the gate stays real (do not silently pass)."
+    origin: scripts/check-workflow-state-single-source.sh

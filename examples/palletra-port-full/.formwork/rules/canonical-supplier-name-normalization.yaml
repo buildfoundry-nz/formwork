@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-canonical-supplier-name-normalization.sh
+# (#3259 PR-2) — Rule A. The canonical helper for
+# platform.suppliers.standardized_name is stockroom.NormalizeSupplierName in
+# internal/stockroom/suppliername.go — the ONE key the import wizard, the commit
+# resolver, and every write site bucket by. Before the fix there were three
+# divergent keys. Rule A makes the re-fork impossible: the ONLY supplier-name
+# normalizer is stockroom.NormalizeSupplierName; any OTHER Go func whose name pairs
+# normalize/normalize with supplier (in either order) outside suppliername.go
+# re-forks the key. Tests and generated (*.pb.go) code are exempt; the canonical
+# site is exempt.
+#
+# Ported as a forbidden-pattern (decomment-go so a commented-out declaration
+# cannot false-fire) over a func-declaration regex mirroring the .sh's Rule A
+# alternation: `func [(recv) ]<...>normali[sz]e<...>supplier<...>(` OR the
+# supplier-then-normalize order. Scoped to freightworks/**/*.go, excluding tests,
+# *.pb.go, and the canonical suppliername.go.
+#
+# DIVERGENCE (noted): the .sh's Rule B — a Go file that WRITES
+# platform.suppliers.standardized_name must not compute it with a non-comment SQL
+# `lower(trim(` — is a second, independent invariant (write-site SQL fork) that a
+# single forbidden-pattern does not also carry; the single-normalizer invariant
+# (Rule A), the load-bearing "one key" guarantee, is ported here.
+rules:
+  - id: canonical-supplier-name-normalization
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/*.pb.go"
+        - "freightworks/services/core-api/internal/stockroom/suppliername.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'func\s+(?:\([^)]*\)\s+)?[A-Za-z0-9_]*[Nn]ormali[sz]e[A-Za-z0-9_]*[Ss]upplier[A-Za-z0-9_]*\s*\(|func\s+(?:\([^)]*\)\s+)?[A-Za-z0-9_]*[Ss]upplier[A-Za-z0-9_]*[Nn]ormali[sz]e[A-Za-z0-9_]*\s*\('
+    cure: "Delete the local normalizer and call stockroom.NormalizeSupplierName (freightworks/services/core-api/internal/stockroom/suppliername.go); it is the single source of truth for platform.suppliers.standardized_name (#3259 PR-2)."
+    origin: scripts/check-canonical-supplier-name-normalization.sh

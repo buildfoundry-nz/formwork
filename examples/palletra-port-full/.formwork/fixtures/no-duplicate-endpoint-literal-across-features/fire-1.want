@@ -1,0 +1,1 @@
+- endpoint '/api/catalog/products' is hard-coded in 2 packages: feature_costing feature_stockroom

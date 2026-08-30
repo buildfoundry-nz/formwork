@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-uxevents-fields-scrubbed.sh
+# (epic #5848 §5). The client-events PII-scrub gate: every generated
+# `Get*() string` field on the client-events proto must flow through exactly one
+# fail-closed choke-point in internal/uxevents/sanitize*.go — a narrow
+# valid* validator (bounded/id fields), redactStack (raw_trace), or redactText
+# (everything else). The field UNIVERSE is derived MECHANICALLY from the
+# generated .pb.go getters (so nothing can be silently omitted), each getter is
+# BUCKET-classified in a fail-closed map, and rule (a) parses paren-depth to
+# assert each string getter is enclosed by its bucket function while rule (b)
+# forbids ingest/emit/classify from touching a raw free-text getter.
+#
+# Why the ESCAPE HATCH (type: command): the real gate execs a Python scanner
+# (scripts/dev/find-uxevents-fields-not-scrubbed.py) that strips Go comments
+# and string/rune literals, walks paren depth across multi-line scrub calls, and
+# joins the generated getter universe to a hand-maintained bucket map. That is a
+# stateful, comment-and-literal-aware parse over generated code with a
+# cross-file classification join — no declarative formwork rule type expresses
+# it. It runs the real check unmodified and asserts a clean exit.
+rules:
+  - id: uxevents-fields-scrubbed
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-uxevents-fields-scrubbed.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/uxevents/**/*.go"
+        - "freightworks/services/core-api/routes/ux_events/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-uxevents-fields-scrubbed.sh
+      expect:
+        exit: 0
+    cure: "Classify every new client-events proto string getter into its fail-closed bucket in internal/uxevents/sanitize*.go — a bounded/id field through its valid* validator, raw_trace through redactStack, every other string through redactText — and read only the scrubbed ScrubbedEvent from ingest/emit/classify. An unclassified getter hard-fails the gate (epic #5848 §5)."
+    origin: scripts/check-uxevents-fields-scrubbed.sh

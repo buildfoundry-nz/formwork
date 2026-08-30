@@ -1,0 +1,54 @@
+# Ported from Palletra scripts/check-classify-anchor-text-single-source.sh
+# (wizard-classify Slice 5, hardened sweep-7 #6). The stockroom import wizard's
+# subcategory classifier runs across three surfaces (internal/stockroom +
+# routes/stockroom) that only agree if their shared primitives stay single-source.
+# The .sh has THREE rules; two are ported here, the third is SKIPPED (see below).
+# Both ported rules decomment Go `//` comments (full-comment lines stripped),
+# matched by decomment-go.
+#
+# SKIPPED — rule 3 (classify-carry priced_lines UPDATE keeps its
+# `subgroup_id IS NULL` precedence guard). It is a STATEMENT-scoped multiline
+# PCRE2 with negative lookahead ((?!`)(?!subgroup_id IS NULL)(?!'from_doc)
+# over a [\s\S] span). RE2 has no lookaround and this build does not accept a
+# `syntax: regexp2` param (strict decode rejects unknown fields), so it cannot be
+# faithfully expressed as forbidden/required-pattern without weakening it.
+rules:
+  # Rule 1 — ONE anchor-text emitter. The "<category> — <name>" anchor text (an
+  # em-dash bracketed by spaces) may be produced only by
+  # ComposeSubcategoryAnchorText in classify_reprocess.go.
+  - id: classify-anchor-text-single-emitter-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/stockroom/**/*.go"
+        - "freightworks/services/core-api/routes/stockroom/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    except:
+      paths:
+        - "**/classify_reprocess.go"
+    preprocess: decomment-go
+    params:
+      pattern: '" — "'
+    cure: "Emit the anchor text via ComposeSubcategoryAnchorText (classify_reprocess.go). A divergent emitter embeds to a different region and degrades cosine similarity (sweep-7 #6)."
+    origin: scripts/check-classify-anchor-text-single-source.sh
+  # Rule 2 — ONE source='embedding' provenance writer. The bare 'embedding' SQL
+  # literal may appear only in routes/stockroom/catalog/stockroom_classify_subcategories.go.
+  - id: stockroom-classify-embedding-provenance-single-writer
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/stockroom/**/*.go"
+        - "freightworks/services/core-api/routes/stockroom/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    except:
+      paths:
+        - "**/stockroom_classify_subcategories.go"
+    preprocess: decomment-go
+    params:
+      pattern: "'embedding'"
+    cure: "The 'embedding' provenance literal belongs only in the /run auto-apply (stockroom_classify_subcategories.go); the commit-stage carry parameterises the column (sweep-7 #6)."
+    origin: scripts/check-classify-anchor-text-single-source.sh

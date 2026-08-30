@@ -1,0 +1,45 @@
+# Ported from Palletra scripts/check-no-hand-rolled-app-card-decoration.sh (Phase 5
+# re-audit DD-4). A `Container(decoration: BoxDecoration(color: <surface>,
+# borderRadius: ShellSpacing.cornerRadius*, border: Border.all(...)))` is the
+# canonical ShellCard shell; open-coding it anywhere but
+# packages/plt_widgets/lib/shell_card.dart is banned.
+#
+# The .sh (v3) uses ripgrep --pcre2 --multiline with THREE zero-width lookaheads
+# anchored to the same `BoxDecoration(` position, each scanning up to 400 chars
+# of the block for its token — order-INDEPENDENT (sweep-8 #9: the measure cards
+# write color -> border -> borderRadius, so a fixed-order chain missed them).
+# Ported to linear RE2: a line-anchored `BoxDecoration(` trigger gated by
+# require_present for the three tokens. The three same-position zero-width
+# lookaheads become order-independent whole-file presence checks, and the
+# per-line trigger reports the finding on the BoxDecoration( line.
+rules:
+  - id: no-hand-rolled-app-card-decoration
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/plt_widgets/lib/shell_card.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+    params:
+      # Origin: rg --pcre2 with three zero-width lookaheads at the BoxDecoration(
+      # position, each token within ~200-400 chars (a single BoxDecoration block).
+      # Linear-RE2 form: all_of + window: 8 — the four tokens (the BoxDecoration(
+      # opener plus the three properties) must co-occur within an 8-line span (~one
+      # block), anchored on the earliest = the BoxDecoration( line (fixture want).
+      # A plain whole-file require_present was WRONG here: it false-fired on develop
+      # (6 files) where a card's border/borderRadius sit 60+ lines from an unrelated
+      # widget's color:surface. The window reproduces the .sh's intra-block proximity.
+      window: 8
+      all_of:
+        - 'BoxDecoration\('
+        - 'color:\s*[A-Za-z_][A-Za-z0-9_.]*\.surface[A-Za-z0-9]*'
+        - 'borderRadius:\s*ShellSpacing\.cornerRadius[A-Za-z]*'
+        - 'border:\s*Border\.all'
+      prefilter: 'BoxDecoration'
+    cure: "Replace the inline Container(decoration: BoxDecoration(...)) card surface with an ShellCard from packages/plt_widgets/lib/shell_card.dart."
+    origin: scripts/check-no-hand-rolled-app-card-decoration.sh

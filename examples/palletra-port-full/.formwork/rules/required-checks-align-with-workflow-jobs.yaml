@@ -1,0 +1,49 @@
+# Ported from Palletra scripts/check-required-checks-align-with-workflow-jobs.sh (#1005).
+#
+# Recurrence guard for the #3285 class: a required status-check context that can
+# never report and so BLOCKS every PR forever. It reads the committed manifest
+# of required contexts (scripts/baselines/required-status-checks.txt) and, for
+# each entry, asserts (a) the context maps to a real workflow job display name
+# (a job `name:` or job key) — catching a RENAME — and (b) an `always`-kind
+# context is not path-filtered (its job carries no job-level `if:` on
+# diff_scope / *_changed) — catching a PATH-FILTER skip→hang. `aggregator`-kind
+# contexts (the if:always() Quality Gate) are exempt from the path-filter check.
+#
+# PORT MAPPING: COMMAND ESCAPE. The check PARSES every .github/workflows/*.yml
+# into a per-job table (job key vs. `name:`, plus a job-level `if:`
+# diff_scope/_changed path-filter flag via an indentation-aware awk walker),
+# then joins that table against a two-column manifest with per-kind (always /
+# aggregator) semantics. No formwork declarative type parses a YAML workflow's
+# job graph, resolves display names, or classifies a job as path-filtered, and
+# set-relation extracts tokens from file CONTENT lines, not the structured
+# job/if model this needs. Not expressible declaratively, so this is the spec's
+# sanctioned escape: params.cmd runs the real check, which verifies in CI. No
+# fixture (formwork lint enumerates it).
+rules:
+  - id: required-checks-align-with-workflow-jobs
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-required-checks-align-with-workflow-jobs.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "scripts/baselines/required-status-checks.txt"
+        - ".github/workflows/*.yml"
+        - ".github/workflows/*.yaml"
+    params:
+      cmd:
+        - bash
+        - scripts/check-required-checks-align-with-workflow-jobs.sh
+      expect:
+        exit: 0
+    cure: "Keep scripts/baselines/required-status-checks.txt in lockstep with the branch-protection rulesets AND the workflows: every required context must map to a real job display name, and every `always`-kind context's job must not be path-filtered (delegate a path-filtered check to the Quality Gate aggregator, or de-path-filter/rename the job). See #1005 / #3285."
+    origin: scripts/check-required-checks-align-with-workflow-jobs.sh

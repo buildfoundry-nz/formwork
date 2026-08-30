@@ -1,0 +1,4 @@
+# Scope-level: 20000402081500 drops a column and tightens a nullable one with no
+# *_integration_test.go seeding rows for that version, so the only replay it ever
+# gets is against an empty database.
+- freightworks/services/core-api/migrations/palletra/20000402081500_extraction_facts_cutover.up.sql: destructive migration without a seeded-data integration test (migratePalletraTo + INSERT INTO for version 20000402081500)

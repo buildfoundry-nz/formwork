@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-flutter-metric-dot-color-via-shared-resolver.sh (#2654).
+# The per-annotation metric-card builder (plot_tallies_panel_cards*.dart under
+# feature_dimension/lib/presentation) must resolve the rail dot color through the
+# shared PartitionWidthColors.outlineForAnnotationOrNull(...) resolver, never re-derive
+# it via a bare MarkerTypeColors.stroke( / PartitionWidthColors.outlineForAnnotation(
+# (which skips the family override and diverges from the canvas). The `\(` right
+# after outlineForAnnotation deliberately does NOT match the allowed
+# outlineForAnnotationOrNull( form. Rename-tolerant filename glob, as the .sh find.
+rules:
+  - id: flutter-metric-dot-color-via-shared-resolver
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/presentation/plot_tallies_panel_cards*.dart"
+    params:
+      pattern: 'MarkerTypeColors\.stroke\(|PartitionWidthColors\.outlineForAnnotation\('
+    cure: "Resolve dotColor via PartitionWidthColors.outlineForAnnotationOrNull(annotation, type: ..., tieFamilyColors: ref.watch(tieFamilyColorsProvider(projectId, pageId)))."
+    origin: scripts/check-flutter-metric-dot-color-via-shared-resolver.sh

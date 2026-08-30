@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-dart-generated-code-fresh.sh.
+#
+# The committed *.freezed.dart / *.g.dart tree must be byte-for-byte what
+# `dart run build_runner build --workspace` produces today. The check
+# fundamentally RUNS the build_runner code generator in place (there is no
+# out-of-tree mode) and diffs the regenerated tree against the committed one —
+# it needs the Flutter/Dart toolchain AND a live working tree to regenerate and
+# restore. That cannot be a self-contained text fixture, so it maps to the
+# `command` ESCAPE HATCH: params.cmd is the real check script, verified in CI
+# where the SDK is present. No fixture; SKIPs locally (enumerated by lint).
+rules:
+  - id: dart-codegen-fresh
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-dart-generated-code-fresh.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "frontend/**/*.dart"
+        - "packages/**/*.dart"
+        - "frontend/pubspec.yaml"
+        - "packages/**/pubspec.yaml"
+        - "pubspec.yaml"
+        - "pubspec.lock"
+        - "**/build.yaml"
+    params:
+      cmd:
+        - bash
+        - scripts/check-dart-generated-code-fresh.sh
+      expect:
+        exit: 0
+    cure: "Run (cd frontend && dart run build_runner build --delete-conflicting-outputs) and commit the regenerated part files. Never hand-edit generated *.freezed.dart / *.g.dart."
+    origin: scripts/check-dart-generated-code-fresh.sh

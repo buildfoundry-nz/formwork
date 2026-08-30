@@ -1,0 +1,31 @@
+# Ported from Palletra scripts/check-render-seam-must-use-cachedbytes.sh
+# (sweep-1 #2). Both worker page-source seams MUST fetch through the
+# cache-HIT-ONLY pagefeed.Cache.StoredBytes, NEVER the removed .Bytes seam
+# whose miss leg heap-regenerates the whole source per page (the OOM shape PR
+# #2765 finding 4 removed). This ports the NEGATIVE link — the drift-proof
+# recursive scan: no non-test .go under the two worker page-source seam dirs
+# (workerharness/ + sourcerouting/) may name the cache-qualified
+# `(pageFeedCache|cache).Bytes(` seam. The regex is cache-qualified so an
+# unrelated bytes.Buffer.Bytes() never false-fires, and StoredBytes( is not
+# matched (its Bytes is preceded by `d`). Comments are stripped before matching
+# (the .sh's drop_comments), so the "StoredBytes, never Bytes" prose in the
+# sources' own comments can neither satisfy nor trip the check.
+#
+# Not ported here: the POSITIVE link (sourcerouting.go's MatchOnlySeam must
+# return cache.StoredBytes(ctx) — a required-anchor); this file captures the
+# forbidden-pattern maptype (the negative link).
+rules:
+  - id: render-seam-must-use-cachedbytes
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workerharness/**/*.go"
+        - "freightworks/services/core-api/internal/sourcerouting/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '(pageFeedCache|cache)\.Bytes\('
+    cure: "Fetch page-source bytes through the hit-only cache.StoredBytes seam (miss -> caller fallback), never the removed .Bytes seam whose miss leg heap-regenerates the whole source per page (sweep-1 #2 / PR #2765 finding 4)."
+    origin: scripts/check-render-seam-must-use-cachedbytes.sh

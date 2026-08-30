@@ -1,0 +1,11 @@
+syntax = "proto3";
+package palletra.api.v1;
+
+message CreateAnnotationRequest {
+  string origin_request_id = 1;
+  string page_id = 2;
+}
+
+message GetAnnotationRequest {
+  string annotation_id = 1;
+}

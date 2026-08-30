@@ -1,0 +1,55 @@
+# Ported from Palletra scripts/check-annotation-kind-code-coverage.sh
+# (audit 2026-05-23 Phase 5).
+#
+# Every annotation_kind_code a primary detector wrapper's LabelToKind can EMIT
+# must have BOTH a row in palletra.marker_types (DB fixture) AND a def in
+# shared/markerTypeDefs.ts (FE fixture). Drift silently corrupts the pipeline
+# (the FK lookup fails at runtime, or the FE sidebar drops the annotation). The
+# .sh wraps a Go contract test (`go test ./services/core-api/internal/modelcoverage/...`)
+# whose fixtures.go pins dbAnnotationKindCodes + uiAnnotationTypeCodes.
+#
+# It fundamentally RUNS A TOOL (go test), so this is the command escape hatch.
+# Running the real `go test` needs the whole module; instead the port reproduces
+# the SAME set-coverage assertion the contract test makes — emitted ⊆ (DB ∩ FE) —
+# on a self-contained fixture tree (the wrapper's labelToKind map + the two code
+# lists in fixtures.go). Scope-level finding (no want marker); fire-1 emits a code
+# absent from the fixtures, pass-1 has full coverage.
+rules:
+  - id: annotation-kind-code-coverage
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/modelcoverage/**/*.go"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import os, re, sys
+          W = "freightworks/services/core-api/internal/modelcoverage/wrapper.go"
+          F = "freightworks/services/core-api/internal/modelcoverage/fixtures.go"
+          if not os.path.exists(W) or not os.path.exists(F):
+              sys.stderr.write("modelcoverage source missing\n")
+              sys.exit(1)
+          # Emitted codes: the RHS string literals of the labelToKind map.
+          emitted = set(re.findall(r':\s*"([a-z_]+)"', open(W).read()))
+          ftext = open(F).read()
+          def codes(name):
+              m = re.search(name + r"\s*=\s*\[\]string\{([^}]*)\}", ftext)
+              return set(re.findall(r'"([a-z_]+)"', m.group(1))) if m else set()
+          db = codes("dbAnnotationKindCodes")
+          fe = codes("uiAnnotationTypeCodes")
+          rc = 0
+          for c in sorted(emitted):
+              if c not in db:
+                  sys.stderr.write("emitted code %r has no palletra.marker_types row\n" % c)
+                  rc = 1
+              if c not in fe:
+                  sys.stderr.write("emitted code %r has no shared/markerTypeDefs.ts def\n" % c)
+                  rc = 1
+          sys.exit(rc)
+      expect:
+        exit: 0
+    cure: "Cure each uncovered emitted code by adding the missing palletra.marker_types row (+ refresh dbAnnotationKindCodes), adding the missing shared/markerTypeDefs.ts def (+ refresh uiAnnotationTypeCodes), or removing the emitting case from the wrapper's LabelToKind. No allowlist."
+    origin: scripts/check-annotation-kind-code-coverage.sh

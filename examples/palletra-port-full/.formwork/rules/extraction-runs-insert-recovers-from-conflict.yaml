@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-extraction-runs-insert-recovers-from-conflict.sh
+# (sweep-17 #2). Migration 0047 enforces "at most one pending/running run per
+# project" via a partial UNIQUE INDEX. Every production INSERT INTO
+# palletra.extraction_attempts MUST collapse concurrent writers to one row, or
+# concurrent callers split the project into two jobIDs and Cloud Tasks dedupe
+# silently fails. Recovery is one of: (a) the shared helper
+# parseruns.InsertOrClaimActive (catches 23505 + re-SELECTs), (b) an inline
+# `ON CONFLICT`, or (c) an inline 23505 catch via pgconn/pgx.PgError.
+#
+# Ported as a pair-consistency: trigger = an INSERT INTO palletra.extraction_attempts
+# line; requires = any recovery form present anywhere in the same file. The
+# helper's OWN package (parseruns/) is scope-excluded — it IS the recovery
+# and the .sh exempts `^package parseruns$`. Scope mirrors the .sh's
+# go_src_files --include-path */services/* --include-path */internal/*,
+# tests excluded.
+#
+# DIVERGENCE (noted): form (c) in the .sh requires BOTH `"23505"` AND
+# pgconn/pgx.PgError together (a conjunction); pair-consistency's requires is a
+# single alternation, so it accepts `"23505"` alone. This is a minor precision
+# loss on form (c) only (an under-check, never a false flag on compliant code);
+# forms (a) and (b) are matched exactly.
+rules:
+  - id: extraction-runs-insert-recovers-from-conflict
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/**/*.go"
+        - "freightworks/internal/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/parseruns/**"
+    params:
+      trigger: 'INSERT INTO palletra\.extraction_attempts'
+      requires: 'parseruns\.InsertOrClaimActive\(|ON CONFLICT|"23505"'
+    cure: "Route the INSERT through parseruns.InsertOrClaimActive, or add an inline ON CONFLICT clause / 23505 (pgconn.PgError) catch (sweep-17 #2)."
+    origin: scripts/check-extraction-runs-insert-recovers-from-conflict.sh

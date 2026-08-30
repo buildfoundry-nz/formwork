@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-gemini-media-parts-routed-through-prompt-first.sh, Rule A.
+# Every multimodal Gemini call must assemble its part list with the stable
+# instruction TEXT first, then per-call media, through the single ordering seam
+# firstPromptParts (internal/gemini/client.go). Ordering matters because prompt
+# caching keys on a common LEADING token prefix: put the per-call media first
+# and the prefix diverges immediately, so the stable instructions stop matching
+# the cache. Leading with the invariant text is what keeps them matching.
+#
+# Rule A: a function that MINTS a media part must also route that media through
+# firstPromptParts. Mapped onto go/per-func-count-relation: per function,
+# count(media-mint calls) <= count(firstPromptParts calls). A builder that mints
+# a media part (genai.NewPartFromBytes/URI) but never calls the seam has
+# count(left)=1 > count(right)=0 and fires; a function that calls the seam
+# without minting (0 <= 1) and the seam's own definition (0 <= 0) both hold.
+#
+# DIVERGENCE (noted): the .sh also (a) treats a `genai.Part{InlineData:…}` /
+# `{FileData:…}` composite literal as a media mint — a struct literal is not a
+# CallExpr, so only the NewPartFrom{Bytes,URI} constructor form is counted here;
+# and (b) requires the seam call to actually RECEIVE the media (an argument after
+# the prompt), rejecting a bare `firstPromptParts(prompt)` decoy — a count
+# relation cannot inspect arguments. Rule B (the seam seeds NewPartFromText
+# BEFORE the media... spread) is a within-seam ordering over a variadic spread
+# (not a call) and is not expressible as a call-order sequence, so it is not
+# ported. The constructor-mint coupling above is the load-bearing majority case.
+rules:
+  - id: gemini-media-parts-routed-through-prompt-first
+    type: go/per-func-count-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/gemini/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      left: 'genai\.NewPartFrom(Bytes|URI)'
+      right: 'firstPromptParts'
+      relation: "<="
+    cure: "Hand the minted media to firstPromptParts(prompt, media...); do not assemble a media-first []*genai.Part{...} literal at a call site — a media-first list diverges on the first token, so the stable instructions stop matching the cached prefix (#1737)."
+    origin: scripts/check-gemini-media-parts-routed-through-prompt-first.sh

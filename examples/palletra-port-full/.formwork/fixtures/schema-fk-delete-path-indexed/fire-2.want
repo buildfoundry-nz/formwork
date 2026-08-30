@@ -1,0 +1,4 @@
+# Scope-level: the snapshot path is present but unreadable (a directory), so the
+# run judges no FK at all. Pinned to the detector's own header sentence, not to
+# the OS's errno text, which spells EISDIR differently per platform.
+- [check-schema-fk-delete-path-indexed] ERROR — the schema snapshot at freightworks/services/core-api/migrations/schema.snapshot.sql is present but unreadable

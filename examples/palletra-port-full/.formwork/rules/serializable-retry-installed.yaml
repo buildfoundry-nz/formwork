@@ -1,0 +1,31 @@
+# Ported from Palletra scripts/check-serializable-retry-installed.sh
+# (Sweep-14 §C2 / Gate L5). Postgres Serializable isolation surfaces
+# SQLSTATE 40001 (serialization_failure) when concurrent transactions cannot be
+# ordered; the caller MUST catch 40001 and retry, or the handler returns a bare
+# 500 instead of the structured 409 the FE can recover from. Every non-test .go
+# file under routes/ that opens a Serializable transaction (`pgx.Serializable`,
+# or the raw `BEGIN ISOLATION LEVEL SERIALIZABLE` form) must ALSO reference an
+# in-file retry wrapper: the literal `commitWithBackoff`, any `*WithRetry(`
+# helper, or a bare `for attempt :=` retry loop.
+#
+# Textbook pair-consistency: the Serializable-open is the TRIGGER, the retry
+# wrapper is the REQUIRED same-file companion. The .sh greps the RAW file (rg,
+# no de-comment) and asserts the companion appears somewhere in the same file —
+# exactly pair-consistency's where: same-file semantics — so preprocess is raw
+# and the two regexes are ported verbatim from the .sh's rg patterns.
+rules:
+  - id: serializable-retry-installed
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: raw
+    params:
+      trigger: 'pgx\.Serializable|BEGIN[[:space:]]+ISOLATION[[:space:]]+LEVEL[[:space:]]+SERIALIZABLE'
+      requires: 'commitWithBackoff|[A-Za-z_]+WithRetry\(|for[[:space:]]+attempt[[:space:]]*:='
+      where: same-file
+    cure: "Wire the Serializable transaction through commitWithBackoff (or an equivalent *WithRetry helper) so SQLSTATE 40001 surfaces as a recoverable 409, not a 500 — see sweep-13 §A4 / commit.go pattern."
+    origin: scripts/check-serializable-retry-installed.sh

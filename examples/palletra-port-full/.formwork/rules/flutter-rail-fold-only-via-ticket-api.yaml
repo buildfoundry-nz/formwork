@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-flutter-rail-fold-only-via-ticket-api.sh
+# (#7662 RS-4). A WorkflowProgressDelta is a full SNAPSHOT of the Measure rail at
+# its commit, with no sequence stamp. WorkflowRailSync.fold() applies it in
+# place AND consumes the refetch queued for that page — so folding one built before
+# a sibling mutation committed rewinds the rail permanently, because the refetch
+# that would repair it is gone. finishMutation is the ONLY place allowed to decide
+# fold-vs-refetch, gated on whether the mutation was solo (RailMutationPermits).
+#
+# RULE A (fold only through finishMutation), ported here: outside the owner
+# workflow_rail_sync.dart, no measure-surface file may call fold() directly on
+# the rail-refresh notifier. A direct `...notifier).fold(` / `railSync.fold(`
+# skips the solo-mutation check and rewinds the rail on exactly the races the
+# ticket API exists to detect. Ported as a forbidden-pattern over the measure
+# packages, with the owner file scope-excluded (it defines fold and legitimately
+# calls it).
+#
+# DIVERGENCE (noted): the .sh's RULE B (a file calling openMutation must call
+# cancelMutation at least as many times, so no ticket leaks) is a count-parity
+# per-file invariant a single forbidden-pattern cannot express; it is out of scope
+# for this rule. The .sh also de-comments Dart first — formwork ships no
+# decomment-dart, so the fixtures keep the fold call out of comments.
+rules:
+  - id: flutter-rail-fold-only-via-ticket-api
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/**/*.dart"
+        - "packages/plt_canvas_kit/lib/**/*.dart"
+      exclude:
+        - "packages/plt_canvas_kit/lib/measure/providers/workflow_rail_sync.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+    params:
+      pattern: '\.notifier\)\.fold\(|railSync\.fold\('
+    cure: "Do not fold a delta directly. Go through the ticket API — railSync.openMutation() before, railSync.finishMutation(ticket, pageId: p, delta: resp.completionDiff) after — which folds only when the mutation was solo, and refetches otherwise (#7662 RS-4)."
+    origin: scripts/check-flutter-rail-fold-only-via-ticket-api.sh

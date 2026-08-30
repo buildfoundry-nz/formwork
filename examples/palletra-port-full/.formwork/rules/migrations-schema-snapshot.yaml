@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-schema-migration-snapshot.sh — the
+# migrations-vs-snapshot REPLAY gate. It proves two things in ONE pass via
+# scripts/db-schema-snapshot.sh --check: (1) the committed migrations replay
+# cleanly FROM SCRATCH on the same pgvector image CI/dev use (an incrementally-
+# applied migration can hide a from-scratch failure); (2) the committed
+# schema.snapshot.sql is exactly what those migrations produce — so a schema
+# change without its migration (or a migration without its regenerated snapshot)
+# cannot land.
+#
+# Why the ESCAPE HATCH (type: command): this gate fundamentally boots a scratch
+# pgvector docker container, replays the whole migration ledger into it, and
+# pg_dumps the result to diff against schema.snapshot.sql. That is an external
+# tool (docker + postgres) over live DB state — it cannot be reproduced from a
+# self-contained tmpdir fixture, exactly the class the spec reserves the command
+# escape for. CI runs it as a hard gate (CHECK_MIGRATIONS_SNAPSHOT_FORCE=1); it
+# verifies there, and `formwork lint` enumerates it. No standalone fixture.
+rules:
+  - id: migrations-schema-snapshot
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-schema-migration-snapshot.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**"
+    params:
+      cmd:
+        - bash
+        - scripts/check-schema-migration-snapshot.sh
+      expect:
+        exit: 0
+    cure: "Migrations must replay from scratch AND produce exactly schema.snapshot.sql. Regenerate the snapshot with scripts/db-schema-snapshot.sh on a docker host and commit it alongside the migration; never hand-edit the snapshot to match a broken replay."
+    origin: scripts/check-schema-migration-snapshot.sh

@@ -1,0 +1,23 @@
+rules:
+  # sweep-9c #3: the DB-generated bom_line_items.total column uses the UNROUNDED
+  # effective quantity. Summing it for the priced total charges a quantity
+  # different from the rounded one the FE displays. The canonical priced sum
+  # MUST use scanbom.SnappedLineTotalExpr; no non-test Go file may sum the raw
+  # generated column via SUM(bli.total) / SUM(bom_line_items.total).
+  - id: bom-line-total-rounded
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include: ["freightworks/**/*.go"]
+      exclude:
+        # Go test files. The banned SUM(bli.total) is the OLD behaviour, and the
+        # ported tree's regression tests quote it verbatim in golden SQL to
+        # assert the snapped expression replaced it — so the rule has to stay
+        # off tests or it fires on its own proof. This slice carries no
+        # _test.go: dead here, live there. Preventative, not rot.
+        - "freightworks/**/*_test.go"
+    preprocess: raw
+    params:
+      pattern: 'SUM\(\s*(bli|bom_line_items)\.total\s*\)'
+    cure: "Sum scanbom.SnappedLineTotalExpr, not the raw generated total column (sweep-9c #3)."
+    origin: scripts/check-bom-line-total-rounded.sh

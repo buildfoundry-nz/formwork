@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-route-preamble-guards.sh — RULE 3 (#3189).
+# A raw decode-or-400 preamble: `shared.ReadWire(r,` / `shared.ReadWireBody(r,`
+# whose error check is PURE (`<err> != nil`, no `||` extra validation on that
+# line) with a `shared.WriteErrorPayload(w, http.StatusBadRequest, "bad_request")`
+# within the next 2 lines. Use shared.ParseOr400. Compound-condition decodes
+# (`; err != nil || req.Foo == "" {`) do extra validation the helper can't
+# express and must NOT match.
+#
+# The "no `||` on the ReadWire line" carve-out is expressed by `[^\n|]*` after
+# `(r,` — the rest of that line may contain no pipe (so `err != nil || ...`
+# stops the match before it can reach the 400). The .sh window is the tighter
+# awk j = i .. i+2 (2-line lookahead), expressed here as 0-2 following lines
+# between the decode and the bad_request 400. Match starts at the ReadWire
+# line — the reported line.
+#
+# Scope: routes/**/*.go, excluding *_test.go and routes/shared/.
+rules:
+  - id: route-prologue-check-readproto
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/routes/shared/**"
+    params:
+      # Pure consuming multiline pattern — no lookaround, linear RE2. `[^\n|]*`
+      # after `(r,` is the "no || on the ReadWire line" carve-out (a compound
+      # `err != nil || ...` decode carries a pipe, so the match cannot reach the
+      # 400); (?:\n[^\n]*){0,2} is the awk i..i+2 window. LocateLine anchors on the
+      # ReadWire line (fixture want-marker).
+      pattern: 'shared\.ReadWire(?:Body)?\(r,[^\n|]*(?:\n[^\n]*){0,2}shared\.WriteErrorPayload\(w, http\.StatusBadRequest, "bad_request"\)'
+      prefilter: 'StatusBadRequest'
+      multiline: true
+    cure: "Use `if !shared.ParseOr400(w, r, m) { return }` for the pure decode-or-400 preamble; keep ReadWire directly only for compound-condition decodes that do extra validation."
+    origin: scripts/check-route-preamble-guards.sh

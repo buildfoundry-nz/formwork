@@ -1,0 +1,3 @@
+#!/bin/sh -eu
+# The interpreter carries arguments; the shebang still names sh.
+flutter analyze && gofmt -l .

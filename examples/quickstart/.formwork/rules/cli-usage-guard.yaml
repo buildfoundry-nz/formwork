@@ -1,0 +1,37 @@
+# RULE 3 — the inverse: something that must be PRESENT.
+#
+# forbidden-pattern asks "does this appear?". required-pattern asks "is this
+# missing?". Most real guardrail suites need both, and the second kind is the
+# one command-line tools usually get wrong: nothing in the language makes a
+# program check its own arguments.
+#
+# `mode: every-file` (the default) means EVERY in-scope file must match. The
+# other mode, `exists`, means at least one file somewhere must match — useful
+# for "this repo must have a licence header somewhere", useless here.
+#
+# THE TRAP THIS RULE TEACHES, because it is the one every required-pattern
+# walks into: a rule that reads raw file bytes is satisfied by a COMMENT. Delete
+# the guard, leave `// usage: deploy <image-tag>` behind, and the file still
+# contains the literal — the rule reports OK over a program that no longer
+# checks its arguments at all. A required-pattern is only as strong as the
+# question "could a comment answer this?", and here it could.
+#
+# `preprocess: decomment-go` is the answer: it blanks Go comments before
+# matching and leaves string literals alone, so the `fmt.Fprintln(os.Stderr,
+# "usage: ...")` in the real guard still counts and the comment does not. The
+# fixtures pin both halves — fire-2 is the comment-only file, pass-1 is the
+# real guard.
+rules:
+  - id: cli-usage-guard
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "scripts/**/*.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'usage: '
+      mode: every-file
+    cure: "Check the argument count and print a usage line before doing anything. Without the guard a run with no arguments deploys the empty tag — and reports success."
+    origin: "quickstart-example"
+    tags: [go]

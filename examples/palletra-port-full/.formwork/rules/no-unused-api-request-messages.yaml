@@ -1,0 +1,56 @@
+# Ported from Palletra scripts/check-no-unused-api-request-messages.sh (#5351).
+# The repo borrows protobuf for schema only (REST/Chi server, no gRPC stubs):
+# GET/LIST/DELETE handlers read chi.URLParam / r.URL.Query() directly, so a
+# bodyless *Request message is wired to nothing — a dead struct in
+# shared/generated. Every `message *Request` declared under
+# schema/proto/palletra/api/v1/ MUST be referenced by hand-written Go/Dart (a
+# shared.ParseOr400[apiv1.XRequest] decode / a Dart construction), else it is
+# an orphan and must be deleted or wired.
+#
+# Ported as a set-relation SUBSET: side A = every `*Request` message declared in
+# the api/v1 protos; side B = every `*Request` symbol REFERENCED in hand-written
+# Go/Dart code (generated *.pb.* excluded so a message's own generated
+# declaration never counts as "used"). A ⊆ B means every declared Request is
+# referenced by real code; an element of A missing from B is a dead orphan.
+#
+# DIVERGENCE (noted): (1) the .sh also keeps a Request alive via a cross-proto
+# reference (another proto's RPC input / field type); side B here scans only
+# Go/Dart (the dominant reference path the .sh header names), so a Request kept
+# alive solely by another proto would read as orphan. (2) The .sh strips
+# comment-line hits (a doc-comment mention does not count); this line-oriented
+# extraction does not decomment, so a `//`-commented Go/Dart mention of the name
+# would satisfy side B (mirrors the b-08 set-relation port's noted limitation).
+# The primary defect — a declared Request no code constructs or decodes — is
+# caught identically. Scope-level finding (fire-1.want carries the `-` marker).
+rules:
+  - id: no-unused-api-request-messages
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "schema/proto/palletra/api/v1/**/*.proto"
+        - "freightworks/**/*.go"
+        - "packages/**/*.dart"
+        - "frontend/**/*.dart"
+      exclude:
+        - "**/*.pb.go"
+        - "**/*.pb.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbserver.dart"
+    params:
+      a:
+        files:
+          - "schema/proto/palletra/api/v1/**/*.proto"
+        pattern: '^message ([A-Za-z0-9_]+Request) \{'
+        group: 1
+      b:
+        files:
+          - "freightworks/**/*.go"
+          - "packages/**/*.dart"
+          - "frontend/**/*.dart"
+        pattern: '[A-Za-z0-9_]+Request'
+        group: 0
+      relation: subset
+    cure: "A Request nothing constructs or decodes is dead (GET/LIST/DELETE handlers read chi.URLParam / r.URL.Query() directly). Delete the message (and regenerate shared/generated), or wire it to the handler that decodes it (#5351)."
+    origin: scripts/check-no-unused-api-request-messages.sh

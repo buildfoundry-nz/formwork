@@ -1,0 +1,1 @@
+- palletra/domain/v1/dead.proto is Go-only (no live proto or hand-Dart reaches it) yet ships committed Dart at shared/generated/dart/lib/palletra/domain/v1/dead.pb.dart

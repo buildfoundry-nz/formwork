@@ -1,0 +1,19 @@
+rules:
+  - id: request-logger-excludes-sensitive-fields
+    type: forbidden-pattern
+    severity: error
+    # The gate reads code-only text (comments removed); decomment-go blanks Go
+    # comments so a doc-comment naming a field never fires.
+    preprocess: decomment-go
+    scope:
+      include:
+        - "freightworks/services/core-api/middleware/requestlog.go"
+    params:
+      # ALLOWLIST, not denylist (sweep-19-#3): the request logger may read only
+      # r.Method, r.RemoteAddr, r.Context, r.URL.Path. Fire on ANY OTHER r.<accessor>
+      # via a regexp2 negative-lookahead allowlist — matching the perl allowlist
+      # `grep -vE '^r\.(Method|RemoteAddr|Context)$|^r\.URL\.Path$'`.
+      pattern: '\br\.(?!(?:Method|RemoteAddr|Context)\b)(?!URL\.Path\b)[A-Za-z]'
+      syntax: regexp2
+    cure: "Log only r.Method, r.URL.Path, r.RemoteAddr, and the recorded status/bytes — never the query string, headers, or cookies (credential-to-log leak)."
+    origin: scripts/check-request-logger-excludes-sensitive-fields.sh

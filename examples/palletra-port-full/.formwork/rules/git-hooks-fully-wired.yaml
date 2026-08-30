@@ -1,0 +1,79 @@
+# Ported from Palletra scripts/check-git-hooks-fully-wired.sh (#4336 / #7893). Keeps
+# the node-free git-hook wiring un-rottable. The .husky/ hooks carry every local
+# gate the CI fixup cascade fails on; they went DEAD once the React/TS toolchain
+# (and husky's node installer) was deleted and nothing pointed git at .husky.
+# scripts/install-git-hooks.go restores the wiring with a node-free
+# `git config core.hooksPath .husky` (an exec.Command call; run it with
+# `go run scripts/install-git-hooks.go`). RULES: (1) the installer exists (a .go
+# run via `go run` needs no executable bit, so the old +x assertion is dropped);
+# (2) it sets core.hooksPath to .husky; (3) .husky/pre-commit and pre-push each
+# exist, are executable, carry a POSIX-sh shebang, and do NOT source the husky
+# runtime (_/husky.sh) — that node coupling is what killed the hooks (the hooks
+# stay extensionless POSIX sh; only the installer and merge driver moved to Go);
+# (4) the regen-schema-snapshot merge driver is fully wired (.gitattributes
+# mapping + installer configures merge.driver + driver program exists).
+#
+# This gate inspects FILES (existence, executable bit, shebang, config-string
+# presence) — a tool-shaped check over the tree, not Go/SQL/Dart structure — so
+# it is ported via the ESCAPE HATCH `command` type: a self-contained reproduction
+# of all four rules that runs at the fixture root and exits non-zero on any
+# violation. It inspects only files (no git state), matching the original gate's
+# own fixture-drivable design.
+#
+# "POSIX-sh shebang" is read as the interpreter NAME, matched against sh, bash
+# and dash: the three that run a POSIX sh script unmodified, and the only ones
+# these hooks are written for. The limb used to be `^#!.*sh`, which asked only
+# whether the first line ENDED in "sh" — so #!/usr/bin/fish, #!/bin/zsh and
+# #!/bin/tcsh all cleared it. That is the same dependency on an interpreter the
+# tree does not guarantee that killed these hooks the first time (zsh is POSIX
+# only under an emulation this shebang never requests). Both the absolute-path
+# form and the `env <interp>` form are read, and an interpreter may carry
+# arguments (#!/bin/sh -eu). Each rejected shell has its own fire fixture
+# (fire-2/3/4) and each newly named accepted one a pass fixture (pass-2/3), so
+# neither the anchor nor its width moves without a fixture going red.
+rules:
+  - id: git-hooks-fully-wired
+    type: command
+    severity: error
+    scope:
+      include:
+        - "scripts/**"
+        - ".husky/**"
+    params:
+      cmd:
+        - bash
+        - "-c"
+        - |
+          v=0
+          INSTALLER=scripts/install-git-hooks.go
+          if [ ! -f "$INSTALLER" ]; then
+            echo "scripts/install-git-hooks.go missing" >&2; v=1
+          fi
+          grep -Eq 'core\.hooksPath",[[:space:]]*"\.husky"' "$INSTALLER" 2>/dev/null \
+            || { echo "installer never sets core.hooksPath to .husky" >&2; v=1; }
+          grep -Eq 'merge\.regen-schema-snapshot\.driver' "$INSTALLER" 2>/dev/null \
+            || { echo "installer never configures merge.regen-schema-snapshot.driver" >&2; v=1; }
+          for h in pre-commit pre-push; do
+            p=".husky/$h"
+            if [ ! -f "$p" ] || [ ! -x "$p" ]; then
+              echo ".husky/$h missing or not executable" >&2; v=1; continue
+            fi
+            head -n1 "$p" 2>/dev/null \
+              | grep -Eq '^#![[:space:]]*(/[^[:space:]]*/)?(env[[:space:]]+)?(sh|bash|dash)([[:space:]]|$)' \
+              || { echo ".husky/$h shebang is not a POSIX-sh-family interpreter (sh/bash/dash)" >&2; v=1; }
+            if grep -q 'husky\.sh' "$p" 2>/dev/null; then
+              echo ".husky/$h sources the husky runtime (_/husky.sh)" >&2; v=1
+            fi
+          done
+          if [ ! -f .gitattributes ] || ! grep -Eq 'schema\.snapshot\.sql[[:space:]]+merge=regen-schema-snapshot' .gitattributes 2>/dev/null; then
+            echo ".gitattributes does not map schema.snapshot.sql to merge=regen-schema-snapshot" >&2; v=1
+          fi
+          D=scripts/git-merge-schema-snapshot-driver.go
+          if [ ! -f "$D" ]; then
+            echo "merge driver program missing" >&2; v=1
+          fi
+          exit $v
+      expect:
+        exit: 0
+    cure: "Run 'go run scripts/install-git-hooks.go' and keep .husky/pre-commit + pre-push standalone POSIX sh (executable, shebang naming sh, bash or dash, no _/husky.sh source); keep the installer setting core.hooksPath=.husky and configuring merge.regen-schema-snapshot.driver, with .gitattributes mapping schema.snapshot.sql and the driver program present (#4336 / #7893)."
+    origin: scripts/check-git-hooks-fully-wired.sh

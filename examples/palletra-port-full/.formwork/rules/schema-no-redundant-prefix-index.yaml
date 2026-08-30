@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-schema-no-redundant-prefix-index.sh (#6722
+# audit finding 14). Fails when any NON-UNIQUE NON-PARTIAL btree index's key
+# column list is a strict left-prefix of another NON-PARTIAL btree index's key
+# list on the same schema.table — pure write/storage overhead a composite already
+# covers.
+#
+# ESCAPE (type: command). This is a cross-STATEMENT relational analysis over the
+# schema snapshot: an awk pass parses every CREATE INDEX, balanced-extracts each
+# column expression (splitting at depth-0 commas so COALESCE(a,b) stays one key),
+# normalizes ASC/DESC/NULLS ordering away, then compares every index pair on the
+# same table for a strict-prefix relation under the non-unique/non-partial/
+# strictly-longer constraints. No declarative type or the sql/* analyzers can
+# compare one index statement against another and decide prefix-redundancy —
+# there is no per-statement predicate for it. The real script is the faithful
+# check; it verifies in CI. No fixture; SKIPs locally (enumerated by lint).
+rules:
+  - id: schema-no-redundant-prefix-index
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-schema-no-redundant-prefix-index.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+    params:
+      cmd:
+        - bash
+        - scripts/check-schema-no-redundant-prefix-index.sh
+      expect:
+        exit: 0
+    cure: "Drop the prefix-redundant narrow btree index in a migration and regenerate the snapshot — a composite btree seeks its leading columns, so the narrow index serves no read it cannot (#6722 finding 14)."
+    origin: scripts/check-schema-no-redundant-prefix-index.sh

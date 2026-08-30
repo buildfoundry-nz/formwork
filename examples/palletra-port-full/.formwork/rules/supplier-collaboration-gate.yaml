@@ -1,0 +1,90 @@
+# Ported from Palletra scripts/check-supplier-collaboration-gate.sh (#4774).
+# suppliercollab.RequireActive is the two-tier rollout gate every
+# supplier-collaboration entry point must consult before acting. #2593 shipped
+# four quote-zone entry points with NONE calling it, so an un-entitled org could
+# mint live supplier invite tokens. A handler is IN SCOPE when its registrar
+# call in a register file mentions orgctx.CapSupplierCollabAccess OR the
+# /api/collaborations/ path prefix; the handler's own func body (resolved in a
+# sibling .go in the same package dir) MUST contain a literal
+# suppliercollab.RequireActive call.
+#
+# PORT MAPPING: this correlates a register file (which handlers are in scope)
+# with a SIBLING source file (the handler's func body) — a cross-file resolution
+# no per-file Go-AST analyzer expresses. It uses the ESCAPE HATCH: a command
+# rule that discovers register files by glob, extracts each in-scope handler
+# method, resolves its body in the package dir, and requires the literal call.
+# fire-1 registers a CapSupplierCollabAccess handler whose body omits the call
+# (exit 1); pass-1's handler calls it (exit 0).
+rules:
+  - id: supplier-collaboration-gate
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          set -u
+          CORE_API="freightworks/services/core-api"
+          [ -d "$CORE_API" ] || { echo "OK: no core-api dir"; exit 0; }
+          fail=0; scoped_total=0
+          # Discover register files by glob (the #5390 lesson: no hand-list).
+          while IFS= read -r reg; do
+            [ -n "$reg" ] || continue
+            dir=$(dirname "$reg")
+            # Extract in-scope handler methods: an rg.<M>(...) call (across line
+            # wraps) mentioning CapSupplierCollabAccess or /api/collaborations/;
+            # the handler is the call's final argument (recv.Method -> Method).
+            methods=$(awk '
+              function emit(call,   tail) {
+                if (call !~ /CapSupplierCollabAccess/ && call !~ /\/api\/collaborations\//) return
+                tail = call
+                sub(/.*,[ \t]*/, "", tail)
+                gsub(/[^A-Za-z0-9_.]/, "", tail)
+                sub(/^.*\./, "", tail)
+                if (tail ~ /^[A-Z][A-Za-z0-9_]*$/) print tail
+              }
+              /^[ \t]*rg\.[A-Za-z]+\(/ { buf=$0; collecting=1;
+                if ($0 ~ /\)[ \t]*$/) { emit(buf); collecting=0; buf="" } next }
+              collecting { buf=buf" "$0;
+                if ($0 ~ /\)[ \t]*$/) { emit(buf); collecting=0; buf="" } next }
+            ' "$reg" | sort -u)
+            while IFS= read -r m; do
+              [ -n "$m" ] || continue
+              scoped_total=$((scoped_total+1))
+              # Resolve the handler body in any non-test .go in the same package
+              # dir and require the literal RequireActive call in it.
+              resolved=0; missing=1
+              for f in "$dir"/*.go; do
+                [ -f "$f" ] || continue
+                case "$f" in *_test.go) continue ;; esac
+                body=$(awk -v M="$m" '
+                  $0 ~ "^func \\(.*Handler\\) " M "\\(w http\\.ResponseWriter" { inb=1 }
+                  inb { print }
+                  inb && /^}/ { exit }
+                ' "$f")
+                [ -n "$body" ] || continue
+                resolved=1
+                code=$(printf '%s\n' "$body" | grep -vE '^[[:space:]]*//')
+                if grep -q 'suppliercollab\.RequireActive(' <<<"$code"; then missing=0; fi
+              done
+              if [ "$resolved" -eq 0 ]; then
+                echo "FAIL ${reg}: handler ${m} could not be resolved in its package" >&2
+                fail=1
+              elif [ "$missing" -eq 1 ]; then
+                echo "FAIL: handler ${m} (scoped in ${reg}) never calls suppliercollab.RequireActive" >&2
+                fail=1
+              fi
+            done <<< "$methods"
+          done < <(find "$CORE_API" -type f \
+                    \( -name 'register.go' -o -name 'register_*.go' -o -name 'wave*_register.go' \) \
+                    ! -name '*_test.go' | sort)
+          [ "$scoped_total" -gt 0 ] || { echo "OK: no supplier-collab entry points"; exit 0; }
+          exit $fail
+      expect:
+        exit: 0
+    cure: "Call suppliercollab.RequireActive literally in the body of every handler registered on CapSupplierCollabAccess or under /api/collaborations/ — inside its live path, mapping suppliercollab.ErrDisabled to 403 (#4774)."
+    origin: scripts/check-supplier-collaboration-gate.sh

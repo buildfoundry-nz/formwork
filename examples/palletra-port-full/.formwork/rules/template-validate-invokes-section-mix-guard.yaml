@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-template-no-kit-native-section-mix.sh (#7660).
+# Two swap-over-invariant guards must stay wired, each anchored on the CALL (not
+# the func definition) so deleting the call while keeping the definition still
+# trips. Each anchor lives in one specific file, so this is two exists-mode
+# required-pattern rules scoped to those exact files (the same shape as the
+# ported calibration / measure-progress compound gates).
+rules:
+  - id: template-validate-invokes-section-mix-guard
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/stocktemplates/spec.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'ValidateSectionNoNativeKitMix\(s\.JobType'
+      mode: exists
+    cure: "LayoutSpec.Validate (spec.go) must keep calling ValidateSectionNoNativeKitMix(s.JobType, ...) so no code-resident section mixes native + Kit-formula lines (§D3a, #7660)."
+    origin: scripts/check-template-no-kit-native-section-mix.sh
+  - id: template-supersede-calls-successor-guard
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/stocktemplates/supersede/section_swap.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'validateTemplateNoNativeKitMix\(ctx, tx,'
+      mode: exists
+    cure: "The swap writer (section_swap.go) must keep calling validateTemplateNoNativeKitMix(ctx, tx, ...) before it commits a new version (§D3a, #7660)."
+    origin: scripts/check-template-no-kit-native-section-mix.sh

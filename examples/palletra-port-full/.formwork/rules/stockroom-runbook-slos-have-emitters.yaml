@@ -1,0 +1,48 @@
+# Ported from Palletra scripts/check-stockroom-runbook-slos-have-emitters.sh
+# (#2567 item 3). Every SLO metric name a stockroom oncall runbook alerts on MUST
+# have a live Go emitter. Pre-fix, the runbooks alerted on metrics whose emitter
+# was deleted with the legacy TypeScript backend and never re-implemented in Go —
+# responders watched dashboards with no data, a false safety net. The gate
+# asserts doc/code parity: every `stockroom.<seg>.<seg…>` token (>= 2 dotted segments
+# after `stockroom.`) named in docs/runbooks/stockroom-*.md must appear as a Go string
+# literal "<name>" in a non-test .go file under freightworks/.
+#
+# Ported as set-relation SUBSET: set A = every stockroom.* metric token in the stockroom
+# runbooks; set B = every quoted stockroom.* token in non-test freightworks Go. A must
+# be a subset of B — a runbook metric with no matching Go string literal is the
+# finding. preprocess: decomment-go so a metric surviving only in a Go COMMENT
+# does not count as an emitter (the .sh's step-2 de-comment requirement); the
+# runbook fixtures contain no `//`, `/* */` or backtick, so decommenting is a
+# no-op on them and set A is extracted identically to the .sh's raw md grep.
+# Test files are dropped at scope.exclude, so a `_test.go` mention never counts.
+#
+# DIVERGENCE (noted): (1) the .sh fails closed (exit 2) on an unreadable runbook;
+# formwork treats a missing/empty scope as clean (`formwork lint` owns empty-
+# scope rot). (2) decomment-go is applied rule-wide rather than only to the Go
+# side, but is inert on the runbook fixtures as noted. The two-segment minimum
+# and OTel-legal char class are carried in the patterns.
+rules:
+  - id: stockroom-runbook-slos-have-emitters
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "docs/runbooks/stockroom-*.md"
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      a:
+        files:
+          - "docs/runbooks/stockroom-*.md"
+        pattern: '(stockroom\.[A-Za-z0-9_-]+\.[A-Za-z0-9_.-]+)'
+        group: 1
+      b:
+        files:
+          - "freightworks/**/*.go"
+        pattern: '"(stockroom\.[A-Za-z0-9_-]+\.[A-Za-z0-9_.-]+)"'
+        group: 1
+      relation: subset
+    cure: "Either wire an OTel instrument in Go with the exact metric name (see routes/stockroom/pricing/stockroom_pricing_commit_metrics.go for the shape), or retract the SLO claim from the runbook. Never invent emission just to satisfy a runbook — a runbook alerting on a metric nobody emits is a false safety net (#2567 item 3)."
+    origin: scripts/check-stockroom-runbook-slos-have-emitters.sh

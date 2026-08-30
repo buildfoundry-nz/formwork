@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-standard-scale-list-in-scalecalc.sh
+# (#4503, absence limb). No non-test Go file OUTSIDE internal/scalecalc/ may
+# carry the standard-scale denominator []float64 literal, fingerprinted by the
+# ascending run `250, 500, 1000` that no non-scale float slice carries. The .sh
+# flattens newlines before matching to also catch multi-line-split literals;
+# formwork's forbidden-pattern is line-oriented, so this faithfully catches the
+# common single-line literal but not a deliberately line-split re-fork (noted
+# divergence). Comments stripped via decomment-go.
+rules:
+  - id: standard-scale-list-sole-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/internal/scalecalc/**"
+    preprocess: decomment-go
+    params:
+      pattern: '\[\]float64\{[^}]*250,[[:space:]]*500,[[:space:]]*1000'
+    cure: "Call scalecalc.AlignToStandardScale (persist) / scalecalc.ClosestStandardScale (recommend); the standard-scale denominator list lives only in internal/scalecalc (#4503)."
+    origin: scripts/check-standard-scale-list-in-scalecalc.sh

@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-dart-forbid-eager-nested-scroll-lists.sh (#1665).
+#
+# The signature of a list that is eager-by-construction while advertising
+# laziness is a ListView / GridView constructor whose body carries BOTH
+# `shrinkWrap: true` and `NeverScrollableScrollPhysics`.
+#
+# FP FIX (was: a raw multiline regexp2 with no comment awareness — fired on the
+# gate's own rationale prose in a `///` doc comment, e.g.
+# feature_costing/.../bom_sectioned_view.dart which describes "nested a
+# `ListView.builder(shrinkWrap: true, physics: NeverScrollableScrollPhysics())`
+# under each ReorderableListView"). The .sh's Python scanner BLANKS comments +
+# strings before scanning, so that prose can never trip it. formwork has no
+# decomment-dart preprocessor, so the constructor anchor now carries a
+# variable-length lookbehind `(?<!//[^\n]*)` — the ListView/GridView match is
+# rejected when a `//` (covers `///`) precedes it on the same line, i.e. it is
+# inside a comment. Real code (the actual widget's ListView.builder) is
+# unaffected. Silent on develop, still fires on the fire-1 fixture.
+rules:
+  - id: dart-forbid-eager-nested-scroll-lists
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/generated/**"
+        - "**/.dart_tool/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.gr.dart"
+    params:
+      syntax: regexp2
+      multiline: true
+      pattern: '(?s)(?<!//[^\n]*)\b(?:ListView|GridView)(?:\.\w+)?\s*\((?:(?!\b(?:ListView|GridView)\b).)*?(?:shrinkWrap:\s*true(?:(?!\b(?:ListView|GridView)\b).)*?NeverScrollableScrollPhysics|NeverScrollableScrollPhysics(?:(?!\b(?:ListView|GridView)\b).)*?shrinkWrap:\s*true)'
+      prefilter: 'NeverScrollableScrollPhysics'
+    cure: "Small bounded panels become an honest Column/Wrap; large ones become a viewport-owned ListView/SliverList. No per-file carve-out (#1665)."
+    origin: scripts/check-dart-forbid-eager-nested-scroll-lists.sh

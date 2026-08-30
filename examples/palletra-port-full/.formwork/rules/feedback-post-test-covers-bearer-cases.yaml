@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-feedback-submission-bearer-auth.sh (#1898) —
+# the ADAPTER-TEST half of the bearer-attach backstop. The adapter test
+# packages/plt_core/test/network/raw_http_client_auth_token_test.dart must carry BOTH
+# required assertions — the present-token case ('Bearer staff-token-321') and
+# the null-token no-header case ([null, null]) — and must NOT be skipped
+# (`skip:`), so "present" means "live". Companion rule
+# feedback-post-helper-attaches-bearer covers the helper half.
+#
+# Ported to a linear-RE2 all_of + none_of: fire (anchored on LINE 1 = fixture
+# want-marker) when the file HAS 'Bearer staff-token-321' but LACKS [null, null]
+# — the #1898 regression (present-token kept, null-token assertion dropped).
+# Replaces the regexp2 zero-width lookahead alternation with two linear scans.
+#
+# DIVERGENCE (noted for fidelity): (a) the .sh runs strip_comments_dart first;
+# formwork has no decomment-dart preprocessor, so this raw scan cannot tell a
+# `skip:` in a comment from a live one (production tests keep this live). (b) The
+# .sh FAILs when the test file is MISSING entirely; an empty scope here passes
+# vacuously (formwork lint owns empty-scope rot). (c) The .sh has THREE
+# independent FAIL branches (lacks present-token OR lacks null-token OR a `skip:`
+# is present); a linear conjunction cannot OR a whole-file presence (`skip:`) with
+# two absences, so this port models the fixture's dropped-null-token regression
+# and folds the "lacks present-token" branch into all_of — the `skip:`-present
+# branch is not modelled.
+rules:
+  - id: feedback-post-test-covers-bearer-cases
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/plt_core/test/network/raw_http_client_auth_token_test.dart"
+    params:
+      # Origin: the adapter test must carry BOTH assertions and not be skip:'d.
+      # all_of holds the present-token assertion (the context that must be live);
+      # none_of holds the null-token assertion whose absence is the fired regression.
+      all_of:
+        - "'Bearer staff-token-321'"
+      none_of:
+        - '\[null, null\]'
+    cure: "Keep both live assertions in raw_http_client_auth_token_test.dart — the present-token 'Bearer staff-token-321' case and the null-token [null, null] no-header case — and do not skip: the test (#1898)."
+    origin: scripts/check-feedback-submission-bearer-auth.sh

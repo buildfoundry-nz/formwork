@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-sku-embedding-written-on-every-path.sh
+# (#2413 PH-4). palletra.extracted_skus.embedding vector(768) is read by
+# the PH-4 grouping pass to decide which sighting belongs to which sku, so a
+# row committed with a NULL vector belongs to NO sku entity: invisible to
+# the rail, absent from BOM totals, silently vanishing. The spec found only two
+# of three write paths; a fourth writer must not be able to appear without naming
+# the column. RULE: every `INSERT INTO palletra.extracted_skus` in non-test
+# Go must name `embedding` in its column list.
+#
+# Ported as a sql/statement-predicate: it selects each SQL statement (reassembled
+# from Go string literals) whose text is an INSERT INTO palletra.extracted_skus
+# and requires the token `embedding`. A statement that omits it yields one finding
+# on the string literal's line. Tests are excluded (a test may seed a partial
+# NULL-embedding row on purpose), matching the .sh's *_test.go skip. Scope:
+# production Go under freightworks.
+#
+# DIVERGENCE (noted): the .sh restricts the `embedding` check to the column list
+# between the table and the first SELECT/VALUES; the predicate requires the token
+# anywhere in the selected INSERT statement. Both catch the primary defect — a
+# new INSERT that omits the column entirely — identically.
+rules:
+  - id: sku-embedding-written-on-every-path
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      table: 'INSERT\s+INTO\s+palletra\.extracted_skus'
+      require:
+        - 'embedding'
+    cure: "Name the `embedding` column in the INSERT INTO palletra.extracted_skus column list and bind a real vector — a NULL-vector sku row belongs to no sku entity and silently vanishes from the rail and the BOM (#2413 PH-4)."
+    origin: scripts/check-sku-embedding-written-on-every-path.sh

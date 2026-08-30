@@ -1,0 +1,14 @@
+name: deploy-dev
+on:
+  push:
+    branches: [develop]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build web
+        run: |
+          flutter build web --release \
+            --dart-define=API_BASE_URL=https://dev.api.example \
+            --dart-define=GCIP_PROJECT_ID=palletra-dev \
+            --dart-define=BUILD_ID=$GITHUB_SHA

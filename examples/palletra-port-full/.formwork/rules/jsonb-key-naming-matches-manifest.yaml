@@ -1,0 +1,46 @@
+# Ported from Palletra scripts/check-jsonb-key-naming-matches-manifest.sh (sweep-4).
+# protojson can store a proto message's jsonb keys in two styles —
+# lowerCamelCase (UseProtoNames:false) or snake_case (UseProtoNames:true) —
+# while a SQL reader keys on ONE literal string; a mismatch silently NULLs the
+# read. The full gate parses docs/jsonb-key-naming-matches-manifests.md (column -> proto ->
+# UseProtoNames -> writers), computes snake/camel spellings from the proto, and
+# enforces WRITER / READ / DISCOVERY across freightworks/**/*.go plus the schema
+# snapshot, with fail-closed table resolution for shared tails (#7010).
+#
+# Why the ESCAPE HATCH (type: command): faithfully expressing this needs a
+# markdown-manifest parser, per-field snake<->camel derivation from .proto
+# files, alias-resolved SQL table attribution, and a ±40-line candidate-
+# resolution window — none of which the declarative RE2/analyzer types can do.
+# This command reproduces the gate's CENTRAL invariant, the WRITER check, on the
+# fixture tree: the registered writer of a UseProtoNames:true column must marshal
+# with `UseProtoNames: true` and MUST NOT carry the opposite `UseProtoNames:
+# false` (comment-stripped, so a doc comment narrating the old wrong setting can
+# neither satisfy nor trip it). fire-1 flips the writer to the wrong style;
+# pass-1 keeps the declared one. Scope-level finding (no want marker).
+rules:
+  - id: jsonb-key-naming-matches-manifest
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          # Manifest fact mirrored from docs/jsonb-key-naming-matches-manifests.md:
+          #   column=palletra.audit_events.metadata use_proto_names=true
+          #   writer=.../internal/auditwrite/write.go
+          f="freightworks/services/core-api/internal/auditwrite/write.go"
+          [ -f "$f" ] || exit 0            # writer absent -> nothing to check
+          stripped="$(sed 's,//.*,,' "$f")"
+          # declared UseProtoNames: true must be present ...
+          grep -qE 'UseProtoNames:[[:space:]]*true' <<<"$stripped" || exit 1
+          # ... and the opposite must never appear (one convention per writer).
+          grep -qE 'UseProtoNames:[[:space:]]*false' <<<"$stripped" && exit 1
+          exit 0
+      expect:
+        exit: 0
+    cure: "Each registered protojson writer must marshal its jsonb column with the UseProtoNames declared in docs/jsonb-key-naming-matches-manifests.md and never the opposite, or every SQL reader keyed on the other style reads ZERO rows (sweep-4 #3/#9)."
+    origin: scripts/check-jsonb-key-naming-matches-manifest.sh

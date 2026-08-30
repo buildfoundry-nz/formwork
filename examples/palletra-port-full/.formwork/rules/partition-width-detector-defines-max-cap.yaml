@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-partition-width-no-hardcoded-vocab.sh rule 4 (#7909).
+# POSITIVE check: the detector package must still DEFINE the single cap constant
+# `MaxPartitionWidthMm =` — the arbitrary-width range vocabulary depends on it. The .sh
+# does `grep -rqE 'MaxPartitionWidthMm[[:space:]]*='` over the detector dir, so this is
+# an exists-mode required-pattern over the same scope. One of four coupled
+# sub-rules split from the .sh.
+rules:
+  - id: partition-width-detector-defines-max-cap
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/detection/partitionwidth/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'MaxPartitionWidthMm\s*='
+      mode: exists
+    cure: "Keep the partitionwidth.MaxPartitionWidthMm cap constant defined; the arbitrary-width vocabulary depends on it (#7909)."
+    origin: scripts/check-partition-width-no-hardcoded-vocab.sh

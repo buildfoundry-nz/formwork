@@ -1,0 +1,34 @@
+# Ported from Palletra scripts/check-gate-strip-comments-single-definition.sh (sweep-5 #8).
+# A meta-gate: the function dropComments must be DEFINED at most once across
+# scripts/ (canonically in scripts/lib/gate-text.go). Three privesc gates once
+# each carried a byte-identical copy; sweep-5 #8 hoisted the primitive into the
+# shared lib so the semantic pinning logic lives once. A re-introduced local
+# copy — the entropy the extraction removed — must fail. Call sites
+# (dropComments(f)) are not definitions and do not count.
+#
+# This inspects the TEXT of Go gate sources (counting a definition-shaped line),
+# not Go/SQL/Dart structure, so it is ported via the ESCAPE HATCH `command` type:
+# a self-contained reproduction that counts definition lines matching the gate's
+# own DEF_RE across scripts/**/*.go and exits non-zero when more than one exists.
+rules:
+  - id: gate-strip-comments-single-definition
+    type: command
+    severity: error
+    scope:
+      include:
+        - "scripts/**/*.go"
+    params:
+      cmd:
+        - bash
+        - "-c"
+        - |
+          n=$(grep -rhE --include='*.go' '^func dropComments\(' scripts 2>/dev/null | wc -l | tr -d ' ')
+          if [ "${n:-0}" -gt 1 ]; then
+            echo "dropComments() is defined ${n} times across scripts/ (must be at most once, in scripts/lib/gate-text.go)" >&2
+            exit 1
+          fi
+          exit 0
+      expect:
+        exit: 0
+    cure: "Delete the duplicate dropComments() definition and use the shared lib instead — scripts/lib/gate-text.go is the single source for the dropComments and brace/closure/arg-binding text primitives (sweep-5 #8)."
+    origin: scripts/check-gate-strip-comments-single-definition.sh

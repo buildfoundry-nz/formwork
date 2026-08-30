@@ -1,0 +1,16 @@
+# Ported from Palletra scripts/check-wizard-columns-step-roundtrip.sh arm 2 (sweep-3 #3).
+# The producer scan_session.go must call SummarizeUnmappedColumns so the wizard
+# Columns step renders. One of the five exists-mode anchors split from the .sh.
+rules:
+  - id: wizard-producer-calls-summarize-unmapped-columns
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/stockroom/analyze/scan_session.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\bSummarizeUnmappedColumns\('
+      mode: exists
+    cure: "scan_session.go must keep calling SummarizeUnmappedColumns or the wizard Columns step will not render (sweep-3 #3)."
+    origin: scripts/check-wizard-columns-step-roundtrip.sh

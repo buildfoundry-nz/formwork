@@ -1,0 +1,71 @@
+# Port of scripts/check-flutter-paginated-cursor-must-be-consumed.sh.
+#
+# Cross-file contract: a proto message that declares next_page_token (generated
+# `set nextPageToken(`) is a paginated response; every repository method under a
+# data/ dir that returns such a proto must, WITHIN ITS OWN PACKAGE, both accept
+# a pageToken param + send a page_token query, AND have a call site that reads
+# the server cursor (.nextPageToken). This joins the generated-proto set to the
+# per-package repo/provider code — a cross-file, cross-tree analysis no single
+# declarative rule expresses — so it maps to the `command` escape hatch,
+# reproducing the sweep-2 core contract over the fixture tree.
+#
+# The later value-flow strengthenings of the original (sweep-4/5/6: the call's
+# pageToken: argument must be the NON-constant cursor, and its last in-body
+# assignment must derive from .nextPageToken) are a Dart dataflow analysis that
+# the escape-hatch grep cannot faithfully reproduce; they are recorded in this
+# batch's skipped[] note as the un-ported remainder.
+#
+# Scope-level finding (no want marker); fire-1's data method ignores its cursor,
+# pass-1 accepts+sends page_token and a provider reads .nextPageToken.
+rules:
+  - id: flutter-paginated-cursor-must-be-consumed
+    type: command
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/data/**/*.dart"
+        - "shared/generated/dart/**/*.pb.dart"
+    params:
+      cmd:
+        - bash
+        - -c
+        - |
+          set -uo pipefail
+          gen="shared/generated/dart"
+          [ -d "$gen" ] || exit 0
+          libdirs=""
+          [ -d frontend/lib ] && libdirs="frontend/lib"
+          for d in packages/*/lib; do [ -d "$d" ] && libdirs="$libdirs $d"; done
+          [ -n "$libdirs" ] || exit 0
+          # Paginated messages: classes carrying `set nextPageToken(`.
+          msgs="$(grep -rl 'set nextPageToken(' "$gen" --include='*.pb.dart' 2>/dev/null | while IFS= read -r pb; do
+            awk '
+              /class[[:space:]]+[A-Za-z0-9_]+[[:space:]]+extends[[:space:]]+\$pb\.GeneratedMessage/ {
+                match($0, /class[[:space:]]+[A-Za-z0-9_]+/); c=substr($0, RSTART+6, RLENGTH-6); gsub(/[[:space:]]/,"",c)
+              }
+              /set nextPageToken\(/ { if (c != "") print c }
+            ' "$pb"
+          done | sort -u)"
+          [ -n "$msgs" ] || exit 0
+          fail=0
+          for msg in $msgs; do
+            while IFS= read -r df; do
+              [ -n "$df" ] || continue
+              case "$df" in *"/data/"*) ;; *) continue ;; esac
+              case "$df" in
+                packages/*/lib/*) pkg="$(printf '%s' "$df" | sed -E 's#(packages/[^/]+/lib)/.*#\1#')" ;;
+                *) pkg="frontend/lib" ;;
+              esac
+              if grep -q 'pageToken' "$df" && grep -q 'page_token' "$df"; then :; else
+                echo "$msg: ${df} never accepts a pageToken arg AND sends a page_token query — it ignores its cursor"; fail=1; continue
+              fi
+              if ! grep -rq '\.nextPageToken' "$pkg" --include='*.dart' 2>/dev/null; then
+                echo "$msg: no call site in $pkg reads .nextPageToken — the server cursor is fetched but never consumed"; fail=1
+              fi
+            done < <(grep -rlE "Future<${msg}>" $libdirs --include='*.dart' 2>/dev/null)
+          done
+          exit $fail
+      expect:
+        exit: 0
+    cure: "A repo method returning a next_page_token proto must accept an opaque pageToken and send it as ?page_token=, and a provider in the same package must read resp.nextPageToken and echo it back until empty (sweep-2 #1)."
+    origin: scripts/check-flutter-paginated-cursor-must-be-consumed.sh

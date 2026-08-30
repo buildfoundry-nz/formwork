@@ -1,0 +1,48 @@
+# Ported from Palletra scripts/check-no-write-only-palletra-tables.sh (#5/#6,
+# sweep-21-closeout). A palletra.* table INSERTed in non-test Go but never
+# referenced by a FROM/JOIN anywhere in non-test Go is WRITE-ONLY: rows are
+# persisted that nothing consumes.
+#
+# Ported as a set-relation SUBSET: side A = every table `INSERT INTO
+# palletra.<t>` writes; side B = every table a `FROM`/`JOIN palletra.<t>`
+# reads (a `DELETE FROM palletra.<t>` reader is already covered — it contains
+# `FROM palletra.<t>`). strings-only-go blanks Go code and comments so only SQL
+# carried in string literals is scanned.
+#
+# FALSE-POSITIVE FIX. The oracle ALSO counts an upsert self-read — `INSERT INTO
+# palletra.<t> … ON CONFLICT … RETURNING …` — as a reader (statement-scoped via
+# sql-statements-go.awk). palletra.user_bulletin_views is written+consumed
+# ONLY through that upsert's RETURNING in routes/changelog/changelog.go, never a
+# standalone FROM, so the FROM/JOIN-only port read it as write-only on clean
+# develop. formwork's set-relation matches PER LINE, so it cannot span the
+# multi-line `INSERT … ON CONFLICT … RETURNING` statement to detect the
+# self-read; the one documented upsert-RETURNING file is therefore excluded from
+# scope (the port of that carve-out). Every OTHER file's plain append-only
+# STOREs stay covered, and the fixture's write-only palletra.audit_events still
+# fires. (A NEW upsert-RETURNING table in a different file would need the same
+# carve-out or the statement-scoped detection the shell gate has.)
+rules:
+  - id: no-write-only-palletra-tables
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/routes/changelog/changelog.go"
+    preprocess: strings-only-go
+    params:
+      a:
+        files:
+          - "freightworks/**/*.go"
+        pattern: 'INSERT INTO palletra\.([a-z_][a-z0-9_]*)'
+        group: 1
+      b:
+        files:
+          - "freightworks/**/*.go"
+        pattern: '(?:FROM|JOIN)\s+palletra\.([a-z_][a-z0-9_]*)'
+        group: 1
+      relation: subset
+    cure: "Give the INSERTed palletra.* table a genuine reader (a SELECT FROM/JOIN that serves its rows, or an upsert ON CONFLICT … RETURNING self-read) — a table written but never read is a write-only fact-table dead-end (#5/#6)."
+    origin: scripts/check-no-write-only-palletra-tables.sh

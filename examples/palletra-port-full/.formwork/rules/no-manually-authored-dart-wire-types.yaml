@@ -1,0 +1,33 @@
+# Ported from Palletra scripts/check-no-manually-authored-dart-wire-types.sh.
+# Source of truth for wire shapes is schema/proto/*; generated Dart lives under
+# the generated tree. Hand-rolling a class that mirrors a proto by hand is a slow
+# drift trap. The .sh is a 5-rule suite; this port carries the two rules that are
+# plain path-only bans (no wrapper-layer or cross-file carve-out), foldable into
+# one line-oriented forbidden-pattern:
+#   Rule 1 — no `factory X.fromJson(` outside the generated tree.
+#   Rule 2 — no `@JsonSerializable(` outside the generated tree.
+# Both mean "a wire shape defined parallel to the proto"; the generated tree is
+# excluded by scope.
+#
+# DIVERGENCE (noted): Rule 3 (Map<String, dynamic> outside the wrapper layer),
+# Rule 4 (a class redeclaring a generated proto class name — a cross-file set
+# join), and Rule 5 (jsonEncode/jsonDecode outside the wrapper layer) are NOT
+# ported here; each needs either a wrapper-layer path carve-out or a cross-file
+# generated-class-name set that a single forbidden-pattern cannot express.
+rules:
+  - id: no-manually-authored-dart-wire-types
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/**/*.dart"
+        - "frontend/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/generated/**"
+    preprocess: raw
+    params:
+      pattern: '@JsonSerializable\(|^\s*factory\s+[A-Z][A-Za-z0-9_]*\.fromJson\s*\('
+    cure: "Do not hand-roll a wire type. Import the generated class from the generated proto output; for Freezed models commit the build_runner output. No hand-rolled factory X.fromJson / @JsonSerializable outside the generated tree."
+    origin: scripts/check-no-manually-authored-dart-wire-types.sh

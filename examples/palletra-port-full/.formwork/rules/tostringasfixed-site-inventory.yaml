@@ -1,0 +1,53 @@
+# Ported from Palletra scripts/check-tostringasfixed-site-inventory.sh (#5283). Every
+# `toStringAsFixed` call under the Dart library roots must be CLASSIFIED in
+# docs/tostringasfixed-site-inventory.md, so a NEW raw display-format site cannot land
+# without a reviewer deciding whether it should be formatCompact (A), a
+# unit-aware helper (B), an intentional fixed precision (C — permanent
+# allowlist), or a future server display string (D).
+#
+# The .sh's allowlist is a doc keyed by repo-relative path; formwork can't read
+# an external doc's membership, so the allowlist ports to scope.exclude — the
+# doc's 9 currently-classified paths (the class-C permanent members + the
+# deferred class-D boundaries + the format_compact helper itself). multiline:
+# true reports ONE finding per file at the first `toStringAsFixed`, matching the
+# .sh's one-report-per-site posture. Generated Dart is excluded exactly as the
+# dart_source_paths enumerator excludes it.
+#
+# DIVERGENCE (noted): the .sh is a shrink-only baseline that also WARNS on stale
+# doc rows and requires the doc classification itself; formwork's static excludes
+# express the current allowlist membership but not the "must be classified in the
+# doc" / stale-row-warning semantics. A new raw site outside the excluded set
+# still fires — the load-bearing half.
+rules:
+  - id: tostringasfixed-site-inventory
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "packages/feature_costing/lib/data/pricing_panel_repository.dart"
+        - "packages/feature_costing/lib/presentation/margin/margin_input_slider.dart"
+        - "packages/feature_costing/lib/presentation/margin/margin_overview_card.dart"
+        - "packages/feature_costing/lib/presentation/margin/margin_drivers_section.dart"
+        - "packages/feature_costing/lib/testing/fake_margin_model_repository.dart"
+        - "packages/feature_stockroom/lib/presentation/ingest_wizard/ingest_upload_form.dart"
+        - "packages/plt_core/lib/format/format_compact.dart"
+        - "packages/plt_skus/lib/data/skus_sidebar_repository.dart"
+        - "packages/plt_pricing/lib/presentation/lookups/formula_summary_chip.dart"
+    params:
+      # Origin: a file is a "site" when it contains the token `toStringAsFixed`.
+      # The pattern is a plain literal — no regex metacharacter, no lookaround —
+      # so it is native RE2. multiline: true keeps the one-finding-per-file posture
+      # (fires once on the first toStringAsFixed, the fixture want-anchor line).
+      pattern: 'toStringAsFixed'
+      prefilter: 'toStringAsFixed'
+      multiline: true
+    cure: "Classify every display-format site: (A) formatCompact() from plt_core for a trailing-zero-trimmed number, (B) the unit-aware helper when precision varies by unit, (C) add a permanent allowlist entry for intentional fixed precision, or (D) move the display string server-side."
+    origin: scripts/check-tostringasfixed-site-inventory.sh

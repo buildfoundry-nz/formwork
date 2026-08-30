@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+// ListClassificationRequest — the LIST handler reads chi.URLParam directly, so
+// nothing decodes this. It is a dead orphan struct in shared/generated.
+message ListClassificationRequest {
+}
+
+// CreateTaxonomyRequest carries the create body; the Go handler decodes it.
+message CreateTaxonomyRequest {
+  string name = 1;
+}

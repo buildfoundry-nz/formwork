@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-correction-event-marshal-confined-to-one-func.sh.
+# The #6024/#7461 fix hoisted the correction-outbox event's serialization to ONE
+# helper, mutbase.marshalRevisionEvent, and pinned its wire keys with a drift
+# test. But that test cannot see a SECOND marshal: a new emitter or an inline
+# `protojson.MarshalOptions{UseProtoNames:true}.Marshal(event)` would serialize
+# the MarkerGeometryCorrected event without the pinned keys, re-opening the
+# NULL-geometry corruption the infra adjustments_training_view reads.
+#
+# The .sh's "protojson.Marshal may appear in ONLY marshalRevisionEvent" is a
+# per-function confinement — exactly the go/call-confined-to-func-name analyzer:
+# a call whose selector matches `symbol` may appear only inside a func whose name
+# matches `allowed_func`. protojson.Unmarshal (the decode path) does not match
+# and stays legal. The .sh's substring catch of the `MarshalOptions{}.Marshal`
+# inline form (which the AST renders as the bare selector `Marshal`) is the
+# nuance dropped; this captures the primary bare-call `protojson.Marshal(` form.
+rules:
+  - id: correction-event-marshal-confined-to-one-func
+    type: go/call-confined-to-func-name
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/markupwrite/mutbase/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      symbol: 'protojson\.Marshal'
+      allowed_func: '^marshalRevisionEvent$'
+    cure: "Do not marshal the correction-outbox event with protojson outside marshalRevisionEvent. Call marshalRevisionEvent(...) — a second/inline protojson marshal re-opens the #6024 NULL-geometry corruption."
+    origin: scripts/check-correction-event-marshal-confined-to-one-func.sh

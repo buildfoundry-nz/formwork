@@ -1,0 +1,32 @@
+# Ported from Palletra scripts/check-stockroom-has-integration-test.sh (#2557).
+# Pins Stockroom real-backend integration coverage: at least one *stockroom*.dart under
+# frontend/integration_test/ must bind a REAL stockroom repository via a non-comment
+# container.read(<one of six repo providers>) call — a stubbed symbol or a
+# commented-out binding does not count.
+#
+# Ported as a required-pattern (mode: exists): across the *stockroom*.dart
+# integration tests, SOME file must contain a live `container.read(<provider>)`
+# call. The `^(?:(?!//).)*container` guard stands in for the .sh's decomment
+# step — it consumes the assignment prefix (`final repo = `) but fails on any
+# line where `//` precedes the container.read, so a commented binding cannot
+# launder the pin, keeping it on live code (sweep closeout IMPORTANT #8).
+#
+# DIVERGENCE (noted): the .sh's Part 1 — the five named stockroom_*_test.dart
+# targets must each exist and be >=200 bytes (non-hollow) — is a file-presence /
+# min-size check that formworks declarative types do not express (file-size
+# checks max caps, doc-path-exists scans doc citations). The load-bearing,
+# audit-flagged novelty is the real-repository binding (Part 2), ported here;
+# the five-target roster is a straight presence roster left to the .sh in CI.
+rules:
+  - id: stockroom-has-integration-test
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/integration_test/**/*stockroom*.dart"
+    params:
+      syntax: regexp2
+      mode: exists
+      pattern: '^(?:(?!//).)*container\s*\.\s*read\s*\(\s*(?:ratedItemsRepositoryProvider|rateSourcesRepositoryProvider|ingestRepositoryProvider|ratecardRepositoryProvider|vendorsRepositoryProvider|laborRateLinesRepositoryProvider)'
+    cure: "Bind a real stockroom repository via container.read(<provider>) in a stockroom_* integration test (see stockroom_filter_adjust_spine_test.dart). A comment that only names the provider, or a stub that only names the class, is not enough (#2557)."
+    origin: scripts/check-stockroom-has-integration-test.sh

@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-schema-breaking-baseline.sh — Tooth 2.
+# scripts/schema.go MUST baseline buf breaking at a merge-base: a tip baseline
+# mis-flags other branches' later additions as this PR's deletions. required-
+# pattern in every-file mode over the single-file scope makes a schema.go that
+# never mentions `merge-base` a file-level finding.
+#
+# Port note: decomment-go, not raw. schema.go resolves the baseline by exec'ing
+# git, so `merge-base` lives in a string literal — which decomment-go preserves
+# — while a comment merely NAMING merge-base is blanked. Raw would accept that
+# comment as the required match, so the baseline resolution could be ripped out,
+# mentioned in the file header, and the rule would still pass (fire-2 is that
+# shape; #263.3). The sibling Tooth-1 rule is the opposite hazard, not the same
+# one: it is a forbidden-pattern, where a raw scan makes a comment FALSE-fire.
+# Tooth 3 (LIVE git baseline-tree health) is not portable to a declarative rule.
+rules:
+  - id: buf-breaking-check-needs-merge-base-baseline
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "scripts/schema.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'merge-base'
+      mode: every-file
+    cure: "scripts/schema.go must baseline buf breaking at $(git merge-base origin/develop HEAD) — never a moving tip, never a stale branch, never a silent skip."
+    origin: scripts/check-schema-breaking-baseline.sh

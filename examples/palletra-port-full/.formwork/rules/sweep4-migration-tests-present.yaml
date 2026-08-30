@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-sweep4-migration-tests-present.sh
+# (sweep-4 #3/#4 + sweep-5 #10/#19). Every migrations/palletra/NNNN_*.up.sql
+# with NNNN >= 0073 (plus the explicit platform stems 0028/0029) must have BOTH a
+# <stem>_test.go and a <stem>_integration_test.go beside it, and each of those
+# must contain a `^func Test` and a non-trivial body (>= 2 non-comment/package/
+# import lines).
+#
+# COMMAND ESCAPE. The scope selector is a NUMERIC baseline over the migration
+# stem (NNNN >= 0073, with 10#-radix normalisation and an explicit platform-stem
+# addendum) — a magnitude comparison a glob/regex set cannot express — and the
+# per-companion payload is a content probe (a real `func Test` plus a
+# non-trivial-body line count that rejects an empty `package migrations` stub).
+# A single declarative set-relation/baseline rule cannot carry both the numeric
+# baseline and the two content requirements faithfully, so it runs the real
+# script (verifies in CI, enumerated by `formwork lint`). No fixture.
+rules:
+  - id: sweep4-migration-tests-present
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-sweep4-migration-tests-present.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**"
+    params:
+      cmd:
+        - bash
+        - scripts/check-sweep4-migration-tests-present.sh
+      expect:
+        exit: 0
+    cure: "Every palletra migration >= 0073 (+ the 0028/0029 platform pair) needs a non-trivial structural <stem>_test.go AND integration <stem>_integration_test.go beside it — each with a `func Test` and a real body, not an empty package stub (sweep-4/sweep-5). Add the missing/stub tests."
+    origin: scripts/check-sweep4-migration-tests-present.sh

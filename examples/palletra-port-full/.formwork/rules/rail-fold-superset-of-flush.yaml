@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-flutter-rail-fold-superset-of-flush.sh (#7662).
+# In workflow_rail_sync.dart, WorkflowRailSync.fold() CONSUMES the
+# refresh queued for its page, so it is the ONLY thing that updates those
+# caches. The gate enforces several coupled invariants over the ONE file:
+#   RULE A (coverage): every rail-surface provider token named in _flush() must
+#     also be named in fold() (flush ⊆ fold); _flush() must name at least one
+#     surface (anti-vacuity — an empty set is a subset of anything);
+#   RULE B (guarded reads): fold() may not `ref.read(<surface>)` a surface
+#     directly (that BUILDS a dead autoDispose member, firing the very GET the
+#     fold avoids); and fold() must carry at least as many `ref.exists(` guards
+#     as `.notifier` reads.
+#
+# Why the ESCAPE HATCH (type: command): this is a within-file SET-RELATION
+# between two named method bodies (_flush() and fold(), each de-commented and
+# brace-extracted) PLUS a guard-count inequality and two anti-vacuity floors —
+# a multi-part structural predicate over specific methods that no single
+# declarative pattern/set-relation/ordering type expresses faithfully. This
+# command runs the real gate; formwork lint enumerates it and it verifies in CI.
+rules:
+  - id: rail-fold-superset-of-flush
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-flutter-rail-fold-superset-of-flush.sh —
+      the validating target's own gate script, which this corpus does not
+      carry and cannot: it is written in that tree's vocabulary, and this
+      repository tracks no shell scripts at all. In a fixture tree bash would
+      exit 127 in the fire tree and the pass tree alike, so the fire proof
+      would be satisfied by the detector NOT EXISTING and the pass proof would
+      report that same missing-detector exit as a finding. What the port
+      asserts here is the SCOPE and the CURE, both readable against the origin
+      script; the detection runs where the script does.
+    scope:
+      include:
+        - "packages/plt_canvas_kit/lib/measure/providers/workflow_rail_sync.dart"
+    params:
+      cmd:
+        - "bash"
+        - "scripts/check-flutter-rail-fold-superset-of-flush.sh"
+      expect:
+        exit: 0
+    cure: "In workflow_rail_sync.dart, fold every rail surface _flush() refreshes (flush ⊆ fold), read each via an ref.exists-guarded local (never a bare ref.read(<surface>.notifier)), and keep at least one surface named directly in _flush() (#7662)."
+    origin: scripts/check-flutter-rail-fold-superset-of-flush.sh

@@ -1,0 +1,38 @@
+version: 2
+
+# THE POSTURE, RECORDED RATHER THAN INFERRED (#207).
+#
+# Every third-party action in this repository is pinned to a full commit SHA,
+# not to a tag. A tag is a mutable pointer: `actions/checkout@v4` is whatever
+# the v4 tag points at the next time a job starts, and this repository's
+# release.yml runs with `contents: write` and publishes the binaries people
+# install. A moved tag there is a supply-chain compromise with a signed release
+# at the end of it.
+#
+# SHA pins rot instead of moving, which is the trade this file settles: without
+# something proposing bumps, a pinned SHA silently ages out of security
+# support. Dependabot opens one reviewable pull request per action, carrying
+# the new SHA and the changelog, and — since main requires a code-owner-reviewed
+# pull request with the verify matrix green — that PR goes through the same gate
+# as any other change. Nothing merges itself.
+#
+# The `# vN` comment beside each pin is not decoration: it is the only
+# human-readable form of a 40-hex string, and Dependabot updates it in step.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+
+  # Go modules, same reasoning and a lower rate: the release binaries link
+  # whatever is in go.sum, so a vulnerable dependency ships inside them.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: deps

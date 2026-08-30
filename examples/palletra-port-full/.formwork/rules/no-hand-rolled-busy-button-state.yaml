@@ -1,0 +1,62 @@
+# Ported from Palletra scripts/check-no-hand-rolled-busy-button-state.sh
+# (audit Round 0.3 / WI-112 / DD-9 / #8893). An open-coded "click -> spinner ->
+# API -> settle" button keyed on a hand-rolled bool must instead ride
+# BusyFilledButton / BusyOutlinedButton / BusyIconButton
+# (packages/plt_widgets/lib/busy_filled_button.dart).
+#
+# The .sh runs four per-file fingerprint greps and fires when
+#   FP1 AND ( (FP2 AND FP3) OR FP4 )
+# co-occur in one file outside packages/plt_widgets/lib/**:
+#   FP1 — a class-private `bool _<submitting|busy|loading|saving|pending> =`.
+#   FP2 — a setState toggle on that field.
+#   FP3 — a ternary read `_<field> ?` (the inline spinner-or-icon swap).
+#   FP4 — the #8893 pass-to-child shape: the field handed to a child as a
+#         busy:/isOccupied:/submitting:-style named arg.
+# A same-file boolean-combination CO-OCCURRENCE. The origin boolean
+# FP1 AND ((FP2 AND FP3) OR FP4) becomes a PURE conjunction by the distributive
+# law — (FP2 AND FP3) OR FP4 == (FP2 OR FP4) AND (FP3 OR FP4) — so it maps to a
+# linear-RE2 all_of of three clauses: FP1, (FP2|FP4), (FP3|FP4), each matched
+# over the whole file (order-independent, like the four .sh greps). `(?m)` makes
+# FP4's `^` match at a line start (named-arg indentation). all_of co-occurrence
+# is reported on line 1 (fixture want-marker).
+#
+# FP FIX (was: fired on packages/feature_dimension/lib/presentation/partition_type_control.dart).
+# The .sh's four fingerprints are LINE-BASED greps, so each fingerprint's tokens
+# must sit on ONE line; the port let `\s`/`[^}]*` cross newlines, so a
+# dartfmt-WRAPPED ternary — `onChanged: _pending\n    ? null` (FP3 token
+# split across two lines) — matched the port but not the line-based .sh (which
+# reports FP3=0, so the file passes). Each fingerprint's INTER-token whitespace
+# is now horizontal-only (`[^\S\r\n]` / `[^}\r\n]`), so a token pair broken by a
+# newline no longer counts — matching the .sh's per-line grep. FP1 (and the
+# leading `[\s\S]*`) still let the fingerprints live anywhere in the file, as
+# the .sh's four independent whole-file greps do.
+rules:
+  - id: no-hand-rolled-busy-button-state
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/plt_widgets/lib/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+    params:
+      # Distributive-law refactor of FP1 AND ((FP2 AND FP3) OR FP4):
+      #   clause 1 = FP1  — class-private `bool _<name> =`
+      #   clause 2 = FP2 (setState toggle on the field) OR FP4 (busy:-prop pass-to-child)
+      #   clause 3 = FP3 (`_<name> ?` ternary read)      OR FP4
+      # all three present  <=>  the original boolean is satisfied. Each clause is a
+      # single linear-RE2 regex matched over the whole file (the .sh's four
+      # independent per-file greps). Inter-token classes stay newline-excluding
+      # ([^\S\r\n], [^}\r\n]) so whole-file matching keeps the .sh's per-line grep
+      # semantics — a dartfmt-wrapped token pair split by a newline still does not
+      # count. `(?m)` line-anchors FP4's `^` (named-arg indentation).
+      all_of:
+        - 'bool[^\S\r\n]+_(?:submitting|busy|loading|saving|pending)[^\S\r\n]*='
+        - '(?m)(?:setState\(\(\)[^\S\r\n]*(?:=>|\{)[^}\r\n]*_(?:submitting|busy|loading|saving|pending)[^\S\r\n]*=[^\S\r\n]*(?:true|false|!)|(?:^[ \t]*|[(,][ \t]*)(?:busy|isOccupied|loading|isLoading|inProgress|submitting|isSubmitting)[^\S\r\n]*:[^\S\r\n]*_(?:submitting|busy|loading|saving|pending)\b)'
+        - '(?m)(?:_(?:submitting|busy|loading|saving|pending)[^\S\r\n]*\?|(?:^[ \t]*|[(,][ \t]*)(?:busy|isOccupied|loading|isLoading|inProgress|submitting|isSubmitting)[^\S\r\n]*:[^\S\r\n]*_(?:submitting|busy|loading|saving|pending)\b)'
+    cure: "Replace the setState bool — whether it drives a spinner-or-icon ternary or is handed to a child as a busy: prop — with BusyFilledButton / BusyOutlinedButton / BusyIconButton from packages/plt_widgets/lib/busy_filled_button.dart."
+    origin: scripts/check-no-hand-rolled-busy-button-state.sh

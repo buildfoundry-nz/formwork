@@ -1,0 +1,25 @@
+# Ported from Palletra scripts/check-idempotency-route-registry-required.sh (WI-111).
+# Step 1 of the shipped gate is a clean forbidden-pattern: the type-coercion
+# constructor `idempotency.Route("...")` may not appear outside the idempotency
+# package — callers must go through MountRoute / MustAddRoute so the registry
+# can validate the route at request time.
+#
+# The shipped gate's Step 2 (every MountRoute("<literal>") must be canonical
+# `<VERB> /path` — an uppercase RFC verb + one space + a leading-slash path) is a
+# match-then-validate-the-negation check: it fires when a matched literal is NOT
+# of the canonical shape. That requires negative-lookahead / capture-and-reparse
+# semantics a single RE2 forbidden-pattern cannot express, so it is not ported
+# here (see notes). Step 1, the dominant single-source invariant, is faithful.
+rules:
+  - id: idempotency-route-registry-required
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+      exclude:
+        - "freightworks/services/core-api/internal/idempotency/**"
+    params:
+      pattern: 'idempotency\.Route\("'
+    cure: "Register every route through idempotency.MountRoute / MustAddRoute at package-init so the registry can validate it at request time; the direct type-coercion constructor is forbidden outside the idempotency package (WI-111)."
+    origin: scripts/check-idempotency-route-registry-required.sh

@@ -1,0 +1,32 @@
+# Ported from Palletra scripts/check-flutter-widget-ref-after-await-footer.sh.
+# A plot_sidebar_footer.dart async handler must NOT touch the widget `ref`
+# (ref.read/watch/invalidate/listen) AFTER an `await`: the action row can
+# rebuild into a spinner and UNMOUNT the button mid-async, disposing that
+# WidgetRef — touching it then throws "Using ref … after it was disposed".
+# Post-await side-effects belong on a keepAlive controller's OWN ref. The .sh
+# is a per-method awk state machine (reset at each class-member async signature)
+# that flags a `ref.<…>` on a line after a completed await statement.
+#
+# Mapping: formwork's built-in dart/ref-after-await analyzer is that same shape
+# (naive brace-depth method-body tracking): within a method whose header matches
+# `method`, any `access` line after an `await` that is not `guard`-covered fires.
+# `method` = an async method header (only there can a post-await suspension
+# occur — the sync build() legitimately reads ref); `access` = the four ref
+# touches. The footer gate has NO guard escape hatch (ANY post-await ref touch
+# is a violation), so `guard` is a sentinel token that never appears — every
+# post-await ref access fires. Scoped to the footer file by name (the .sh
+# content-anchors class PlotSidebarFooter across the workspace).
+rules:
+  - id: footer-handler-no-ref-post-await
+    type: dart/ref-after-await
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/plot_sidebar_footer.dart"
+        - "packages/*/lib/**/plot_sidebar_footer.dart"
+    params:
+      method: 'async\s*\{'
+      access: 'ref\.(read|watch|invalidate|listen)\('
+      guard: '__no_ref_after_await_guard_sentinel__'
+    cure: "Move the post-await side-effects (cache invalidation, the post-approve nav advance) onto a keepAlive controller's own ref (see PlotApproveSectionController) — never touch the widget ref after an await in a footer handler."
+    origin: scripts/check-flutter-widget-ref-after-await-footer.sh

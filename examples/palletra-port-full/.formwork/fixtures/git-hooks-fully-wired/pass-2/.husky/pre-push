@@ -1,0 +1,3 @@
+#!/bin/dash
+# dash is a POSIX-sh-family interpreter and node-free: accepted.
+exec ./scripts/check-file-size.sh

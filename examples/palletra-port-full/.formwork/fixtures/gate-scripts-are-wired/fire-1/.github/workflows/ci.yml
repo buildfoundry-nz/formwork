@@ -1,0 +1,5 @@
+name: ci
+jobs:
+  arch:
+    steps:
+      - run: go run scripts/check-example-gate.go

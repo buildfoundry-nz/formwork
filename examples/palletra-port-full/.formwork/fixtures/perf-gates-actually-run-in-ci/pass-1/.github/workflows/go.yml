@@ -1,0 +1,11 @@
+name: go
+on: [push]
+jobs:
+  integration:
+    runs-on: blacksmith
+    env:
+      RUN_PERF_GATES: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: go test
+        run: go test ./...

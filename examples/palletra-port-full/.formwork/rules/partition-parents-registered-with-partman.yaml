@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-partition-parents-registered-with-partman.sh
+# (#2867). The AlloyDB-side mirror of check-partition-parents-carry-ci-default-child:
+# there the DEFAULT fallback is intentionally SKIPPED (pg_partman owns partition
+# creation), so a RANGE-partitioned parent never handed to partman via a
+# create_parent() call has NO forward partition past its last hardcoded child and
+# 23514s at the quarter rollover on every partman-managed env (dev/staging/prod).
+# That is how platform.audit_events / platform.rate_entries detonated on
+# 2026-07-01 (#4708). Rule: every range parent in the snapshot MUST be registered
+# with a create_parent() (p_parent_table := 'schema.table') somewhere in the
+# migration tree.
+#
+# Ported as a set-relation SUBSET (A ⊆ B). Side A = range-partitioned parents from
+# schema.snapshot.sql; side B = every parent named in a `p_parent_table :=
+# 'schema.table'` create_parent registration across the migration tree. A range
+# parent absent from B has no partman registration and fires (scope-level).
+#
+# DIVERGENCE (noted): identical to check-partition-parents-carry-ci-default-child — side
+# A keys on the single-line range-child seed attach (`ALTER TABLE ONLY <parent>
+# ATTACH PARTITION <child> FOR VALUES FROM …`) rather than the multi-line
+# `PARTITION BY RANGE` clause a per-line set-relation cannot join to the table
+# name. In this repo the sets coincide. Side B scans the whole migration tree
+# (up + down .sql), matching the .sh's tree-wide grep.
+rules:
+  - id: partition-parents-registered-with-partman
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+        - "freightworks/services/core-api/migrations/**/*.sql"
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+        pattern: 'ALTER TABLE ONLY ([a-z0-9_]+\.[a-z0-9_]+) ATTACH PARTITION [a-z0-9_.]+ FOR VALUES FROM'
+        group: 1
+      b:
+        files:
+          - "freightworks/services/core-api/migrations/**/*.sql"
+        pattern: 'p_parent_table[ \t]*:=[ \t]*.([a-z0-9_]+\.[a-z0-9_]+)'
+        group: 1
+      relation: subset
+    cure: "Register the range parent with partman in a migration (PERFORM public.create_parent(p_parent_table := '<schema.table>', p_type := 'range', …), partman-guarded), mirroring 0015 / 20000419203000. Without it AlloyDB has no forward partition and 23514s at the quarter rollover (#2867 / #4708)."
+    origin: scripts/check-partition-parents-registered-with-partman.sh

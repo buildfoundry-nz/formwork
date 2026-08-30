@@ -1,0 +1,36 @@
+# Ported from Palletra scripts/check-flutter-reporter-start-via-guarded-helper.sh (#4202).
+# The post-auth client-event reporter is kicked by reading
+# `clientTelemetryReporterProvider.future` to force its async build(). A bare
+# fire-and-forget read drops a rejected init as an uncaught async error,
+# silently losing telemetry. The ONE safe way is startClientEventTracker(),
+# which routes the future through bestEffort. This rule fires on a bare
+# fire-and-forget read STATEMENT of clientTelemetryReporterProvider.future.
+#
+# Port fidelity (approximation, noted): the .sh decomments Dart and collapses
+# whitespace, then removes the guarded `startClientEventTracker(<ref>.(read|
+# watch)(clientTelemetryReporterProvider.future))` form and flags any surviving read.
+# That negative-context match needs lookbehind, which RE2 lacks, and this
+# binary's forbidden-pattern is RE2 line-by-line (no `syntax: regexp2`, no
+# multiline). So this rule matches only the exact #4202 bug shape: a statement
+# that BEGINS with `<ref>.(read|watch)(clientTelemetryReporterProvider.future);`.
+# The single-line guarded call begins with `startClientEventTracker(` (no
+# match), and a dart-format-wrapped guarded argument line ends in `),` not `);`
+# (no match), so neither false-fires. It does NOT catch an assignment-captured
+# unguarded read (`final f = ref.read(...future);`) — an under-approximation.
+# Rule B of the .sh (startClientEventTracker called exactly once) is an
+# at-most-one count that forbidden/required-pattern cannot express; not ported.
+rules:
+  - id: flutter-reporter-start-via-guarded-helper
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+    params:
+      pattern: '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*\.(?:read|watch)\(clientTelemetryReporterProvider\.future\)[[:space:]]*;'
+    cure: "Route the reporter-start read through startClientEventTracker(ref.read(clientTelemetryReporterProvider.future)) so a rejected init logs a WARNING via bestEffort instead of escaping as an uncaught async error (#4202)."
+    origin: scripts/check-flutter-reporter-start-via-guarded-helper.sh

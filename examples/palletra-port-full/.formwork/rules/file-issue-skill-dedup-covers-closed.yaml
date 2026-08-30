@@ -1,0 +1,14 @@
+# Ported from Palletra scripts/check-issue-filing-skill-contract.sh (#7744), invariant R2:
+# the /file-issue skill's dedup sweep must cover closed issues too — it MUST
+# reference `--state all`. Exists-mode required rule over SKILL.md.
+rules:
+  - id: file-issue-skill-dedup-covers-closed
+    type: required-pattern
+    scope:
+      include:
+        - ".claude/skills/file-issue/SKILL.md"
+    params:
+      pattern: '--state all'
+      mode: exists
+    cure: "Keep the /file-issue skill's dedup sweep on `--state all` so it covers closed issues, not open-only (R2, #7744)."
+    origin: scripts/check-issue-filing-skill-contract.sh

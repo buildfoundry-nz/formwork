@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-routes-mount-via-subrouters.sh (#2652 SV-ARC-1).
+# package main (freightworks/services/core-api/*.go, top level only) is the
+# composition root — it must register NO application route inline. Two shapes
+# fire, combined here into one alternation:
+#   Pattern 1 — a capability-registrar call rg.Capability/Role/Exempt(.
+#   Pattern 2 — a raw chi verb r.Get/Post/Put/Patch/Delete/Method( whose line
+#               also carries a "/api/ path literal. The /healthz + /readyz
+#               probes are NOT /api/ paths, so they never match.
+# decomment-go reproduces the .sh's is_comment_line skip: a pure-comment mention
+# is blanked before matching, and a trailing comment can't hide a real route.
+# APPROXIMATION: RE2 has no lookaround, so pattern 2 requires the verb to
+# precede the "/api/ literal on the line (r.Get("/api/… and
+# r.Method(http.MethodGet, "/api/…), which is how both real shapes are written).
+rules:
+  - id: routes-mount-via-subrouters
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '(^|[^[:alnum:]_.])rg\.(Capability|Role|Exempt)\(|(^|[^[:alnum:]_.])r\.(Get|Post|Put|Patch|Delete|Method)\(.*"/api/'
+    cure: "Move the route out of package main into its per-domain sub-router — routes/<domain>/register.go exposing Register<Domain>(r chi.Router, deps) []routereg.RouteInfo. Only the top-level /healthz + /readyz probes mount directly in main (#2652)."
+    origin: scripts/check-routes-mount-via-subrouters.sh

@@ -1,0 +1,16 @@
+# Ported from scripts/check-per-item-vendor-id-wired.sh (sweep-3 #2), reader
+# half anchor 2. stockroom_supplier_match.go's supplier-detail-items query must
+# reference pi.vendor_id or items linked via the per-item supplier FK are
+# silently dropped.
+rules:
+  - id: per-item-supplier-id-referenced-by-match-query
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/routes/stockroom/suppliers/stockroom_supplier_match.go'
+    params:
+      pattern: 'pi\.vendor_id'
+      mode: exists
+    cure: 'stockroom_supplier_match.go must keep referencing pi.vendor_id or supplier detail items drop rows linked via the per-item supplier FK (sweep-3 #2 reader half).'
+    origin: scripts/check-per-item-vendor-id-wired.sh

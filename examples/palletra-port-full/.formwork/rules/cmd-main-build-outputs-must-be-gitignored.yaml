@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-cmd-main-build-outputs-must-be-gitignored.sh (#7505).
+# `cd freightworks && go build ./...` drops an executable named after each
+# `package main` directory under services/core-api/cmd/ and freightworks/cmd/
+# into freightworks/. Every such <name> MUST carry a whole-line `/<name>` entry
+# in freightworks/.gitignore, or a `git add -A` restages the built binary — the
+# path a 23 MB Mach-O blob took into the repo. Non-main helper subpackages under
+# cmd/ build no output and are skipped. Bidirectional in spirit: the ignore
+# hygiene layer must stay in lock-step with the set of main cmd dirs.
+#
+# Why the ESCAPE HATCH (type: command): the gate enumerates DIRECTORIES on disk
+# (the built binary is named after the cmd dir, not any content token), reads
+# each dir's own .go files for `^package main`, and joins that directory-name set
+# to whole-line entries in a sibling .gitignore. formwork's rule types extract
+# value sets from file CONTENT, not from path segments, so the directory-name↔
+# gitignore join cannot be expressed by set-relation or pair-consistency. It runs
+# the real check unmodified.
+rules:
+  - id: cmd-main-build-outputs-must-be-gitignored
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-cmd-main-build-outputs-must-be-gitignored.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/cmd/**"
+        - "freightworks/cmd/**"
+        - "freightworks/.gitignore"
+    params:
+      cmd:
+        - bash
+        - scripts/check-cmd-main-build-outputs-must-be-gitignored.sh
+      expect:
+        exit: 0
+    cure: "Add the missing '/<name>' whole-line entry to freightworks/.gitignore for each services/core-api/cmd/<name> or freightworks/cmd/<name> that is a `package main` — each builds an executable named <name> into freightworks/, and without the ignore entry a `git add -A` restages it (#7505)."
+    origin: scripts/check-cmd-main-build-outputs-must-be-gitignored.sh

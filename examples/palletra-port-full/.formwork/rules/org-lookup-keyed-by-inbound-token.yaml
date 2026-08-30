@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-inbound-email-recipient-token-routing.sh (#8792),
+# pattern B (POSITIVE invariant). The org must be pinned by an `incoming_mail_token = $`
+# SQL lookup keyed off the recipient token. Its ABSENCE means the org is no longer
+# pinned by the token — exists-mode fires when no in-scope file carries the anchor.
+rules:
+  - id: org-lookup-keyed-by-inbound-token
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/mail_intake/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'incoming_mail_token\s*=\s*\$'
+      mode: exists
+    cure: "Pin the org with an `incoming_mail_token = $` lookup keyed off the recipient inbound token, never off From-derived membership (#8792)."
+    origin: scripts/check-inbound-email-recipient-token-routing.sh

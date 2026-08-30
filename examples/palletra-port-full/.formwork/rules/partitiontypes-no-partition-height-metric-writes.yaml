@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-partitiontypes-no-partition-height-metric-writes.sh (#4817).
+# Measurement is the single source of truth for partition heights. The partition-types write
+# path (non-test .go under internal/partitiontypes/ + routes/pricing/pricing_partition_types.go)
+# must never issue a SQL WRITE (INSERT INTO / UPDATE / DELETE FROM) targeting
+# palletra.annotation_gauges or palletra.annotations. SELECT reads are fine.
+#
+# APPROXIMATION: the .sh flattens newlines to spaces before matching, so a
+# verb/table split across lines is still caught. formwork forbidden-pattern
+# matches per line, so this port catches the (dominant) single-line write shape
+# but not a write whose verb and table are on different physical lines.
+rules:
+  - id: partitiontypes-no-partition-height-metric-writes
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/internal/partitiontypes/**/*.go"
+        - "freightworks/services/core-api/routes/pricing/pricing_partition_types.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: '(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+palletra\.(annotation_gauges|annotations)([^A-Za-z0-9_]|$)'
+    cure: "Do not write annotation_gauges / annotations from the partition-types path; READ approved metrics to seed drafts, and route legitimate assignment clears through the markupwrite/partitiontypemut seam (#4817)."
+    origin: scripts/check-partitiontypes-no-partition-height-metric-writes.sh

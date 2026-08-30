@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+// The name reservation was dropped — a regression could re-add active_rate.
+message UpdateRatedItemRequest {
+  reserved 6;
+  optional string tariff_text = 8;
+}

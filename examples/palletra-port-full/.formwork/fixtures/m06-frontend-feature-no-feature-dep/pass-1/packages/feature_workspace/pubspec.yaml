@@ -1,0 +1,15 @@
+name: feature_workspace
+description: Org feature package.
+publish_to: none
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter
+  plt_core:
+    path: ../plt_core
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  feature_access:
+    path: ../feature_access

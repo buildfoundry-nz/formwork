@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-inbound-email-recipient-token-routing.sh (#8792),
+# pattern A (POSITIVE invariant). The inbound-email webhook must resolve the org
+# from the per-org inbound TOKEN in the recipient address, so at least one
+# non-test file under routes/mail_intake/ must call inboundaddr.ParseToken(.
+# Its ABSENCE means routing has moved off the recipient token (onto the spoofable
+# From) — exists-mode fires when no in-scope file carries the anchor.
+rules:
+  - id: recipient-token-extracted-from-inbound-email
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/mail_intake/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'inboundaddr\.ParseToken\('
+      mode: exists
+    cure: "Keep resolving the org from the recipient inbound token via inboundaddr.ParseToken(...); never route off the spoofable From header (#8792)."
+    origin: scripts/check-inbound-email-recipient-token-routing.sh

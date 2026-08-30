@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package palletra.domain.v1;
+
+// aisle_direction was dropped from this message — the cross-message round-trip
+// silently reverts to "single-sided, 0 cross-aisles".
+message VisionkitAnnotationProperties {
+  string label = 1;
+}

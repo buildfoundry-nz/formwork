@@ -1,0 +1,25 @@
+# Ported from Palletra scripts/check-routes-capability-required.sh (#5390).
+# In converted capability-registrar files (services/core-api/**/{register_*.go,
+# register.go, wave*_register.go}, non-test) every route must go through
+# rg.Capability/rg.Exempt. Two raw shapes are violations, combined here into one
+# alternation: Pattern1 a raw chi mutating verb on the router var
+# `r.(Post|Put|Patch|Delete)(` (a route that bypassed the registrar); Pattern2 a
+# raw `r.With(orgctx.AssertCapability(` chain (gated the old way, out of the
+# recorded RouteInfo set). The .sh drops pure-comment lines before matching, so
+# decomment-go is the faithful preprocessor.
+rules:
+  - id: routes-capability-required
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/**/register_*.go"
+        - "freightworks/services/core-api/**/register.go"
+        - "freightworks/services/core-api/**/wave*_register.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '((^|[^[:alnum:]_.])r\.(Post|Put|Patch|Delete)\(|r\.With\(orgctx\.AssertCapability\()'
+    cure: "Register the route through the capability registrar — rg.Capability(cap, method, path, handler) for a gated route, or rg.Exempt(reason, method, path, handler) for an intentional pre-auth exception (#5390)."
+    origin: scripts/check-routes-capability-required.sh

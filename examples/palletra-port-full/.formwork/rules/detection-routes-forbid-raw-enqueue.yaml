@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-detection-rerun-must-allocate-epoch.sh (#8225) — Rule A.
+# No routes/ Go file may call the raw enqueuer `.EnqueueIdentification(`; every route
+# re-run dispatch goes through the required-epoch choke point
+# EnqueueIdentificationAtEpoch(. The pattern `EnqueueIdentification\(` matches the raw call
+# but NOT `EnqueueIdentificationAtEpoch(` (the char after "EnqueueIdentification" is "A",
+# not "("). Comment-stripped (decomment-go) so a prose mention can neither trip
+# nor satisfy the ban. _test.go excluded, mirroring the lib's test-less default.
+rules:
+  - id: detection-routes-forbid-raw-enqueue
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'EnqueueIdentification\('
+    cure: "Route every routes/ detection re-run dispatch through detectqueue.EnqueueIdentificationAtEpoch (the required-epoch choke point); never call the raw EnqueueIdentification( in a route (#8225)."
+    origin: scripts/check-detection-rerun-must-allocate-epoch.sh

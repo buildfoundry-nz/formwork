@@ -1,0 +1,22 @@
+# Ownership for the merge gate on main.
+#
+# THIS FILE IS HALF OF A GATE, AND THE OTHER HALF IS A REPOSITORY SETTING.
+# main's ruleset requires a pull request whose review comes from a code owner;
+# that requirement resolves to nobody on any path this file does not cover, so
+# the `*` line below is what makes "reviewed by a code owner" mean "reviewed".
+# Narrowing it to a path list would silently exempt every path not on the list.
+#
+# NAME A TEAM OR A USER, NEVER AN ORGANIZATION. `@buildfoundry-nz` is an
+# organization, not a team, and GitHub resolves it to no owner at all — a
+# CODEOWNERS file written that way is syntactically fine, renders in the UI as
+# an error nobody reads, and requires the approval of an empty set. That is not
+# hypothetical: it is the live state of the CODEOWNERS in this repository's
+# validating target, where all 44 protected-surface lines name the organization
+# and `gh api repos/<owner>/<repo>/codeowners/errors` answers with 38 "Unknown
+# owner" errors. internal/repoproof/codeowners_test.go fails this file if an
+# owner is spelled that way here.
+#
+# The API above is also how this file is checked against the real repository,
+# and it is the only way: an owner that does not exist, or that exists without
+# write access, is not visible in the file's text.
+* @buildfoundry-nz/engineering

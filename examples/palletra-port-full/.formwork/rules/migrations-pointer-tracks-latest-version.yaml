@@ -1,0 +1,53 @@
+# Ported from Palletra scripts/check-migrations-pointer-tracks-latest-version.sh (#4122).
+# Each migration domain (palletra, platform) carries a single-line
+# LATEST_MIGRATION file holding the STEM (version + name, no .up/.down.sql) of its
+# highest-version migration. This gate fails unless that file exists and equals
+# the actual highest-version migration's stem. WHY: version collisions are
+# SEMANTIC merge conflicts invisible to any per-PR check — the shared pointer
+# turns two concurrent migration PRs into a GIT merge conflict (the Django
+# max_migration.txt pattern), forcing a rebase+renumber before the second lands.
+#
+# Why the ESCAPE HATCH (type: command): the check must compute the MAX-version
+# migration filename per domain and compare it to a pointer FILE's content — a
+# derived-max-over-filenames vs file-body equality that no declarative type
+# expresses (set-relation joins content sets, not filename-derived maxima). This
+# command reproduces the gate on the tree; it self-skips (exit 0) when a domain
+# has no migrations dir or no migrations, matching the real gate.
+rules:
+  - id: migrations-pointer-tracks-latest-version
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.sql"
+        - "freightworks/services/core-api/migrations/**/LATEST_MIGRATION"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          MIG="freightworks/services/core-api/migrations"
+          [ -d "$MIG" ] || exit 0
+          rc=0
+          for domain in palletra platform; do
+            dir="$MIG/$domain"
+            [ -d "$dir" ] || continue
+            maxv="$(ls "$dir" 2>/dev/null | grep -E '\.(up|down)\.sql$' | sed -E 's/_.*//' | grep -E '^[0-9]+$' | sort -n | tail -1)"
+            [ -n "$maxv" ] || continue
+            stem="$(ls "$dir" 2>/dev/null | grep -E "^${maxv}_.*\.(up|down)\.sql$" | sed -E 's/\.(up|down)\.sql$//' | sort -u | head -1)"
+            ptr="$dir/LATEST_MIGRATION"
+            if [ ! -f "$ptr" ]; then
+              echo "$domain: LATEST_MIGRATION is missing — create it as the single line: $stem"
+              rc=1; continue
+            fi
+            actual="$(tr -d '[:space:]' < "$ptr")"
+            if [ "$actual" != "$stem" ]; then
+              echo "$domain: LATEST_MIGRATION is stale (points to '${actual:-<empty>}', should be '$stem')"
+              rc=1
+            fi
+          done
+          exit $rc
+      expect:
+        exit: 0
+    cure: "Every migration that advances the frontier MUST bump its domain's LATEST_MIGRATION to its own stem. That single shared line turns two concurrent migration PRs into a git merge conflict, so a version collision can never silently land on develop and brick boot-migrate (#4122)."
+    origin: scripts/check-migrations-pointer-tracks-latest-version.sh

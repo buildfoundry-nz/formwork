@@ -1,0 +1,49 @@
+# Ported from Palletra scripts/check-primaryaction-kind-values-are-documented.sh (W7).
+#   A = the literal value of every primaryaction.Kind* const (primaryaction.go)
+#   B = the kind documented as a `//   "<kind>"   — ...` em-dash bullet in the
+#       proto MainAction doc-comment.
+#
+# FALSE-POSITIVE FIX: the .sh scopes side B to the MainAction doc-block ONLY
+# (the lines between `kind values (the discriminator):` and
+# `message MainAction {`). The original port matched the em-dash bullet shape
+# across the WHOLE proto file, so it also picked up the identically-shaped
+# `//  "<reason>"  — ...` bullets in ApproveStageEligibilityResponse.reason
+# ("ok", "unmatched_section", "scale_pending", "no_approvable_rows"). Under
+# `relation: equal` those four extra B-only elements made the sets unequal and
+# the rule fired on clean develop. set-relation cannot express the .sh's
+# between-marker line-range scoping, and those reason bullets are textually
+# identical in shape to the kind bullets, so no pattern refinement distinguishes
+# them.
+#
+# The relation is therefore SUBSET (A ⊆ B) instead of equal: every Go Kind* const
+# must be documented, but extra documented bullets (the other messages' reason
+# codes) no longer fail. This eliminates the false positive AND still catches the
+# NAMED regression — `upcoming_section` shipped as a real Kind const but omitted from
+# the proto doc-comment (a const in A missing from B → A ⊄ B fires), which is the
+# exact drift this gate was built for. Divergence (noted): the reverse direction
+# (a stale documented bullet with no matching const) is no longer caught — that
+# direction is unportable without the line-range scoping and is the very source
+# of the false positive.
+rules:
+  - id: primaryaction-kind-values-are-documented
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workflow/primaryaction/primaryaction.go"
+        - "schema/proto/palletra/api/v1/projects_rpc.proto"
+    preprocess: raw
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/internal/workflow/primaryaction/primaryaction.go"
+        pattern: 'Kind[A-Za-z]+\s*=\s*"([a-z_]+)"'
+        group: 1
+      b:
+        files:
+          - "schema/proto/palletra/api/v1/projects_rpc.proto"
+        pattern: '//\s+"([a-z_]+)"\s+\x{2014}'
+        group: 1
+      relation: subset
+    cure: "Every primaryaction.Kind* const must be documented as a \"<kind>\" — ... em-dash bullet in the proto MainAction doc-comment (and regen). A const with no matching bullet is the W7 drift — add the bullet or remove the stale const."
+    origin: scripts/check-primaryaction-kind-values-are-documented.sh

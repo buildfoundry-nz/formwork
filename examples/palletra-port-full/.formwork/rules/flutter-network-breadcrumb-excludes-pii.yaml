@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-flutter-network-breadcrumb-excludes-pii.sh
+# (C4/B1, #4695). The failure interceptor forwards only raw non-PII facts
+# (method / query-stripped path / status / kind / traceId); it must never read a
+# request/response BODY or query string. This ports the FORBIDDEN limb:
+# error_log_interceptor.dart must not read `.data`, `.queryParameters`,
+# `response?.data`, or `.responseBody`. The .sh's positive anchor (the interceptor
+# must skip /api/ux-events) is a required-pattern limb a single
+# forbidden-pattern rule cannot also express — see notes.
+#
+# FP FIX (was: scanned raw text): the .sh strips Dart comments before matching,
+# and the interceptor's own doc comment *names* `.data` / `.queryParameters` in
+# prose ("A dumb producer: it never reads `.data`, `.queryParameters`...") — the
+# whole point of the header. On raw text that doc comment false-fires. Dart shares
+# Go's `//` and `/* */` comment syntax, so preprocess: decomment-go blanks the
+# doc/inline comments (string literals — e.g. the '/api/ux-events' path — are
+# preserved) before the match, exactly mirroring the gate's drop_comments. A real
+# `.data` / `.queryParameters` read in CODE still fires.
+rules:
+  - id: flutter-network-breadcrumb-excludes-pii
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/plt_core/lib/network/error_log_interceptor.dart"
+    preprocess: decomment-go
+    params:
+      pattern: '\.data\b|\.queryParameters\b|response\?\.data|\.responseBody\b'
+    cure: "Forward only method/path/status/kind/traceId — never a body or query string. Read RequestOptions.method / the query-stripped path, not .data / .queryParameters."
+    origin: scripts/check-flutter-network-breadcrumb-excludes-pii.sh

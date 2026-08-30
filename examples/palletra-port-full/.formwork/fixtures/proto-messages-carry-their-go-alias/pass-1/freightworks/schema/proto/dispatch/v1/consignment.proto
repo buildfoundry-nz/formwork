@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package freightworks.dispatch.v1;
+
+option go_package = "freightworks/schema/gen/go/dispatch/v1;dispatchv1";
+
+message Consignment {
+  string id = 1;
+  string status = 2;
+
+  // Nested messages stay bare deliberately: the preprocessor only qualifies
+  // column-0 messages, and a nested one is addressed through its parent.
+  message Line {
+    string sku = 1;
+  }
+}

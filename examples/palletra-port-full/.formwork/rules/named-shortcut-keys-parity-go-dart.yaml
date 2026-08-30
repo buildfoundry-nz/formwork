@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-named-shortcut-keys-parity-go-dart.sh
+# (#3365 PR-4). The set of allowed NAMED shortcut keys (Delete, ArrowLeft,
+# BracketLeft, ...) is ONE grammar shared across the language boundary: the Go
+# server owns it (internal/shortcuts.allowedShortcutKeys — it validates every rebind
+# PUT) and the Flutter codec must decode exactly that set (shortcut_chord_codec
+# _keyAliases — it maps each token to a LogicalKeyboardKey). Add a named key on
+# the Go side but not the Dart codec and the server accepts a rebind the UI can
+# never decode (the key silently unbinds); drop one from Go but not Dart and the
+# reverse. Two "keep in lockstep" comments were the only enforcement.
+#
+# Ported as a set-relation EQUAL join: the Go allowedShortcutKeys double-quoted map
+# keys and the Dart _keyAliases single-quoted map keys must be the same set. A
+# token present on only one side is reported.
+#
+# DIVERGENCE (noted for fidelity): the .sh exits 2 when EITHER extracted set is
+# empty (a source moved / the map shape drifted). set-relation has no
+# present-but-empty guard — an empty set trivially satisfies nothing-to-diff — so
+# only the core equality is ported; formwork lint owns empty-scope rot. The Go
+# key pattern anchors on `: true` and the Dart key pattern anchors on
+# `: LogicalKeyboardKey`, so only genuine map entries enter each set (a stray
+# quoted token elsewhere in either file never counts). Scope-level finding
+# (fire-1.want carries `-`).
+rules:
+  - id: named-shortcut-keys-parity-go-dart
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/shortcuts/bindings.go"
+        - "packages/plt_measure_hotkeys/lib/domain/shortcut_chord_codec.dart"
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/internal/shortcuts/bindings.go"
+        pattern: '"([A-Za-z]+)":\s*true'
+        group: 1
+      b:
+        files:
+          - "packages/plt_measure_hotkeys/lib/domain/shortcut_chord_codec.dart"
+        pattern: "'([A-Za-z]+)':\\s*LogicalKeyboardKey"
+        group: 1
+      relation: equal
+    cure: "The named-shortcut-key grammar is one contract. Add/remove the token on BOTH sides — Go internal/shortcuts.allowedShortcutKeys and Dart _keyAliases — so the server never accepts a rebind the codec cannot decode (#3365 PR-4)."
+    origin: scripts/check-named-shortcut-keys-parity-go-dart.sh

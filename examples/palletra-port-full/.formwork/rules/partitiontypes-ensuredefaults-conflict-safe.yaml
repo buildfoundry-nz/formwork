@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-partitiontypes-ensuredefaults-conflict-safe.sh
+# (sweep-11 SV-ARCH DF-1). partitiontypes.GuaranteeDefaults lazily seeds one confirmed
+# PRIMARY partition type per side on the GET (List) path, guarded by
+# `WHERE NOT EXISTS (... side = $3)`. That guard runs under READ COMMITTED, so
+# two concurrent first-load GETs both evaluate NOT EXISTS against a snapshot in
+# which the other's INSERT is uncommitted — both pass, both INSERT, and the loser
+# violates the primary-per-side unique constraint (23505 → unswallowed 500). A
+# NOT-EXISTS guard is NOT conflict-free under READ COMMITTED; only an
+# `ON CONFLICT DO NOTHING` on the INSERT absorbs the double-seed.
+#
+# Ported as pair-consistency, scoped to the GuaranteeDefaults seeder file
+# (internal/partitiontypes/defaults.go): the trigger `INSERT INTO
+# palletra.project_partition_types` obliges the companion `ON CONFLICT` in the same
+# file. That file's sole project_partition_types INSERT is the NOT-EXISTS-guarded
+# seed, so file-grain coupling faithfully asserts "the seed absorbs the concurrent
+# conflict". preprocess: decomment-go — the SQL lives in a Go backtick raw string
+# (preserved) while a `//` doc comment naming the INSERT is stripped.
+#
+# DIVERGENCE (noted): the .sh is block-scoped (it walks each backtick SQL block
+# and flags one that STOREs project_partition_types AND has NOT EXISTS AND lacks
+# ON CONFLICT) and scans all of freightworks/. pair-consistency is file-grain and
+# the port pins the one seeder file, so the NOT EXISTS guard predicate is not
+# separately verified. A plain manual-create INSERT — which the .sh excludes as
+# a legitimate 400 (ErrDuplicateTag), not a seed race — lives in a different
+# handler file and is correctly out of this scope.
+rules:
+  - id: partitiontypes-ensuredefaults-conflict-safe
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/partitiontypes/defaults.go"
+    preprocess: decomment-go
+    params:
+      trigger: '(?i)INSERT\s+INTO\s+palletra\.project_partition_types'
+      requires: '(?i)ON\s+CONFLICT'
+    cure: "Add `ON CONFLICT DO NOTHING` to the GuaranteeDefaults seed INSERT so two concurrent first-load GETs that both pass the NOT EXISTS guard absorb the double-seed as a no-op instead of one 500-ing on a 23505 unique violation (sweep-11 SV-ARCH DF-1)."
+    origin: scripts/check-partitiontypes-ensuredefaults-conflict-safe.sh

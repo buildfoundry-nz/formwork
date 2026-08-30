@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-page-ids-filter-cte-one-true-source.sh (#1920 Fold 1).
+# The CTE definition header literal `WITH page_scope_filter AS` is banned in every
+# non-test Go file except the sanctioned const home internal/scan/project/page_scope_filter.go.
+# Callers prepend the shared PageScopeFilterCTE const and reference scoped_pages —
+# they never re-type the header. Line comments are stripped (decomment-go) so
+# doc-comment prose never false-fires; *_test.go excluded.
+rules:
+  - id: page-ids-filter-cte-one-true-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'WITH page_scope_filter AS'
+    except:
+      paths:
+        - "**/internal/scan/project/page_scope_filter.go"
+    cure: "Delete the inline CTE; prepend scanproject.PageScopeFilterCTE and reference scoped_pages instead (#1920)."
+    origin: scripts/check-page-ids-filter-cte-one-true-source.sh

@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-vat-formula-single-source.sh, RULE A.
+# The SQL VAT core factor `(1 + <...vat...> / 100)` (shared by the inc and inverse
+# forms) must live only in internal/vatmath/vatmath.go; inlining it anywhere else
+# in non-test freightworks Go is the source-of-truth divergence the audit hunts.
+# Keyed on a `vat` token INSIDE the factor so the sibling markup/contingency/waste
+# factors never false-fire. Case-insensitive ((?i)) and comment-stripped
+# (decomment-go — the .sh sed-strips // comments) so a doc-comment never trips it.
+# The sanctioned file is exempted by exact path suffix, not substring.
+rules:
+  - id: vat-formula-single-source-sql
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/vatmath/vatmath.go"
+    preprocess: decomment-go
+    params:
+      pattern: '(?i)\(1 \+ [^)]*vat[^)]*/ *100'
+    cure: "Import internal/vatmath and build the fragment through the helper: vatmath.VatIncSQL(netExpr, vatPctExpr) / vatmath.NetFromGrossSQL(grossExpr, vatPctExpr)."
+    origin: scripts/check-vat-formula-single-source.sh

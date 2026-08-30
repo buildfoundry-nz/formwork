@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-bom-draft-single-source.sh (#2960) — Rule A.
+# The VAT/shrinkage default literals live ONCE (DefaultVATPercent = 12.5,
+# DefaultShrinkagePercent = 5.0) in internal/bomdraft/bomdraft.go. A non-test Go file
+# that places the literal 12.5 or 5.0 (digit-bounded) on the same line as a
+# vat/shrinkage keyword (case-insensitive) is a duplicated default. Comments are
+# stripped first so prose mentioning the numbers never fires. bomdraft.go is exempt.
+#
+# Port note: RE2 has no lookahead for order-agnostic co-occurrence; the pattern
+# requires the vat/shrinkage keyword to precede the literal (the overwhelmingly common
+# `... = 12.5` / `COALESCE(vat_percent, 12.5)` shape). A rare literal-before-keyword
+# line would not fire.
+rules:
+  - id: bom-draft-single-source-defaults
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/services/core-api/internal/bomdraft/bomdraft.go"
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '(?i)(vat|shrinkage).*[^0-9.](12\.5|5\.0)([^0-9]|$)'
+    cure: "Import internal/bomdraft and use bomdraft.DefaultVATPercent / bomdraft.DefaultShrinkagePercent; do not inline the 12.5 / 5.0 default (#2960)."
+    origin: scripts/check-bom-draft-single-source.sh

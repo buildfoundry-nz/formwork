@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-golangci-required-linters-stay-enabled.sh (pin every required
+# golangci-lint linter at enabled).
+#
+# Every .golangci.{yml,yaml,toml} MUST keep 12 required linters (staticcheck,
+# govet, errcheck, ineffassign, unused, gosec, gocritic, revive, bodyclose,
+# rowserrcheck, sqlclosecheck, noctx) enabled in linters.enable, none disabled
+# / disable-all'd / silenced via issues.exclude-rules, and must not skip
+# production paths. No config in the tree => no-op.
+#
+# The gate asserts a SET of required tokens is present in a YAML config (an
+# "all-of" requirement, not a single forbidden/required pattern), so it ports to
+# the `command` escape hatch: the command fails unless every required linter
+# appears as a block-list `- <linter>` entry in .golangci.yml. Scope-level
+# finding — fire-1 omits a required linter, pass-1 enables all twelve.
+#
+# APPROXIMATION (noted): this reproduces the enable-list coverage core; the
+# disable:/disable-all:/issues.exclude-rules silencing paths and the
+# production-path skip-dirs check are not modeled by the grep loop.
+rules:
+  - id: golangci-required-linters-stay-enabled
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/.golangci.yml"
+        - "**/.golangci.yaml"
+    params:
+      cmd:
+        - "sh"
+        - "-c"
+        - "for l in staticcheck govet errcheck ineffassign unused gosec gocritic revive bodyclose rowserrcheck sqlclosecheck noctx; do grep -qE \"^[[:space:]]*-[[:space:]]+$l[[:space:]]*$\" .golangci.yml || exit 1; done"
+      expect:
+        exit: 0
+    cure: "Add the missing linter to linters.enable, remove disable entries, remove any exclude-rules silencing required linters, and never skip production paths (freightworks/services/** or freightworks/internal/**)."
+    origin: scripts/check-golangci-required-linters-stay-enabled.sh

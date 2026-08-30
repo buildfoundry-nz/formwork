@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-page-geometry-payload-unguarded-write.sh
+# (sweep-2 #1, hardened class-wide by sweep-3 #1). The geometry-payload-compact
+# sweep reads a row's layout_payload then writes a compacted copy back; a bare
+#   UPDATE palletra.page_layout SET layout_payload = $n WHERE page_id = $m
+# lost-update-clobbers any re-extract that committed between the read and the
+# write. The cure is a compare-and-swap: the UPDATE must predicate on the
+# captured bytes (AND layout_payload = $k) or a version column (AND rev = /
+# AND calc_version =).
+#
+# Ported as a sql/statement-predicate over production Go. `table` SELECTS exactly
+# the risky statement class — an UPDATE of palletra.page_layout whose SET
+# assigns layout_payload (a non-payload UPDATE, e.g. touching only updated_at,
+# is never selected, matching the .sh's `SET .*LAYOUT_PAYLOAD =` guard). The
+# selected statement must then satisfy `require`: a CAS/version predicate in the
+# WHERE clause (`WHERE … (layout_payload|rev|calc_version) =`). A blind
+# write has layout_payload only in its SET, never after WHERE, so require fails
+# and it fires; a CAS-guarded write carries the token after WHERE and passes.
+# This is the exact per-statement grain the .sh's normalizing awk walks.
+#
+# DIVERGENCE (noted): (1) the .sh uppercase-folds and collapses whitespace before
+# matching; formwork's regex is case-sensitive and does not fold, so a
+# lowercase-keyword or oddly-wrapped statement is matched on its literal shape
+# (every page_layout write in tree is a single canonical-case literal). (2) The
+# .sh's sweep-6 #5 second clause — an ON CONFLICT DO UPDATE whose layout_payload
+# RHS is a COMPUTED value rather than EXCLUDED.layout_payload is also a blind
+# write — is NOT ported: distinguishing the EXCLUDED RHS from a computed one needs
+# a negative-lookahead RE2 cannot express. Only the primary bare-UPDATE class is
+# ported here; the upsert-of-fresh-content path is (correctly) out of scope.
+rules:
+  - id: page-geometry-payload-unguarded-write
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      table: 'UPDATE[ \t\n]+palletra\.page_layout[ \t\n]+SET[^;]*layout_payload[ \t\n]*='
+      require:
+        - 'WHERE[^;]*(layout_payload|rev|calc_version)[ \t]*='
+    cure: "Predicate the UPDATE on the captured bytes (AND layout_payload = $k) or a version column (AND rev = / AND calc_version =) so a row a concurrent re-extract changed since the read is skipped, not clobbered. The INSERT … ON CONFLICT DO UPDATE upsert of freshly-extracted content is exempt (sweep-3 #2)."
+    origin: scripts/check-page-geometry-payload-unguarded-write.sh

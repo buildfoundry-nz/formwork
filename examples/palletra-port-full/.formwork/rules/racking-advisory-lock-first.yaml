@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-racking-advisory-lock-first.sh
+# (racking-writer lock-ordering gate, #5912). Every racking write
+# handler must acquire the project's multi_section_scope advisory lock BEFORE it
+# takes any racking page_gauges row lock. Two orders on one project are an ABBA
+# cycle: approve-with-suggestions takes the advisory lock then UPDATEs rows, while
+# ReaffirmEdited UPDATEs rows then the advisory lock. Postgres aborts one on
+# deadlock, the handler 500s, and that estimator's approve is silently lost. The
+# race has no test seam, so the ordering is pinned mechanically, not by a test —
+# a mutation check confirmed that MOVING the Ensure call after the row work leaves
+# every test green while reintroducing the deadlock.
+#
+# THE RULE: in files under routes/pricing/, the bare row-mutating sweeps
+# rackinginputs.RevokeAll( / rackinginputs.ReaffirmEdited( are the only doors
+# to racking row locks that do not lock first on their own, so
+# rackinginputs.GuaranteeCrossSectionHostPage( MUST precede the first such sweep.
+#
+# Ported as an ordering (within file): `GuaranteeCrossSectionHostPage(` (before) must
+# precede `(RevokeAll|ReaffirmEdited)(` (after); a sweep on an earlier line
+# than the lock acquisition fires. preprocess: decomment-go so a doc comment
+# naming either call cannot shift the ordering. (Fidelity: the .sh ALSO fails when
+# a gated file never calls Ensure at all — a presence check that existing tests
+# already turn red, per the .sh's own mutation note; the novel invariant this gate
+# adds, and the one ported, is the ORDER when both are present.)
+rules:
+  - id: racking-advisory-lock-first
+    type: ordering
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/pricing/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      before: 'rackinginputs\.GuaranteeCrossSectionHostPage\('
+      after: 'rackinginputs\.(RevokeAll|ReaffirmEdited)\('
+      within: file
+    cure: "Make rackinginputs.GuaranteeCrossSectionHostPage the FIRST statement of the handler's transaction, before any racking row mutation (RevokeAll/ReaffirmEdited). It is re-entrant within a tx, so calling it when Apply will call it again costs nothing (#5912)."
+    origin: scripts/check-racking-advisory-lock-first.sh

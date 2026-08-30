@@ -1,0 +1,96 @@
+# Ported from Palletra scripts/check-dart-forbid-handrolled-confirm-dialogs.sh (#7968).
+#
+# The shared showDecisionDialog<bool> helper is the ONE home for a two-way
+# bool-confirm dialog. This gate flags the EXACT hand-rolled shape it replaces:
+# an AlertDialog / .adaptive / CupertinoAlertDialog whose `content:` is a plain
+# `(const) Text(...)` AND whose `actions:` pop a bool (Navigator.of(...).pop(true|
+# false) or Navigator.pop(ctx, true|false)). Richer dialogs (non-Text content)
+# are excluded by construction — the CONTENT SHAPE decides, no allowlist. This
+# needs comment/string stripping + balanced-paren block parsing + a two-signal
+# co-occurrence inside one dialog, which no declarative formwork type expresses,
+# so it is the `command` ESCAPE HATCH as a SELF-CONTAINED python reproduction
+# over the fixture tree. Scope excludes the helper's own home (plt_widgets).
+# Scope-level finding; fire-1 hand-rolls a bool-confirm dialog, pass-1 uses the
+# shared helper.
+rules:
+  - id: dart-forbid-handrolled-confirm-dialogs
+    type: command
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+      exclude:
+        - "packages/plt_widgets/lib/**"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import glob, os, re, sys
+
+          def blank(src):
+              out = []
+              i, n = 0, len(src)
+              while i < n:
+                  c = src[i]
+                  if c == '/' and i + 1 < n and src[i + 1] == '/':
+                      while i < n and src[i] != '\n':
+                          out.append(' '); i += 1
+                      continue
+                  if c == '/' and i + 1 < n and src[i + 1] == '*':
+                      i += 2
+                      while i < n and not (src[i] == '*' and i + 1 < n and src[i + 1] == '/'):
+                          out.append('\n' if src[i] == '\n' else ' '); i += 1
+                      i += 2
+                      continue
+                  if c in ("'", '"'):
+                      q = c; out.append(' '); i += 1
+                      while i < n:
+                          if src[i] == '\\' and i + 1 < n:
+                              out.append('  '); i += 2; continue
+                          if src[i] == q:
+                              out.append(' '); i += 1; break
+                          out.append('\n' if src[i] == '\n' else ' '); i += 1
+                      continue
+                  out.append(c); i += 1
+              return ''.join(out)
+
+          CTOR = re.compile(r'\b(?:AlertDialog(?:\.adaptive)?|CupertinoAlertDialog)\s*\(')
+          CONTENT_TEXT = re.compile(r'content:\s*(?:const\s+)?Text\s*\(')
+          POP_BOOL = re.compile(r'Navigator\.of\([^)]*\)\.pop\(\s*(?:true|false)\b'
+                                r'|Navigator\.pop\([^,]*,\s*(?:true|false)\b')
+
+          hits = []
+          for pattern in ['packages/*/lib/**/*.dart', 'frontend/lib/**/*.dart']:
+              for path in sorted(glob.glob(pattern, recursive=True)):
+                  if '/plt_widgets/' in path or path.endswith(('.g.dart', '.freezed.dart')):
+                      continue
+                  try:
+                      raw = open(path, encoding='utf-8').read()
+                  except OSError:
+                      continue
+                  text = blank(raw)
+                  for m in CTOR.finditer(text):
+                      i = m.end() - 1
+                      depth = 0; j = i
+                      while j < len(text):
+                          if text[j] == '(':
+                              depth += 1
+                          elif text[j] == ')':
+                              depth -= 1
+                              if depth == 0:
+                                  j += 1; break
+                          j += 1
+                      body = text[i:j]
+                      if CONTENT_TEXT.search(body) and POP_BOOL.search(body):
+                          line = raw.count('\n', 0, m.start()) + 1
+                          hits.append('%s:%d: hand-rolled bool-confirm dialog' % (path, line))
+
+          for h in hits:
+              sys.stderr.write(h + '\n')
+          sys.exit(1 if hits else 0)
+      expect:
+        exit: 0
+    cure: "Replace the hand-rolled AlertDialog with the shared showDecisionDialog<bool> helper (packages/plt_widgets/lib/verify_action_dialog.dart) — it binds Enter to the primary action and error-tints destructive deletes (#7968)."
+    origin: scripts/check-dart-forbid-handrolled-confirm-dialogs.sh

@@ -1,0 +1,49 @@
+# Ported from Palletra scripts/check-no-custom-formula-parsing-grammar.sh
+# (sweep-7 #4). The formula evaluator's grammar (function + operator namespace)
+# is server-owned (GET /api/pricing/formula/grammar, rendered via
+# formulaRulesProvider). The FE must hold NO hardcoded mirror. The .sh's
+# signature of a re-introduced mirror is a file that quotes ALL of the single-arg
+# function names together: `'ceil'` AND `'floor'` AND `'round'` AND `'abs'`.
+#
+# The four-literal co-occurrence needs an AND of patterns — impossible in a plain
+# RE2 forbidden-pattern. regexp2 zero-width lookaheads express it: the line must
+# contain each of the four quoted names (order-independent). A file that quotes
+# only one or two (a legitimate single use of `'ceil'`) never matches.
+#
+# DIVERGENCE (noted): the .sh's `rg -q` tests co-occurrence across the WHOLE
+# file; formwork's forbidden-pattern matches line-by-line, so this port catches
+# the canonical single-line function-set literal (`<String>{'ceil', 'floor',
+# 'round', 'abs'}`) — the compact Set/List shape a hardcoded grammar mirror
+# actually takes — rather than a set spread one-name-per-line across a
+# multi-line literal. Same class of single-line-shape assumption noted on the
+# set-relation ports.
+rules:
+  - id: no-custom-formula-parsing-grammar
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/generated/**"
+        - "**/lib/testing/**"
+    params:
+      # Whole-file co-occurrence of the four grammar function-name literals
+      # (origin: rg -l "'ceil'" then rg -q "'floor'" && "'round'" && "'abs'").
+      # Line-anchored trigger 'ceil' + require_present for the other three is the
+      # linear-RE2 replacement for the regexp2 lookahead conjunction (9s over 1293
+      # files), and anchors on the unaryFns line (fixture want-marker) rather
+      # than line 1.
+      pattern: "'ceil'"
+      require_present:
+        - "'floor'"
+        - "'round'"
+        - "'abs'"
+    cure: "The formula grammar is server-owned (GET /api/pricing/formula/grammar). Consume it via formulaRulesProvider and pass the function/operator sets in — do not hardcode ceil/floor/round/abs (sweep-7 #4)."
+    origin: scripts/check-no-custom-formula-parsing-grammar.sh

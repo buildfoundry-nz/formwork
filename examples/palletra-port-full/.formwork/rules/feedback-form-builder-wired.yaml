@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-feedback-form-builder-wired.sh (#1898).
+# frontend/lib/app.dart's BetterFeedback(...) mount must carry a
+# `feedbackBuilder:` argument wiring the custom Type+Priority form; without it
+# BetterFeedback silently falls back to its package-default text-only form and
+# every report loses the Type/Priority capture — a regression no analyzer or
+# test would catch. The .sh greps the single file for the token, so this is an
+# exists-mode required rule scoped to app.dart. (The .sh skips when the file is
+# absent; formwork exists-mode likewise reports nothing when the scope is empty.)
+rules:
+  - id: feedback-form-builder-wired
+    type: required-pattern
+    scope:
+      include:
+        - "frontend/lib/app.dart"
+    preprocess: code-only-dart
+    params:
+      pattern: 'feedbackBuilder:'
+      mode: exists
+    cure: "Add 'feedbackBuilder: critiqueFormBuilder,' to the BetterFeedback(...) mount in frontend/lib/app.dart (package:feature_critique custom form)."
+    origin: scripts/check-feedback-form-builder-wired.sh

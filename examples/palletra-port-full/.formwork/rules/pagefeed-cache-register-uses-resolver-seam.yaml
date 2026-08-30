@@ -1,0 +1,16 @@
+# Ported from Palletra scripts/check-pagefeed-cache-shared.sh (PR #2765 #8).
+# Dev-local must run ONE pagefeed.Cache: a composition-root wiring chain no
+# unit test can pin. This is link 3 (mount_app.go resolves via the unit-pinned seam). Comment-stripped (decomment-go) so
+# prose can never satisfy the link. exists-mode over the exact file.
+rules:
+  - id: pagefeed-cache-register-uses-resolver-seam
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/mount_app.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'resolvePageFeedCache\(d\.PageFeedCache,\s*d\.DrawingsSigner\)'
+      mode: exists
+    cure: "mount_app.go must resolve the HTTP cache via resolvePageFeedCache(d.PageFeedCache, d.DrawingsSigner)."
+    origin: scripts/check-pagefeed-cache-shared.sh

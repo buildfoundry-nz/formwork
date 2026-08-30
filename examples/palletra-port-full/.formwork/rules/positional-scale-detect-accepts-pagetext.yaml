@@ -1,0 +1,16 @@
+# Ported from scripts/check-positional-gauge-picker.sh, invariant 4.
+# scale.Detect must accept `pages []*domainv1.PdfPageText`, not a bare
+# string/[]byte, so a refactor cannot narrow the detector back to pdftotext output
+# only.
+rules:
+  - id: positional-scale-detect-accepts-pagetext
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/detection/scale/detect.go'
+    params:
+      pattern: '^func\s+Detect\(.*pages\s+\[\]\*domainv1\.PdfPageText'
+      mode: exists
+    cure: 'scale.Detect must accept pages []*domainv1.PdfPageText, never a bare string/[]byte input.'
+    origin: scripts/check-positional-gauge-picker.sh

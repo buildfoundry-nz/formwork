@@ -1,0 +1,9 @@
+name: go
+on: [push]
+jobs:
+  integration:
+    runs-on: blacksmith
+    steps:
+      - uses: actions/checkout@v4
+      - name: go test
+        run: go test ./...

@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-no-raw-sender-or-subject-in-email-logs.sh
+# (sweep-20 #8517). Non-test Go under routes/mail_intake/ must not pass a raw
+# "from" or "subject" attribute to slog.Info/Warn/Error (sender PII / free-form
+# subject in Cloud Logging). "redactedDomain" and the provider emailId are fine — the
+# banned key is the exact attr string ("from", / "subject",).
+# APPROXIMATION: the .sh flattens each file (tr '\n' ' ') before matching so a
+# multi-line slog call is caught; formwork's forbidden-pattern is line-oriented,
+# so this pattern catches only slog calls whose "from"/"subject" attr sits on
+# the same line as slog.Info/Warn/Error (the common single-line form). Noted.
+rules:
+  - id: no-raw-sender-or-subject-in-email-logs
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/mail_intake/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: 'slog\.(Info|Warn|Error)\(.*"(from|subject)",'
+    cure: "Log \"redactedDomain\" (mailerDomain(addr)) + the provider emailId, never the raw sender address or subject line (#8517)."
+    origin: scripts/check-no-raw-sender-or-subject-in-email-logs.sh

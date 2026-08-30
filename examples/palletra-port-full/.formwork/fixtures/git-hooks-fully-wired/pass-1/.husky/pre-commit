@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+# Standalone POSIX-sh pre-commit — no husky runtime source.
+flutter analyze && gofmt -l .

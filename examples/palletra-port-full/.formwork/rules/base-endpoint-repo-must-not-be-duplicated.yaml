@@ -1,0 +1,47 @@
+# Ported from Palletra scripts/check-base-endpoint-repo-must-not-be-duplicated.sh
+# (audit #8). A feature data repo (packages/feature_*/lib/data) must not
+# re-implement a MUTATION that a base data repo (packages/plt_*/lib/data)
+# already owns. feature_membership open-coded uploadMark/removeEmblem byte-identical
+# to plt_org.TenantLogoRepository — the same `/api/account/business-profile/logo`
+# POST+DELETE hit from both sides of the feature/base boundary. The cure is to
+# COMPOSE the base repo's writer, not wrap the endpoint twice.
+#
+# WRITE verbs only: post / put / patch / delete / deleteEmpty /
+# postForm / postBinary. A shared READ (GET) of a canonical resource is
+# legitimate (a dumb FE consuming server state) and is NOT a violation — reads
+# never enter either set because the write-verb alternation excludes `get`.
+#
+# Ported as a set-relation DISJOINT: side A = every `/api/…` endpoint a feature
+# repo WRITES; side B = every `/api/…` endpoint a base repo WRITES. A shared
+# element (the same mutation coded on both sides) is the finding.
+#
+# DIVERGENCE (noted): the .sh resolves `_base`/`_path` const concatenation and
+# normalizes `$id`/`${id}` path params before comparing, and skips generated
+# `.g.dart`/`/generated/` code. set-relation matches per line against the
+# literal endpoint string, so the port assumes the write verb and its `'/api/…'`
+# endpoint literal sit on one line (the canonical WireDio call shape) and does
+# not fold const-built paths. The primary shape — the same literal write
+# endpoint on both sides — is caught identically. Generated code, if present in
+# a real tree, belongs in scope.exclude.
+rules:
+  - id: base-endpoint-repo-must-not-be-duplicated
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "packages/feature_*/lib/data/**/*.dart"
+        - "packages/plt_*/lib/data/**/*.dart"
+    params:
+      a:
+        files:
+          - "packages/feature_*/lib/data/**/*.dart"
+        pattern: 'WireDio(?:Media)?\.(?:post|put|patch|delete|deleteEmpty|postForm|postBinary)\b[^,]*,\s*''(/api/[^'']+)'''
+        group: 1
+      b:
+        files:
+          - "packages/plt_*/lib/data/**/*.dart"
+        pattern: 'WireDio(?:Media)?\.(?:post|put|patch|delete|deleteEmpty|postForm|postBinary)\b[^,]*,\s*''(/api/[^'']+)'''
+        group: 1
+      relation: disjoint
+    cure: "A feature repo WRITES an /api endpoint a base (plt_*) repo already writes. Compose the base repo's writer (e.g. plt_org.TenantLogoRepository) instead of re-wrapping the endpoint — a duplicated mutation across the feature/base boundary is a dead extraction (audit #8)."
+    origin: scripts/check-base-endpoint-repo-must-not-be-duplicated.sh

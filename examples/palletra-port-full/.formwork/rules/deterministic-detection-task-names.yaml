@@ -1,0 +1,28 @@
+# Ported from Palletra scripts/check-deterministic-detection-task-names.sh
+# (sweep-16 #17). The Cloud Tasks dedupe contract requires IdentificationTaskName /
+# PagePaintTaskName / WholeExtractionTaskName to be pure functions of their
+# args: no time.Now / rand.* / os.Hostname / uuid.New / crypto/rand may appear
+# INSIDE those builders' bodies (the file legitimately uses them elsewhere, so a
+# whole-file line grep would over-fire). The .sh extracts just those three
+# function bodies via brace-tracking awk, then bans the tokens — a body-scoped
+# check that only the Go-AST analyzer can express faithfully.
+#
+# go/per-func-count-relation, funcs pinned to the three builders, asserts
+# count(forbidden-call) <= count(right)=0 — i.e. zero forbidden calls in each
+# builder. `right` is a sentinel that matches no real selector, so it is always
+# 0. crypto/rand is not a call selector (it is subsumed by the rand. prefix);
+# the runtime tokens the contract turns on are all calls.
+rules:
+  - id: deterministic-detection-task-names
+    type: go/per-func-count-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/internal/detectqueue/enqueue.go"
+    params:
+      funcs: '^(IdentificationTaskName|PagePaintTaskName|WholeExtractionTaskName)$'
+      left: '\b(time\.Now|rand\.|os\.Hostname|uuid\.New|crypto/rand)\b'
+      right: 'ZZ_NEVER_MATCH_SELECTOR'
+      relation: '<='
+    cure: "Make IdentificationTaskName / PagePaintTaskName / WholeExtractionTaskName read only their arguments; move any clock/RNG/host/uuid call out of the task-name builder (sweep-16 #17)."
+    origin: scripts/check-deterministic-detection-task-names.sh

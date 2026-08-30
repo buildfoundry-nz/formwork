@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-shelving-group-single-source-of-truth.sh
+# (#6724, Rule B — code half). The shelving GROUP (palletra.shelving_groups) is
+# the single source of truth for a mask's shelving classification; #5837 deleted
+# the per-MASK typing surface. This rule keeps the five UNAMBIGUOUS retired
+# symbols out of production Go/Dart/proto. Comments are stripped first
+# (decomment-go handles the C-style // and /* */ that Go, Dart and proto share)
+# so a file narrating the deleted path in prose does not false-fire; tests and
+# gatetests fixtures are out of scope.
+#
+# Partial-but-faithful port: the .sh's sixth token, [sS]etShelvingType, carries a
+# LIVE homograph family (SetShelvingTypeProduct*) that the .sh exempts by
+# extracting the WHOLE identifier and checking it against an enumerated live set
+# — RE2 has no negative lookahead, and the .sh itself documents that a
+# pattern-based carve-out is wrong at every depth, so that token is deliberately
+# NOT ported here rather than weakened. Rule A (schema.snapshot.sql column
+# re-declaration, per-table awk) is likewise out of scope for a single
+# forbidden-pattern. The five simple tokens below match as-is with no carve-out.
+rules:
+  - id: shelving-group-single-source-of-truth
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+        - "packages/**/*.dart"
+        - "frontend/**/*.dart"
+        - "schema/proto/**/*.proto"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/**/internal/gatetests/**"
+    preprocess: decomment-go
+    params:
+      pattern: 'RecordAndUpdateShelvingType|InheritDominantShelvingType|ConfirmShelvingTypes|ShelvingTypePicker|ShelvingTypeControl'
+    cure: "Classify by painting a mask into a shelving group (POST /api/projects/{id}/shelving-groups + the group paint-mutate), never by writing a type onto the annotation itself. The per-mask typing surface was deleted in #5837."
+    origin: scripts/check-shelving-group-single-source-of-truth.sh

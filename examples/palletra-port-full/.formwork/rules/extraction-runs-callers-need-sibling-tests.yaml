@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-extraction-runs-callers-need-sibling-tests.sh
+# (sweep-18 #3 / #16). Every PRODUCTION caller of
+# parseruns.InsertOrClaimActive( — a *.go file under freightworks/, NOT a
+# *_test.go, NOT inside the parseruns/ helper package — MUST have at least
+# one *_test.go IN THE SAME DIRECTORY that references InsertOrClaimActive /
+# insertIntakeProjectAndRun / the caller file's own basename, so the helper's
+# correctness is proved at each route boundary (PR #4787 once deleted the
+# email-inbound caller's test to satisfy a coverage-diff gate).
+#
+# ESCAPE (type: command). This is a per-DIRECTORY cross-file companion check:
+# for each directory that contains a caller file, a sibling test file in that
+# SAME directory must reference the caller. pair-consistency is same-file only;
+# set-relation is a global two-set relation, not a per-directory "for each dir
+# with a caller, a test in that dir names it" quantifier. No declarative type
+# expresses the directory-local caller-to-test coupling. The real script is the
+# faithful check; it verifies in CI.
+rules:
+  - id: extraction-runs-callers-need-sibling-tests
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-extraction-runs-callers-need-sibling-tests.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - "bash"
+        - "scripts/check-extraction-runs-callers-need-sibling-tests.sh"
+      expect:
+        exit: 0
+    cure: "Add an integration test in the SAME package as each parseruns.InsertOrClaimActive caller that exercises the InsertOrClaimActive call path (sweep-17 #2 wrote the helper to make these tests reachable from each caller's package; sweep-18 #3 restored the email-inbound one)."
+    origin: scripts/check-extraction-runs-callers-need-sibling-tests.sh

@@ -1,0 +1,46 @@
+# Ported from Palletra scripts/check-migrations-unique-constraints-need-preflight.sh
+# (WI-110). Every migration that creates a UNIQUE constraint must ALSO contain
+# an earlier-in-the-file duplicate-detection preflight that RAISE EXCEPTIONs on
+# offending rows. Without it, the UNIQUE creation fails mid-deploy with the
+# opaque pgx "could not create unique index" + SQLSTATE 23505 and operators dig
+# the duplicate set out of the logs. Migration 0065 originally shipped without
+# one; the audit added a `DO $$ ... RAISE EXCEPTION ... $$` block BEFORE the
+# `CREATE UNIQUE INDEX`.
+#
+# Ported as ordering (within file): the preflight `RAISE EXCEPTION` (before) must
+# precede the UNIQUE creation `CREATE UNIQUE INDEX` / `ADD CONSTRAINT <name>
+# UNIQUE` (after). A UNIQUE creation on an EARLIER line than the RAISE fires at
+# the UNIQUE line. Case-insensitive to match the .sh's toupper() awk scan.
+#
+# FP FIX: the .sh's awk anchors the CREATE-UNIQUE match at line start
+# (`up ~ /^[[:space:]]*CREATE[[:space:]]+UNIQUE[[:space:]]+INDEX/`) and the
+# RAISE-EXCEPTION match at line start (`^[[:space:]]*RAISE[[:space:]]+EXCEPTION`),
+# so a `-- ... CREATE UNIQUE INDEX ...` prose line in a migration's header comment
+# is NOT treated as a UNIQUE creation. The port's unanchored `CREATE UNIQUE INDEX`
+# matched those comment lines, which sit ABOVE the real preflight RAISE, so the
+# ordering rule wrongly fired on clean, correctly-preflighted migrations
+# (0068:8, 20260703...:59, etc — the comment mentions the index before the DO
+# block runs). Anchoring both patterns at line start (`^\s*`) mirrors the awk and
+# silences the comment matches. ADD CONSTRAINT stays unanchored, exactly as the
+# awk leaves it. preprocess: raw — SQL has no formwork decomment variant.
+#
+# DIVERGENCE (noted): (1) the .sh scopes to *.up.sql whose 4-digit prefix is
+# >= 0065; formwork scopes by path, so the numeric anchor is not modeled — the
+# fixtures use a 0065 file and in-scope migrations behave identically. (2)
+# ordering only fires when BOTH patterns are present but reversed; a UNIQUE
+# creation with NO RAISE anywhere is not caught (same limit class as the ported
+# check-per-pdf-timeout-budget-inside-loop.sh). The novel invariant ported is the ORDER.
+rules:
+  - id: migrations-unique-constraints-need-preflight
+    type: ordering
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.up.sql"
+    preprocess: raw
+    params:
+      before: '(?i)^\s*RAISE\s+EXCEPTION'
+      after: '(?i)(^\s*CREATE\s+UNIQUE\s+INDEX|ADD\s+CONSTRAINT\s+[A-Za-z0-9_]+\s+UNIQUE)'
+      within: file
+    cure: "Wrap the duplicate-detection query in a DO $$ ... END $$ block that runs BEFORE the UNIQUE creation and RAISE EXCEPTIONs with the offending row identifiers. Canonical shape: migration 0065 (WI-110)."
+    origin: scripts/check-migrations-unique-constraints-need-preflight.sh

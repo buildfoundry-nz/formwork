@@ -1,0 +1,4 @@
+// A trailing-`~` editor backup of plot_screen.dart — a stale second copy
+// left by an editor. Its NAME (ending in `~`) is the violation: it fails
+// require_match `[^~]$`, so no-backup-blobs-tracked fires on it.
+class PlotScreen {}

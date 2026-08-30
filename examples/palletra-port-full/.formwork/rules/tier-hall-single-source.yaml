@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-tier-hall-single-source.sh (sweep-9
+# #9). The hall discriminator rule — "estimator-assigned facility_unit_id if
+# present, else the title-derived hall key" — has ONE home:
+# tierscope.Hall. The reference fold and the pricing rollup-identity scope
+# must agree on what "same hall" means, or a reference sheet's metric folds
+# onto an identity the primary no longer shares (#7265). It was re-implemented
+# byte-for-byte in calceval.hallKey.
+#
+# The .sh ALREADY used rg --pcre2 --multiline with the exact pattern below —
+# the `FacilityUnitID != nil` guard then a `return …HallKey` fallback within
+# a short (160-char) window, the re-derivation shape. This is a straight port
+# to regexp2 + multiline. Match starts at `FacilityUnitID != nil` — the
+# reported line.
+#
+# Scope mirrors the .sh: freightworks/**/*.go, excluding *_test.go and the
+# canonical home internal/tierscope/.
+rules:
+  - id: tier-hall-single-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/tierscope/**"
+    params:
+      # Plain multiline RE2: the .sh's `rg --pcre2 --multiline` pattern uses no
+      # PCRE-only feature — the `FacilityUnitID != nil` guard, a bounded
+      # `[\s\S]{0,160}` proximity span, then a `return …HallKey` fallback.
+      # Bounded repetition + negated classes are all RE2-linear. Match starts at
+      # `FacilityUnitID != nil` (want-anchor).
+      pattern: 'FacilityUnitID != nil[\s\S]{0,160}return[^\n]*HallKey'
+      prefilter: 'FacilityUnitID'
+      multiline: true
+    cure: "Call tierscope.Hall(facilityUnitID, hallKey) instead of re-implementing the facility_unit_id-else-hall_key rule — one definition so the reference fold and the pricing fold can't drift."
+    origin: scripts/check-tier-hall-single-source.sh

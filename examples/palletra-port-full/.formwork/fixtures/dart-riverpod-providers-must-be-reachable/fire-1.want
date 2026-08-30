@@ -1,0 +1,1 @@
+- dead @riverpod provider deadInputsProvider (declared in ./packages/feature_lines/lib/providers.g.dart, no live consumer)

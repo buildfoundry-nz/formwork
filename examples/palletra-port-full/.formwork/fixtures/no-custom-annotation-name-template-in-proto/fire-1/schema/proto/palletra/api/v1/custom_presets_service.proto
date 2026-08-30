@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+message CreateCustomAnnotationNamePresetResponse { // want: no-custom-annotation-name-template-in-proto
+  string id = 1;
+}

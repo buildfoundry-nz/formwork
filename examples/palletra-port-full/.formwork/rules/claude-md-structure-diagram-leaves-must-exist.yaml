@@ -1,0 +1,55 @@
+rules:
+  # F11 (#5650): the `## Structure` fenced ASCII tree in CLAUDE.md is parsed for
+  # its two internal/ nodes (classified by comment text: "core-api-only" =>
+  # freightworks/services/core-api/internal, "shared" => freightworks/internal).
+  # Each node's deeper-indented `<name>/` child leaf must exist at the composed
+  # path, so the diagram can never claim a package lives where it does not.
+  # Placeholders (`<pkg>/`) and non-package tokens are skipped. This is bespoke
+  # indentation-tracking parsing (not declarative), reproduced faithfully with
+  # the command escape hatch over the fixture tree.
+  - id: claude-md-structure-diagram-leaves-must-exist
+    type: command
+    severity: error
+    scope:
+      include: ["CLAUDE.md"]
+    params:
+      cmd:
+        - bash
+        - -c
+        - |
+          set -u
+          doc=CLAUDE.md
+          [ -f "$doc" ] || exit 0
+          CORE=freightworks/services/core-api/internal
+          SHARED=freightworks/internal
+          in_struct=0; in_fence=0; node=""; base=""; nindent=-1; fail=0
+          while IFS= read -r line || [ -n "$line" ]; do
+            if [ "$in_struct" -eq 0 ]; then
+              case "$line" in "## Structure"*) in_struct=1 ;; esac
+              continue
+            fi
+            case "$line" in
+              '```'*) if [ "$in_fence" -eq 0 ]; then in_fence=1; continue; else break; fi ;;
+            esac
+            [ "$in_fence" -eq 1 ] || continue
+            lead="${line%%[! ]*}"; indent=${#lead}
+            stripped="${line#"$lead"}"
+            case "$stripped" in
+              internal/*)
+                case "$line" in
+                  *core-api-only*) node=core;   base=$CORE;   nindent=$indent ;;
+                  *shared*)        node=shared; base=$SHARED; nindent=$indent ;;
+                  *)               node="";     base="";      nindent=-1 ;;
+                esac
+                continue ;;
+            esac
+            [ -n "$node" ] || continue
+            if [ "$indent" -le "$nindent" ]; then node=""; base=""; nindent=-1; continue; fi
+            first="${stripped%% *}"
+            case "$first" in */) leaf="${first%/}" ;; *) continue ;; esac
+            case "$leaf" in ''|*[!a-zA-Z0-9_]*) continue ;; esac
+            [ -e "$base/$leaf" ] || { echo "ghost leaf: $base/$leaf" >&2; fail=1; }
+          done < "$doc"
+          exit $fail
+    cure: "Move the leaf under the internal/ node matching its real home; fix the diagram, do not mkdir the ghost (F11)."
+    origin: scripts/check-claude-md-structure-diagram-leaves-must-exist.sh

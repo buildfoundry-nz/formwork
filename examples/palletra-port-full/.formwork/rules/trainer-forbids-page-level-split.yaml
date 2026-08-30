@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-trainer-document-level-split.sh (sweep-1 #2 +
+# sweep-2/3/4/6/8). The classifier trainer MUST split train/val by DOCUMENT, not
+# by page. The full .sh is a ~8-sub-rule compound gate; the two FORBIDDEN teeth
+# (its maptype) are ported here:
+#   (1) no page-level Split DECLARATION in the train package — plain/spaced/
+#       method/generic form — only DocumentSplit / DivideWithFallback are allowed
+#       (the next char after `Split` in those is `W`/nothing, never `[` or `(`).
+#   (2) the trainer cmd must not CALL the page-level train.Split( .
+# Both scan comment-stripped Go (decomment-go) so a token hidden in a comment
+# can neither false-fire nor stand in as a decoy.
+#
+# NOTE (partial port): the .sh's REQUIRED teeth — trainer must call
+# train.DivideWithFallback(, must emit a live "NOT held out" warning, must branch
+# on `if degraded`, must not blank-discard the result, must import train plainly,
+# must reference only sanctioned train.* API — are separate required-pattern
+# guards not captured by these two forbidden-pattern rules.
+rules:
+  - id: trainer-forbids-page-level-split
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/parsecompose/classifier/local/train/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '^func (\([^)]*\) )?Split(\[|\s*\()'
+    cure: "A page-level Split leaks sibling pages across the train/val boundary; declare DocumentSplit / DivideWithFallback instead (dev-2026-07-09 leak, sweep-1 #2)."
+    origin: scripts/check-trainer-document-level-split.sh
+  - id: trainer-cmd-forbids-page-split-call
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/cmd/train-page-classifier/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'train\.Split(\[|\s*\()'
+    cure: "The trainer cmd must split by document via train.DivideWithFallback(, never the page-level train.Split(."
+    origin: scripts/check-trainer-document-level-split.sh

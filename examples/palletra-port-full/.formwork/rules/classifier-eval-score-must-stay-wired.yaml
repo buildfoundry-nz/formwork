@@ -1,0 +1,56 @@
+# Ported from Palletra scripts/check-classifier-eval-gate-wired.sh (sweep-10).
+# classifier/eval is the scoring core of the offline classifier regression gate;
+# it must stay WIRED (not silently retained as dead code). Three existence
+# anchors, each a required-pattern in exists mode:
+#   1. a non-test .go OUTSIDE classifier/eval calls eval.Score( — a live consumer
+#      (comment-stripped so a `// eval.Score(` comment cannot fake it);
+#   2. classifier/evalgate ships a *_test.go referencing RateLocalModel(;
+#   3. that same test dir asserts a held-out accuracy floor via `.Accuracy <`.
+#
+# DIVERGENCE (noted): the .sh skips ALL anchors if the classifier/eval dir is
+# absent, and only anchor 1 is comment-stripped (anchors 2/3 grep raw). Ported
+# faithfully: anchor 1 uses decomment-go, anchors 2/3 raw. Per-rule empty-scope
+# passes (formwork lint owns empty-scope rot), approximating the whole-gate skip.
+rules:
+  # Anchor 1 — eval.Score has a live consumer outside classifier/eval and tests.
+  - id: classifier-eval-score-must-stay-wired
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/parsecompose/classifier/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/internal/parsecompose/classifier/eval/**"
+    preprocess: decomment-go
+    params:
+      pattern: 'eval\.Score[[:space:]]*\('
+      mode: exists
+    cure: "Keep a live non-test consumer of eval.Score( outside classifier/eval (classifier/evalgate) — the §8 regression gate must stay wired (sweep-10)."
+    origin: scripts/check-classifier-eval-gate-wired.sh
+  # Anchor 2 — evalgate's regression test exercises RateLocalModel(.
+  - id: classifier-evalgate-regression-test-rates-local-model
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/parsecompose/classifier/evalgate/**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'RateLocalModel[[:space:]]*\('
+      mode: exists
+    cure: "classifier/evalgate must ship a regression test exercising RateLocalModel( (sweep-10)."
+    origin: scripts/check-classifier-eval-gate-wired.sh
+  # Anchor 3 — evalgate asserts a held-out accuracy FLOOR (report.Accuracy < …).
+  - id: classifier-evalgate-holdout-accuracy-floor-required
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/parsecompose/classifier/evalgate/**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\.Accuracy[[:space:]]*<'
+      mode: exists
+    cure: "classifier/evalgate must assert a held-out accuracy floor (report.Accuracy < floor) or the regression gate passes vacuously (sweep-10)."
+    origin: scripts/check-classifier-eval-gate-wired.sh

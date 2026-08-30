@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-pagekinds-single-source.sh.
+# internal/pagekinds is the single source for palletra.page_kind capability.
+# Bans reintroducing any of the eight deleted capability maps as a var/const in
+# non-test freightworks Go: tierBearingPageKinds, crossVerifyTypes,
+# pageKindToCategory, partitionPlanPageKinds, pageKindToSections, drawingPageKinds,
+# expandedPageKinds, lowComplexityPageKinds. These facts now live on pagekinds.Spec.
+rules:
+  - id: pagekinds-single-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: '\b(?:var|const)\s+(?:tierBearingPageKinds|crossVerifyTypes|pageKindToCategory|partitionPlanPageKinds|pageKindToSections|drawingPageKinds|expandedPageKinds|lowComplexityPageKinds)\b'
+    cure: "These page-kind facts live on internal/pagekinds.Spec; add/extend the Spec field and derive from it, do not re-hardcode a parallel map."
+    origin: scripts/check-pagekinds-single-source.sh

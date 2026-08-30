@@ -1,0 +1,138 @@
+name: Release
+
+# Tag-driven publishing to GitHub Releases (spec amendment 2026-08-05 in
+# specs/2026-07-23-cicd-and-binary-distribution-design.md): a v* tag produces
+# the four static tarballs plus checksums.txt as a GitHub Release. While the
+# repo is private, consumers are peers with repo read access pulling via an
+# authenticated `gh release download -R buildfoundry-nz/formwork`; once the
+# project goes public the same releases are the public channel. Tags are cut
+# by hand (spec non-goal: no auto-versioning).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  # Nothing else enforces that a tag points at a CI-green commit — a tag can
+  # be pushed against any SHA — so the release re-verifies before publishing,
+  # on the SAME two-platform matrix that defines CI-green in ci.yml: a
+  # darwin-only test failure must red-gate the darwin tarballs, not publish
+  # them behind a green linux run (fail-open review of this file).
+  #
+  # THAT SAMENESS IS CHECKED, NOT ASSERTED (#281). What stood here said "if
+  # ci.yml's matrix changes, this one changes with it — including the runner
+  # labels", and nothing held the two files together. The include lists being
+  # byte-identical is what made that dangerous rather than harmless: the claim
+  # read as true, so a runner move applied to ci.yml alone would have left this
+  # job publishing a platform's tarballs off a run on a machine the merge gate
+  # never used, with the comment still saying they matched.
+  #
+  # internal/repoproof/ci_contexts_test.go compares the two verify jobs and
+  # fails on any divergence — the matrix legs entry-for-entry, platform AND
+  # runner label (#183), and the steps too, because the same machines running a
+  # weaker command is not the same verification. Edit either job and that test
+  # tells you to edit the other. release.yml itself is deliberately not a
+  # required check context: it runs on `push: tags` and can never report on a
+  # pull request.
+  verify:
+    name: verify before publish (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # LINUX MOVED (#183) — on the CPU symptom, and only that one. On run
+          # 31969746419 internal/rules/sqlparse — the most CPU-bound package in
+          # the suite, since it compiles the PostgreSQL grammar as WASM on
+          # wazero — ran 749s on the GitHub-hosted machine and hit Go's
+          # 11-minute test timeout, against 21s on macos-latest in that same
+          # run and 11.4s/16.4s on the merges either side of it. A red main and
+          # a manual re-run, caused by nothing in the change. It runs in ~13s
+          # here.
+          #
+          # #183 ALSO read that run's module-cache restore failure as this
+          # machine degrading. That half was false when it was written and is
+          # corrected here rather than left to rot: the restore failed
+          # identically on all three jobs across three runner vendors in that
+          # same run, and kept failing on Blacksmith after the move, green runs
+          # included. Its cause was the `toolchain` vs `go` directive collision
+          # fixed in .github/actions/setup-go (#282) — never the machine.
+          #
+          # This label is already proven here: release-config has run on it
+          # with setup-go and cache: true since #181.
+          - platform: linux
+            runner: blacksmith-4vcpu-ubuntu-2404
+          # DARWIN DELIBERATELY STAYS GITHUB-HOSTED. There is no Blacksmith
+          # macOS runner, and the tempting simplification — drop darwin so
+          # everything sits on one runner — is the fail-open this matrix exists
+          # to prevent: GoReleaser publishes darwin tarballs, and a darwin-only
+          # failure must red-gate them rather than ship behind a linux green.
+          # Leaving darwin here is a fine outcome; deleting it is not.
+          - platform: darwin
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/setup-go
+      - name: make verify
+        run: make verify
+
+  release:
+    name: goreleaser release
+    needs: verify
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: write # create the GitHub Release and upload its assets
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # GoReleaser resolves the version from the tag
+      - uses: ./.github/actions/setup-go
+      - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          version: "~> v2"
+          install-only: true
+      # Build the current-platform target and run the load-bearing
+      # stamped-and-trusted assertion (shared with ci.yml) against the REAL
+      # tag-derived version BEFORE anything is published: a binary that would
+      # gate as untrusted must never ship. ci.yml exercises the same script
+      # every PR, but only on a snapshot version — the tag-stripped "v" class
+      # of regression (2026-07-23) manifests only here.
+      #
+      # ASSUMPTION THIS RESTS ON: the publish step below rebuilds (--clean
+      # wipes this dist/), so the asserted bytes are not the published bytes.
+      # That is sound only while the stamp is a pure function of (tag,
+      # .goreleaser.yaml) — one builds: entry, one shared ldflags line, and a
+      # target-independent isReleaseVersion.
+      #
+      # TWO OF THOSE THREE ARE CHECKED AND THE THIRD IS NOT, said here because
+      # an enforced claim and an aspirational one read identically in a comment
+      # and this file has now shipped both (#281).
+      # internal/repoproof/release_stamp_test.go holds:
+      #   - .goreleaser.yaml declares ONE builds: entry, with no per-target
+      #     overrides: and no ldflags template field that varies by target. A
+      #     second entry would not merely weaken the assertion, it would aim it
+      #     elsewhere: cmd/assert-trusted-stamp takes the FIRST dist/ binary
+      #     named formwork under a linux_amd64 path, and each build id gets its
+      #     own directory.
+      #   - this job needs: verify, runs the assertion, and runs it BEFORE the
+      #     publish below — position inside a run: block included, since one
+      #     multi-line step would otherwise hide the inversion.
+      #   - no job in either workflow builds a release artifact without running
+      #     the assertion at all.
+      # NOT held anywhere, and left to whoever edits it: a target-independent
+      # isReleaseVersion in internal/cli/version.go. That is a property of Go
+      # code rather than of configuration, and a grep for runtime.GOOS would be
+      # a rule pretending to be a proof. A GOOS branch in version.go breaks this
+      # equivalence silently — re-think this step before adding one.
+      # (OSS GoReleaser has no build/assert/publish split; `goreleaser
+      # continue` is Pro-only, so rebuild-after-assert is the available shape.)
+      - name: assert tagged build is version-stamped and trusted
+        run: |
+          goreleaser build --clean --single-target
+          go run ./cmd/assert-trusted-stamp
+      - name: goreleaser release
+        run: goreleaser release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

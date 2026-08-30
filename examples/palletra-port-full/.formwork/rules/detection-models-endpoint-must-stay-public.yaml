@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-detection-models-endpoint-must-stay-public.sh
+# (sweep-16 #3). GET /api/detection/models MUST be registered in mount_app.go
+# at TOP-LEVEL (public) scope — NOT inside any r.Group that has called
+# r.Use(d.SessionMiddleware). The detection-model registry carries no per-tenant
+# state, so unauthenticated surfaces read it without a GCIP bearer. A missing
+# registration also fails.
+#
+# COMMAND ESCAPE: the check is a brace-DEPTH parse of mount_app.go — it walks
+# the file tracking `{`/`}` nesting and whether each enclosing r.Group has called
+# r.Use(d.SessionMiddleware), then asserts the registration line sits in a scope
+# with no auth-middleware ancestor. No declarative formwork type tracks brace
+# nesting or ancestor-scope state; a forbidden/required-pattern cannot tell a
+# top-level mount from one inside an auth group. Running the real script is the
+# faithful check; verifies in CI, formwork lint enumerates it.
+rules:
+  - id: detection-models-endpoint-must-stay-public
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-detection-models-endpoint-must-stay-public.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/mount_app.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-detection-models-endpoint-must-stay-public.sh
+      expect:
+        exit: 0
+    cure: "Register GET /api/detection/models at top-level scope in mount_app.go, outside any r.Group that calls r.Use(d.SessionMiddleware) — the detection-model registry is intentionally public (sweep-16 #3)."
+    origin: scripts/check-detection-models-endpoint-must-stay-public.sh

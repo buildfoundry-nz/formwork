@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-projectterms-single-source.sh (#3365).
+# services/core-api/internal/projectterms is the single Go source of truth for
+# the depot + access_grade free-text vocabularies. Nothing re-hardcodes the
+# member string LITERALS in a switch/map elsewhere in the Go tree. The .sh bans
+# the vocabulary-exclusive quoted literals anywhere in non-test Go OUTSIDE the
+# projectterms package, decommenting each file first so a member named in a doc
+# comment does not fire. This is a faithful port of that ban arm.
+#
+# Not ported: the anti-vacuity guard (the same literals MUST still exist in
+# projectterms/data.go, else the .sh exits 2) — that is a required-anchor over a
+# different file and cannot ride on this forbidden-pattern rule.
+rules:
+  - id: projectterms-single-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/internal/projectterms/**"
+    preprocess: decomment-go
+    params:
+      pattern: '"(Northgate|Southpoint|Open/Level|Racked/Tight|Mezzanine/Complex)"'
+    cure: "These depot / access_grade values are owned by services/core-api/internal/projectterms. Read projectterms.Depot / projectterms.AccessGrade — do not re-enumerate the members (#3365)."
+    origin: scripts/check-projectterms-single-source.sh

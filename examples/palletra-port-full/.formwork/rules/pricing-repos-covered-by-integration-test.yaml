@@ -1,0 +1,58 @@
+# Ported from Palletra scripts/check-pricing-repos-covered-by-integration-test.sh (#6840).
+# Side A = the class symbol declared in each
+# packages/feature_costing/lib/data/*_repository.dart; side B = every repository
+# symbol referenced by a frontend/integration_test/*{pricing,margin}*.dart. A
+# must be a subset of B — a repository class in A referenced by no pricing
+# integration test is the uncovered-repo finding.
+#
+# FALSE-POSITIVE FIX: the .sh keeps a SHRINK-ONLY baseline
+# (scripts/baselines/pricing-integration-test-baseline.txt) that grandfathers the
+# repositories already uncovered when per-repo coverage landed (#6840); on a
+# clean develop those grandfathered repos exist but the gate is silent because
+# they are in the baseline. The original port dropped the baseline and ran the
+# strict reading, so it fired on all seven grandfathered repos (a false positive
+# on clean code). The seven baseline paths are excluded from scope here — that
+# reproduces the gate's develop-silent behavior while STILL catching the named
+# recurrence: a NEW pricing repository (not in the baseline) shipping uncovered
+# is not excluded, so its class stays in A and A ⊄ B fires. The exclusion is the
+# steady state the shrink-only baseline converges to; a repo folded into coverage
+# simply stops being uncovered.
+#
+# The pricing-domain integration tests are not all named `*pricing*` — the
+# margin-scenario coverage test is `margin_scenario_test.dart` — so side B's
+# file glob is a brace alternation over both domain tokens rather than a bare
+# `*pricing*` wildcard, to keep out-of-domain tests (measure, checkout, ...)
+# excluded from B while still admitting both.
+rules:
+  - id: pricing-repos-covered-by-integration-test
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "packages/feature_costing/lib/data/**/*_repository.dart"
+        - "frontend/integration_test/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        # Shrink-only #6840 baseline — grandfathered uncovered repos the .sh is
+        # silent on; excluding them keeps this rule silent on develop.
+        - "packages/feature_costing/lib/data/output_repository.dart"
+        - "packages/feature_costing/lib/data/output_templates_repository.dart"
+        - "packages/feature_costing/lib/data/pricing_overview_repository.dart"
+        - "packages/feature_costing/lib/data/pricing_panel_repository.dart"
+        - "packages/feature_costing/lib/data/pricing_ribbon_repository.dart"
+        - "packages/feature_costing/lib/data/estimate_actions_repository.dart"
+        - "packages/feature_costing/lib/data/variance_repository.dart"
+    params:
+      a:
+        files:
+          - "packages/feature_costing/lib/data/**/*_repository.dart"
+        pattern: 'class\s+([A-Za-z][A-Za-z0-9_]*Repository)\b'
+        group: 1
+      b:
+        files:
+          - "frontend/integration_test/**/*{pricing,margin}*.dart"
+        pattern: '\b([A-Za-z][A-Za-z0-9_]*Repository)\b'
+        group: 1
+      relation: subset
+    cure: "Add frontend/integration_test/pricing_*_test.dart (@TestOn('chrome')) that names EACH uncovered repository class, signs in a dev e2e user, drives it against the real core-api, and asserts the typed decode round-trips. Coverage is per-repository — a covered sibling does not count (#6840 / #6479)."
+    origin: scripts/check-pricing-repos-covered-by-integration-test.sh

@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-page-metric-version-single-source.sh
+# (#2524) Rule A. The route-layer computation-version tag is an ALIAS of the one
+# source (parsewrite.DefaultAnalysisVersion), never a re-hardcoded string
+# literal. A `PageTallyComputationVersion = "..."` definition anywhere in
+# non-test freightworks Go is a divergent copy. Comment-stripped (decomment-go).
+rules:
+  - id: page-metric-computation-version-no-hardcoded-literal
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'PageTallyComputationVersion\s*=\s*"'
+    cure: "Alias the single source: const PageTallyComputationVersion = parsewrite.DefaultAnalysisVersion."
+    origin: scripts/check-page-metric-version-single-source.sh

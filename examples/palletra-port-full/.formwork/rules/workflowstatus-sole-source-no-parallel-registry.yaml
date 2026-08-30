@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-workflow-state-single-source.sh (#3365 PR-3).
+# projectterms.WorkflowPhase is the single Go source of truth for the Jobs-screen
+# workflow-status taxonomy. The fold DELETED the parallel taskview registries
+# (the statusOrder ordering slice, its statusRankIndex memo, and the
+# statusViews label/tone/icon map). This rule makes that fold un-regressable:
+# re-declaring any of those identifiers means someone re-hardcoded a fact that
+# belongs on projectterms.WorkflowPhase. Identifier-ban (not literal-grep) so
+# the legitimate workflow-status VALUES appearing in behavior switches/comments
+# do not false-positive. The .sh scans the whole freightworks Go tree with
+# `rg --type go -g '!*_test.go'` for `\b(var|const)\s+(<ids>)\b`; *_test.go is
+# excluded because the synth fixture legitimately embeds the identifier.
+rules:
+  - id: workflowstatus-sole-source-no-parallel-registry
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: '\b(var|const)\s+(statusOrder|statusRankIndex|statusViews)\b'
+    cure: "The workflow-status taxonomy + its label/tone/icon live on projectterms.WorkflowPhase. Read it (Values/Rank/Lookup/Options) — do not re-hardcode a parallel statusOrder/statusRankIndex/statusViews registry."
+    origin: scripts/check-workflow-state-single-source.sh

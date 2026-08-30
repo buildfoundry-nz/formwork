@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-no-discarded-stage-event-write-errors.sh
+# (sweep-18). workflow_stage_events writes must have their returned error
+# checked; discarding it via `_ = ...` hid a silent-drop regression class. The
+# .sh runs three line-greps over non-test Go in four dirs; they are combined
+# here into one RE2 alternation (each an independent per-line forbidden shape):
+#   1. `_ = <recv>.Events.Write{Begun,Completed,Errored,Cancelled}(`
+#   2. `_ = <...>.phasefeed.<Func>(`  (package-level helper)
+#   3. `_ = <recv>.Write{Begun,Completed,Errored,Cancelled,Skipped}(`  (bare Writer receiver)
+rules:
+  - id: no-discarded-stage-event-write-errors
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/internal/detectqueue/**/*.go"
+        - "freightworks/services/core-api/internal/phasefeed/**/*.go"
+        - "freightworks/services/core-api/internal/pdfcarve/**/*.go"
+        - "freightworks/services/core-api/internal/uploadnorm/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: '_\s*=\s*(?:[^=]*\.Events\.Write(?:Begun|Completed|Errored|Cancelled)\(|[^=]*[^A-Za-z_]phasefeed\.[A-Z][A-Za-z0-9_]*\(|[A-Za-z_][A-Za-z0-9_.]*\.Write(?:Begun|Completed|Errored|Cancelled|Skipped)\()'
+    cure: "Surface the stage-event write error: return it, log+abort, or return 5xx. A dropped workflow_stage_events row leaves the page stuck and hides the regression (sweep-18)."
+    origin: scripts/check-no-discarded-stage-event-write-errors.sh

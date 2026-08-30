@@ -1,0 +1,19 @@
+# Ported from scripts/check-primary-action-no-shelving-coverage-gate.sh (#4062),
+# pattern 2. Any workflow_main_action*.go must not call hiddenshelving.Coverage(
+# or import services/core-api/internal/hiddenshelving — the primary-action inputs
+# gatherer must never read the project-wide verdict. decomment-go so the doc
+# comment naming the ban never trips it.
+rules:
+  - id: primary-action-route-no-shelving-coverage
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/**/workflow_main_action*.go'
+      exclude:
+        - '**/*_test.go'
+    preprocess: decomment-go
+    params:
+      pattern: 'hiddenshelving\.Coverage\(|services/core-api/internal/hiddenshelving"'
+    cure: 'The primary-action route must not read hiddenshelving.Coverage; the project-wide block lives in internal/priceready (#4062).'
+    origin: scripts/check-primary-action-no-shelving-coverage-gate.sh

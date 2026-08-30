@@ -1,0 +1,28 @@
+# Ported from Palletra scripts/check-classification-edit-token-confined-to-owner-files.sh.
+# The token `ClassificationOverride` (the K13 user-edit-lock bypass sentinel) may
+# appear ONLY in its definition file (markupwrite/mutbase/mutbase.go) and
+# its sole user seam (markupwrite/partitiontypemut/**), across all non-test Go
+# under freightworks/. Any other reference is a leaked bypass that could unlock a
+# geometry/measurement edit on an approved row. The .sh greps raw source
+# (no decomment), so preprocess is omitted.
+#
+# DIVERGENCE (noted): the .sh also exits 2 (loud, not vacuous) if the token is
+# not defined in mutbase.go (rename / path rot). A forbidden-pattern cannot
+# express that anti-vacuity guard; only the leaked-reference ban is ported.
+rules:
+  - id: classification-edit-token-confined-to-owner-files
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    except:
+      paths:
+        - "freightworks/services/core-api/internal/markupwrite/mutbase/mutbase.go"
+        - "freightworks/services/core-api/internal/markupwrite/partitiontypemut/**"
+    params:
+      pattern: 'ClassificationOverride'
+    cure: "Only mutbase/mutbase.go (defn) and partitiontypemut/ (sole user) may name ClassificationOverride — classification is exempt from the K13 lock for partition_type ONLY. Route the edit through partitiontypemut.RecordAndUpdatePartitionType."
+    origin: scripts/check-classification-edit-token-confined-to-owner-files.sh

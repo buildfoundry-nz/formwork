@@ -1,0 +1,25 @@
+# Ported from Palletra scripts/check-flutter-upload-flow-one-notifier-only.sh
+# (Flutter upload-flow parity, PR 9). The upload -> workflow -> processing ->
+# measure flow is ONE state machine on a SINGLE Notifier<UploadState>. A second
+# `(Async)Notifier<UploadState>` declaration forks the state.
+#
+# This is a count check across the feature_intake scope -> pattern-count,
+# op:at-most, n:1. The pattern accepts an optional `$` prefix so it counts both
+# the Riverpod codegen base (`extends $Notifier<UploadState>` in *.g.dart) and a
+# hand-written `extends Notifier<UploadState>` — a second UploadState notifier
+# emits a second base line and trips the at-most-1 bound. Generated files are in
+# scope (the codegen base is where the distinct machine manifests), so *.g.dart
+# is NOT excluded, matching the .sh's `--include='*.dart'`.
+rules:
+  - id: flutter-upload-flow-one-notifier-only
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "packages/feature_intake/lib/**/*.dart"
+    params:
+      pattern: 'extends[[:space:]]+\$?(?:Async)?Notifier<[[:space:]]*UploadState[[:space:]]*>'
+      op: at-most
+      n: 1
+    cure: "Keep the upload flow on one UploadProcessNotifier; a second (Async)Notifier<UploadState> forks the state machine (two reducers racing the same screen sequence). Analytics/onboarding use their own differently-typed notifiers."
+    origin: scripts/check-flutter-upload-flow-one-notifier-only.sh

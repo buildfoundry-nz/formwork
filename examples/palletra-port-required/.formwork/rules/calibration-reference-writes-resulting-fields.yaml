@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-calibration-reference-writes-resulting-fields.sh
+# (Sweep-2 #4). composeAdjustmentReference must persist BOTH appliedCalibration
+# (field 5) and appliedScale (field 6) into the adjustment_reference JSON, or
+# the FE scale banner silently reads 0. The .sh greps for both quoted keys in
+# reference.go; since exists-mode enforces one anchor at a time, each key is a
+# separate rule so BOTH must remain present (a single OR rule would pass with
+# only one key, weaker than the gate).
+#
+# Both read reference.go through decomment-go, not raw. The anchors are the
+# QUOTED map keys, which live in string literals — decomment-go preserves those
+# and blanks only comments, so the real write still matches and a comment
+# naming the key no longer does. Raw accepted the comment, which meant the write
+# could be deleted, explained in the line above where it used to be, and both
+# rules would stay green over a reference.go that persists neither field —
+# exactly the sweep-2 #4 regression (fire-2 of each is that shape; #263.3).
+rules:
+  - id: calibration-reference-writes-resulting-calibration
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/scaleapply/reference.go"
+    preprocess: decomment-go
+    params:
+      pattern: '"appliedCalibration"'
+      mode: exists
+    cure: "composeAdjustmentReference must keep writing the \"appliedCalibration\" key or the FE scale banner reads 0 (sweep-2 #4)."
+    origin: scripts/check-calibration-reference-writes-resulting-fields.sh
+  - id: calibration-reference-writes-resulting-scale
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/scaleapply/reference.go"
+    preprocess: decomment-go
+    params:
+      pattern: '"appliedScale"'
+      mode: exists
+    cure: "composeAdjustmentReference must keep writing the \"appliedScale\" key or the FE scale banner reads 0 (sweep-2 #4)."
+    origin: scripts/check-calibration-reference-writes-resulting-fields.sh

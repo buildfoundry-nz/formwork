@@ -1,0 +1,54 @@
+# Ported from Palletra scripts/check-migrations-partman-parents-registered.sh
+# (#2832 / #4402).
+# The schema-snapshot gate replays the chain on a PLAIN pgvector image where
+# pg_partman is NOT installed, so any partman-dependent migration failure is
+# invisible to CI and only surfaces at deploy-time db-bootstrap (how 20000318174500
+# froze every dev deploy). This gate installs pg_partman into a scratch docker
+# postgres so create_parent runs FOR REAL, replays the whole committed chain via
+# `go run ./cmd/migrate`, then reads public.part_config back to assert: parents
+# registered (count>0), platform.audit_events registered by name, its 24-month
+# keep-table retention window landed, and the live part_config EQUALS the
+# migrations/partman-retention.tsv registry (both directions).
+#
+# Why the ESCAPE HATCH (type: command): it boots a docker postgres, apt-installs
+# postgresql-16-partman, and runs `go run ./cmd/migrate` — an EXTERNAL TOOL /
+# stateful container replay that is UNFIREABLE from a tmpdir fixture (its own synth
+# marker records it as unfireable). CI runs it as the hard gate with
+# CHECK_MIGRATIONS_PARTMAN_PARENTS_REGISTERED_FORCE=1; here it self-skips
+# (exit 0) when docker is unavailable or nothing under migrations/ changed.
+rules:
+  - id: migrations-partman-parents-registered
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector replays every migration inside a live Postgres container
+      and asserts the partition manager's state survives it. It exits 0 on its
+      own no-docker branch, and where docker IS present it execs the
+      validating target's own replay script, which this corpus does not carry.
+      A fixture tree therefore drives the skip arm on any machine without a
+      container runtime and a missing-script exit 127 on one with it — neither
+      is the verdict, and a database is not a directory of files.
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          MIGRATIONS_PATH="freightworks/services/core-api/migrations"
+          [ -d "$MIGRATIONS_PATH" ] || exit 0
+          if [ "${CHECK_MIGRATIONS_PARTMAN_PARENTS_REGISTERED_FORCE:-0}" != "1" ]; then
+            docker info >/dev/null 2>&1 || { echo "[partman-parents] SKIP — docker unavailable (CI runs the hard gate)."; exit 0; }
+            if git rev-parse --verify origin/develop >/dev/null 2>&1 \
+               && git diff --quiet origin/develop...HEAD -- "$MIGRATIONS_PATH"; then
+              echo "[partman-parents] SKIP — no changes under ${MIGRATIONS_PATH} vs origin/develop."
+              exit 0
+            fi
+          fi
+          docker info >/dev/null 2>&1 || { echo "[partman-parents] ERROR: docker is not running." >&2; exit 1; }
+          exec bash scripts/check-migrations-partman-parents-registered.sh
+      expect:
+        exit: 0
+    cure: "A migration mutates a partman parent without keeping its template table in sync, or drops/omits create_parent, or drifts a retention window from migrations/partman-retention.tsv. Keep the partman template in sync (the 0015 pattern) and declare every retention change in the registry (#2832 / #4402 / #6717)."
+    origin: scripts/check-migrations-partman-parents-registered.sh

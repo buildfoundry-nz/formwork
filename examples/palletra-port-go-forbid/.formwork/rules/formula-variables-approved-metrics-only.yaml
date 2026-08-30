@@ -1,0 +1,26 @@
+rules:
+  # sweep-13 I2 (#6250): formula variables must come ONLY from approved metrics.
+  # No file under calceval/** may call an approval-AGNOSTIC
+  # scanproject.List*Totals rollup — an unreviewed metric could move a priced
+  # quantity. The approved variants end ...TotalsCleared(, so matching
+  # `Totals(` (Totals immediately followed by the open paren) hits ONLY the
+  # approval-agnostic rollups. Per-row-gated feeds (ListProjectGauges) are not
+  # *Totals rollups and never match. Display rollups stay legitimate outside
+  # calceval, so the ban is scoped to the formula-eval tree only.
+  - id: formula-variables-approved-metrics-only
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include: ["freightworks/services/core-api/internal/calceval/**/*.go"]
+      exclude:
+        # Go test files. calceval's tests call the unapproved
+        # scanproject.List*Totals( variants deliberately, to pin what the
+        # approved-only path differs FROM; excluding them is what lets the rule
+        # be an error rather than a warning. This slice carries no _test.go:
+        # dead here, live there. Preventative, not rot.
+        - "**/*_test.go"
+    preprocess: raw
+    params:
+      pattern: 'scanproject\.List[A-Za-z0-9]*Totals\('
+    cure: "Call the approved-only variant (e.g. scanproject.ListPartitionTypeTotalsApproved) — SQL gated on am.status='approved' (sweep-13 I2 / #6250)."
+    origin: scripts/check-formula-variables-approved-metrics-only.sh

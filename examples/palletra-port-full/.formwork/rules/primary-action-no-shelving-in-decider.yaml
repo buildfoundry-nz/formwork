@@ -1,0 +1,19 @@
+# Ported from scripts/check-primary-action-no-shelving-coverage-gate.sh (#4062),
+# pattern 1. The pure footer decider under internal/workflow/primaryaction/ must
+# stay agnostic of the project-wide hidden-shelving coverage verdict: no
+# hiddenshelving / hidden_shelving / HiddenShelvingUnresolved in code. decomment-go
+# so the doc comment explaining the rule never trips it.
+rules:
+  - id: primary-action-no-shelving-in-decider
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/workflow/primaryaction/**/*.go'
+      exclude:
+        - '**/*_test.go'
+    preprocess: decomment-go
+    params:
+      pattern: 'hiddenshelving|hidden_shelving|HiddenShelvingUnresolved'
+    cure: 'The footer decider must not reference hidden-shelving coverage; hidden_shelving is a normal multi-page step routed by the shared walk (#4062).'
+    origin: scripts/check-primary-action-no-shelving-coverage-gate.sh

@@ -1,0 +1,5 @@
+# Scope-level: a path naming Go source in the request tree cannot be read, so
+# the DELETE seed set — and every FK judged against the closure over it — is
+# built from a tree this run only partly saw. Pinned to the detector's header
+# sentence, not to the OS's errno text for EISDIR.
+- [check-schema-fk-delete-path-indexed] ERROR — request-path Go file(s) could not be read, so the DELETE seed set is short

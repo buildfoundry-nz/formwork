@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-detection-runner-constructed-exactly-once.sh
+# (audit #6870) — Rule 2. The extraction must not be undone: the helper
+# `func newDetectionWorker(` MUST exist somewhere under non-test core-api Go, so
+# both runners route through it. exists-mode required-pattern over the same
+# comment-stripped scope as Rule 1.
+rules:
+  - id: detection-runner-helper-must-exist
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'func newDetectionWorker\('
+      mode: exists
+    cure: "Keep the newDetectionWorker helper so both the derived-detection auto-run and Wave 11 runners construct through it (#6870)."
+    origin: scripts/check-detection-runner-constructed-exactly-once.sh

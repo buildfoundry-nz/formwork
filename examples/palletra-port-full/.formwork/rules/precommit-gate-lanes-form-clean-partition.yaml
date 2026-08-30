@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-precommit-gate-lanes-form-clean-partition.sh
+# (#4409 meta-gate). .husky/pre-commit splits its gate pool into four lanes
+# (docs/go/dart/always) via scripts/gate-manifest.tsv column 2, so a commit only
+# pays for the gates its staged surface can regress. The meta-gate pins the
+# split so a mis-placed gate can never make a local commit silently skip the gate
+# guarding exactly what it changed. Property A of the .sh: the lanes are a clean
+# PARTITION — no gate is double-listed across lanes, and every listed gate
+# resolves to a scripts/<name> file.
+#
+# This is a META-gate over the shell gate SYSTEM ITSELF (the manifest + hook
+# that formwork is designed to replace); it is not a code/SQL/AST invariant, so
+# it maps to the command ESCAPE HATCH: a self-contained Go reproduction
+# (checks/check.go, committed in each fixture) re-derives property A from the
+# fixture's scripts/gate-manifest.tsv against the fixture tree. The finding is
+# scope-level (no want marker — see fire-1.want); fire-1 double-lists a gate,
+# pass-1 is a clean partition whose every gate resolves to a script.
+#
+# DIVERGENCE (noted): only property A (partition disjoint + every gate resolves)
+# is reproduced. Properties B (no cross-scanner), C (docs-readers not
+# single-lane) and D (LANGFLAG glob non-drift) reason over each gate's script
+# BODY and the hook's inline globs — a surface formwork's own lane model does not
+# carry — and are omitted.
+rules:
+  - id: precommit-gate-lanes-form-clean-partition
+    type: command
+    severity: error
+    scope:
+      include:
+        - "scripts/gate-manifest.tsv"
+    params:
+      cmd:
+        - go
+        - run
+        - checks/check.go
+      expect:
+        exit: 0
+    cure: "Keep the DOCS/GO/DART/ALWAYS lanes in scripts/gate-manifest.tsv a clean partition — no gate listed in two lanes — and make every listed gate basename resolve to a scripts/<name> file (#4409)."
+    origin: scripts/check-precommit-gate-lanes-form-clean-partition.sh

@@ -1,0 +1,19 @@
+# Ported from scripts/check-drawingquality-no-false-blockers.sh (#6430), Rule C.
+# The triageCauses( call must be passed slotVisiblePages(resolved) so an inline
+# action (Set scale / View sheet) is only stamped on findings whose page sits in a
+# visible slot the measure canvas can navigate to. The .sh checks the
+# triageCauses( line for slotVisiblePages(resolved) on that same line, so a
+# line-oriented required-exists is a faithful port.
+rules:
+  - id: drawingquality-triage-slot-reachable
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/drawingquality/check.go'
+    preprocess: decomment-go
+    params:
+      pattern: 'triageCauses\(.*slotVisiblePages\(resolved\)'
+      mode: exists
+    cure: 'Pass slotVisiblePages(resolved) into triageCauses so actions are gated on slot reachability (#6430 Rule C).'
+    origin: scripts/check-drawingquality-no-false-blockers.sh

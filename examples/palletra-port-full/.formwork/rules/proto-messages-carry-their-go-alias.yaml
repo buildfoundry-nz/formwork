@@ -1,0 +1,29 @@
+# Palletra's generated Go and its hand-written adapters both refer to proto
+# messages by the go_package alias — `dispatchv1.Consignment`, never a bare
+# `Consignment` — because two schemas in this tree declare a `Consignment` and
+# an unqualified reference resolved to whichever import happened to win.
+#
+# The check is on the SCHEMA side: every top-level message in a versioned
+# .proto must be reachable under an alias, which means the file has to declare
+# `option go_package = "...;<alias>"`. A file that omits it generates Go whose
+# messages have no alias to qualify with, and the adapters then have nothing to
+# write but the bare name.
+#
+# PREPROCESSOR: qualify-proto-go-alias rewrites each column-0 `message Name {`
+# to `message <alias>.Name {` using the file's own go_package alias, so this
+# rule can require the qualified shape with a plain pattern. Without it the
+# rule would have to re-derive the alias per file, which a declarative pattern
+# cannot do. A file with no go_package option is left untouched by the
+# preprocessor — which is exactly the violation, and is what fire-1 pins.
+rules:
+  - id: proto-messages-carry-their-go-alias
+    type: required-pattern
+    severity: error
+    preprocess: qualify-proto-go-alias
+    scope:
+      include:
+        - "freightworks/schema/proto/**/*.proto"
+    params:
+      pattern: '(?m)^message\s+[a-z][a-z0-9]*v[0-9]+\.[A-Za-z][A-Za-z0-9_]*\s*\{'
+    cure: "Declare `option go_package = \"freightworks/schema/gen/go/<domain>/v1;<domain>v1\";` in the .proto. Without the `;alias` suffix the generated Go has no package alias, and the adapters fall back to bare message names — which is how two schemas' Consignment collided."
+    origin: schema/proto conventions

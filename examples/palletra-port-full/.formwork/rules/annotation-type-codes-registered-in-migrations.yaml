@@ -1,0 +1,53 @@
+# Ported from Palletra scripts/check-flutter-annotation-type-codes-registered-in-migrations.sh
+# (sweep-8 #5). Every annotation-type code the Flutter app names MUST exist in
+# the Go marker_types registry the migrations seed — the partition-width label
+# shipped `kPartitionWidthSegmentTypeCode = 'n'`, a code no migration seeds (the real
+# code is 'partition_width_segment'), so the badge branch was dead on canvas. This is
+# a set-membership check, so it ports faithfully to set-relation SUBSET:
+#   A = FE codes: every `k<Name>TypeCode = '<code>'` const and every inline
+#       `markerTypeCode == '<code>'` comparison under the Dart source roots
+#       (frontend/lib + packages/*/lib), generated part files excluded.
+#   B = registry codes: every single-quoted token in the palletra migrations
+#       (the .sh is deliberately over-broad here — a real code is always present,
+#       a fictional one never is).
+# A ⊆ B: an FE code absent from the registry set is the violation.
+#
+# DIVERGENCE (noted): (1) the .sh narrows B to migration FILES that literally
+# contain "marker_types" before harvesting quoted tokens; a path glob cannot
+# express that content filter, so B here is every quoted token across the whole
+# palletra migrations tree — a strict widening of the .sh's own already-broad
+# registry side, harmless because a fictional code still never appears. (2) The
+# .sh's exit-2 anti-vacuity guards (empty FE or missing migrations dir) are not
+# expressible; formwork lint owns empty-scope rot. Scope-level finding
+# (fire-1.want carries `-`).
+rules:
+  - id: annotation-type-codes-registered-in-migrations
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+        - "freightworks/services/core-api/migrations/palletra/**/*.sql"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+    params:
+      a:
+        files:
+          - "frontend/lib/**/*.dart"
+          - "packages/*/lib/**/*.dart"
+        pattern: "(?:k[A-Za-z0-9_]*TypeCode\\s*=|markerTypeCode\\s*==)\\s*'([^']+)'"
+        group: 1
+      b:
+        files:
+          - "freightworks/services/core-api/migrations/palletra/**/*.sql"
+        pattern: "'([^']+)'"
+        group: 1
+      relation: subset
+    cure: "An FE annotation-type code must match a code seeded into palletra.marker_types by a migration. Fix the FE literal to the migration's code (e.g. 'partition_width_segment', not 'n'), or seed the new code in a migration first (sweep-8 #5)."
+    origin: scripts/check-flutter-annotation-type-codes-registered-in-migrations.sh

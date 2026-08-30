@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-no-st1000-placeholder-doc.sh (#3829).
+# The ST1000 package-doc placeholder ("… this stub satisfies the ST1000
+# gate …") inverts staticcheck's purpose — the check passes while godoc
+# conveys nothing. Bans the load-bearing half of the phrase in any freightworks
+# *.go file; the gate's own synth fixtures under internal/gatetests/ are
+# excluded (they necessarily embed the phrase).
+rules:
+  - id: no-st1000-placeholder-doc
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/internal/gatetests/**"
+    params:
+      pattern: 'this stub satisfies'
+    cure: "Write a real package doc (2-6 lines: what the package owns, its entry points, the hard rule that governs it); never re-mint the placeholder (#3829)."
+    origin: scripts/check-no-st1000-placeholder-doc.sh

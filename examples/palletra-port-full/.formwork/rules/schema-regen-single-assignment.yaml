@@ -1,0 +1,121 @@
+# Ported from Palletra scripts/check-schema-regen-choice-wired.sh (#4914 /
+# PR #6931 review finding). A grep-only meta-gate that pins the SHAPE of the
+# schema-regen skip wiring in .husky/pre-commit and its helper
+# scripts/dev/schema-regen-choice.go, so a later edit cannot widen the skip,
+# drop a branch, or revert to inline regen with every OTHER gate green.
+#
+# Rule A (the #4914 signature) is exact-cardinality — ported as pattern-count
+# op: exactly, one rule per pinned literal:
+#   * the helper is consulted EXACTLY ONCE (assign x1);
+#   * BOTH buf-touching blocks branch on the result (`= "none"` x2,
+#     `= "skip-merge-identical"` x2).
+# Rule C is literal-condition retention — ported as required-pattern mode:
+# exists, one rule per load-bearing condition the helper must keep (the ACMRD
+# diff-filter, the MERGE_HEAD existence check, the origin/develop provenance
+# leg, the schema/out/** identity pathspec).
+#
+# All four read the helper through decomment-go, never raw. The helper is Go and
+# every token they pin lives inside the command-table string literals, which
+# decomment-go preserves; what it blanks is the comments. That distinction is
+# the whole point: a required-pattern over RAW source is satisfied by a comment
+# NAMING the token it pins, so the condition could be deleted from the code,
+# described in a passing remark, and all four rules would stay green over a
+# helper that no longer does any of it. fire-2 of each is exactly that shape —
+# the condition removed, its name left in a comment — and it fires only because
+# of decomment-go (#263.3).
+#
+# DIVERGENCE (noted): the source script's Rule B — "$SCHEMA_SYNC_DECISION is
+# compared against NO token other than none / skip-merge-identical" — is NOT
+# ported.
+# It is a negative-set assertion (fire on any OTHER quoted token), which needs
+# negative lookahead; formwork's RE2 matcher has none, so no forbidden-pattern
+# can express "any token except these two". Rule A's exact counts already fire
+# if a legitimate branch is lost; Rule B's extra-token widening is the
+# documented gap.
+rules:
+  # ── Rule A — cardinality (pattern-count, op: exactly) ──────────────────────
+  - id: schema-regen-single-assignment
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - ".husky/pre-commit"
+    params:
+      pattern: 'SCHEMA_SYNC_DECISION=\$\(go run scripts/dev/schema-regen-choice\.go\)'
+      op: exactly
+      n: 1
+    cure: "Consult scripts/dev/schema-regen-choice.go EXACTLY ONCE in .husky/pre-commit (SCHEMA_SYNC_DECISION=$(go run scripts/dev/schema-regen-choice.go)); a missing or duplicated assignment breaks the #4914 wiring."
+    origin: scripts/check-schema-regen-choice-wired.sh
+  - id: schema-regen-none-branch-cardinality
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - ".husky/pre-commit"
+    params:
+      pattern: '"\$SCHEMA_SYNC_DECISION" = "none"'
+      op: exactly
+      n: 2
+    cure: "Both buf-touching blocks in .husky/pre-commit must branch on `\"$SCHEMA_SYNC_DECISION\" = \"none\"` (exactly 2); a lost branch reverts one block to inline regen."
+    origin: scripts/check-schema-regen-choice-wired.sh
+  - id: schema-regen-skip-branch-cardinality
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - ".husky/pre-commit"
+    params:
+      pattern: '"\$SCHEMA_SYNC_DECISION" = "skip-merge-identical"'
+      op: exactly
+      n: 2
+    cure: "Both buf-touching blocks in .husky/pre-commit must branch on `\"$SCHEMA_SYNC_DECISION\" = \"skip-merge-identical\"` (exactly 2); a lost branch reopens the no-op-merge BSR-quota burn."
+    origin: scripts/check-schema-regen-choice-wired.sh
+  # ── Rule C — helper retains its load-bearing conditions (required-pattern) ─
+  - id: schema-regen-diff-filter-preserved
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "scripts/dev/schema-regen-choice.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'git diff --cached --quiet --diff-filter=ACMRD'
+      mode: exists
+    cure: "schema-regen-choice.go must keep --diff-filter=ACMRD on the trigger diff — deletions must still trigger a regen decision, not fall through to 'none'."
+    origin: scripts/check-schema-regen-choice-wired.sh
+  - id: schema-regen-merge-head-check
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "scripts/dev/schema-regen-choice.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'rev-parse -q --verify MERGE_HEAD'
+      mode: exists
+    cure: "schema-regen-choice.go must keep the MERGE_HEAD existence check — the skip must fail closed when no merge is in progress."
+    origin: scripts/check-schema-regen-choice-wired.sh
+  - id: schema-regen-ancestor-provenance-check
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "scripts/dev/schema-regen-choice.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'merge-base --is-ancestor MERGE_HEAD origin/develop'
+      mode: exists
+    cure: "schema-regen-choice.go must keep the origin/develop ancestor (provenance) check — byte-identity alone is unsound (the #6931 review gap)."
+    origin: scripts/check-schema-regen-choice-wired.sh
+  - id: schema-regen-out-dir-pathspec-kept
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "scripts/dev/schema-regen-choice.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'schema/out/\*\*'
+      mode: exists
+    cure: "schema-regen-choice.go must keep the schema/out/** pathspec in the widened identity comparison — a --ours-resolved binary descriptor conflict becomes invisible again without it."
+    origin: scripts/check-schema-regen-choice-wired.sh

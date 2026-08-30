@@ -1,0 +1,68 @@
+# Ported from Palletra scripts/check-tdd-split-across-two-commits.sh (sweep closeout #11).
+# The two-commit TDD rule (WI-34 / #22) requires the RED test commit and the
+# GREEN implementation commit to ship as TWO SEPARATE commits. Once a single
+# non-merge commit carries BOTH a new *_test.go and a new sibling non-stub .go
+# (same directory == same Go package), no reviewer can prove the test was
+# written first. This gate red-builds Rule A: that added-test x added-impl bundle.
+#
+# PORT MAPPING: the real gate takes a `git rev-list` range and inspects each
+# commit's --diff-filter=A added-set — it fundamentally reads git history, which
+# no declarative rule expresses, and formwork's git-diff only matches added/
+# removed LINE patterns, not per-commit ADDED-file pairings. It uses the ESCAPE
+# HATCH: a command rule over a commit-manifest representation — each `commits/
+# cNN/` directory holds one commit's ADDED files (git being unavailable in a
+# plain fixture tree). The command reproduces Rule A: a single commit dir with
+# both a *_test.go and a sibling non-stub .go (a real-logic line, no `// STUB`)
+# is the bundle. fire-1 has c1 adding foo_test.go + a non-stub foo.go together
+# (exit 1); pass-1 splits them — c1 = the test beside a // STUB skeleton, c2 =
+# the real implementation (exit 0).
+rules:
+  - id: tdd-split-across-two-commits
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          set -u
+          ROOT="commits"
+          [ -d "$ROOT" ] || { echo "OK: no commit manifest"; exit 0; }
+          # is_placeholder <file>: 0 (stub, exempt) / 1 (real implementation). A .go is a
+          # stub when it carries a `// STUB` marker OR has no real-logic line after
+          # dropping comments and panic-unimplemented bodies (mirrors the .sh).
+          is_placeholder() {
+            grep -q '// STUB' "$1" && return 0
+            local logic
+            logic=$(grep -vE '^[[:space:]]*//' "$1" \
+              | grep -vE 'panic\("(unimplemented|not implemented)"\)' \
+              | grep -cE ':=|=[^=]|(^|[[:space:]])return[[:space:]]+[^[:space:]]|(^|[[:space:]])(for|if|switch|range|go|select|defer)[[:space:]]|append\(|make\(')
+            [ "${logic:-0}" -eq 0 ] && return 0
+            return 1
+          }
+          fail=0
+          for cdir in "$ROOT"/*/; do
+            [ -d "$cdir" ] || continue
+            # Added *_test.go in this commit, excluding the gatetests synth home.
+            while IFS= read -r tf; do
+              [ -n "$tf" ] || continue
+              case "$tf" in */freightworks/internal/gatetests/*) continue ;; esac
+              tdir=$(dirname "$tf")
+              for impl in "$tdir"/*.go; do
+                [ -f "$impl" ] || continue
+                case "$impl" in *_test.go) continue ;; esac
+                is_placeholder "$impl" && continue
+                echo "FAIL ${cdir}: bundles new test $(basename "$tf") with impl $(basename "$impl")" >&2
+                fail=1
+              done
+            done < <(find "$cdir" -type f -name '*_test.go')
+          done
+          [ "$fail" -eq 0 ] && echo "OK: no commit bundles a new test with its new implementation"
+          exit $fail
+      expect:
+        exit: 0
+    cure: "Split the bundle: commit the failing RED test (beside a // STUB skeleton if needed) first, then the GREEN implementation in a second commit. The split is the audit trail proving the test was written first (WI-34 / #22)."
+    origin: scripts/check-tdd-split-across-two-commits.sh

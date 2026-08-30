@@ -1,0 +1,1 @@
+- Rule A: packages/feature_dimension/lib/presentation/measure_primary_cta_button.dart constructs a button that owns its own in-flight state (only PendingButton allowed)

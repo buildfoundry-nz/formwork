@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package palletra.domain.v1;
+
+// The name reservation was present here — // reserved "vectors", "images"; —
+// but a refactor left it only in a comment, so after decommenting the anchor
+// is absent and the gate fires.
+message PageDimensions {
+  reserved 11, 12;
+  string page_id = 1;
+}

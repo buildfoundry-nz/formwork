@@ -1,0 +1,15 @@
+# Ported from scripts/check-positional-gauge-picker.sh, invariant 2b. pick.go
+# must declare func chooseByRanking( — the deterministic edge-band selection
+# core.
+rules:
+  - id: positional-scale-prominence-picker-present
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/detection/scale/pick.go'
+    params:
+      pattern: '^func\s+chooseByRanking\('
+      mode: exists
+    cure: 'pick.go must declare func chooseByRanking( — the deterministic selection core.'
+    origin: scripts/check-positional-gauge-picker.sh

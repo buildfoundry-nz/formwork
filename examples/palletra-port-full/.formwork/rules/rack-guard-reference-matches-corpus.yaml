@@ -1,0 +1,81 @@
+# Ported from Palletra scripts/check-rack-guard-reference-matches-corpus.sh
+# (#8533, epic #6132).
+#
+# stocktemplates.RackGuardReferenceCases() is a HAND TRANSCRIPTION of the corpus
+# evidence switches 41.5 / 41.9 / 41.10 — and it is the SOLE in-repo statement of
+# what each wrap system buys and how much. Without this gate a coordinated edit
+# of rack_guard_systems.go + rack_guard_systems_reference.go could reprice a kit and
+# stay green everywhere: the golden snapshots regenerate to the new numbers and
+# the DB-free oracle agrees, because both sides ultimately read the same
+# hand-written Go. This gate re-couples the transcription to the checksum-pinned
+# corpus JSON: per switch it compares the (description,code) pairing, each rate's
+# base driver + factor, the root's per-roll coverage, and uom + shrinkage. A Go-side
+# coupling is impossible (encoding/json is banned repo-wide), so a python gate is
+# the precedented shape here (as with check-vendor-kit-fixture.sh).
+#
+# PORT MAPPING: this is a cross-file textual coupling between a Go reference file
+# and a JSON evidence file — parse both, compare derived numeric literals — not a
+# declarative per-file predicate. So it uses the ESCAPE HATCH: a command rule
+# reproducing the coupling over the fixture tree. This fixture-provable port
+# reproduces the load-bearing arm — the per-code FACTOR must match the corpus
+# rate.factor for the transcribed switch, and the Go product-code set must equal
+# the corpus code set (a code diverging is the "bill one product as another"
+# catch). Scope-level finding (no want marker); fire-1 transcribes a factor that
+# diverges from the corpus evidence, pass-1 matches it exactly.
+rules:
+  - id: rack-guard-reference-matches-corpus
+    type: command
+    severity: error
+    scope:
+      include:
+        - "docs/corpus-evidence/vendor-kit/switch-kit-rates.json"
+        - "freightworks/services/core-api/internal/stocktemplates/rack_guard_systems_reference.go"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import json, re, sys
+          CORPUS = "docs/corpus-evidence/vendor-kit/switch-kit-rates.json"
+          REFGO = "freightworks/services/core-api/internal/stocktemplates/rack_guard_systems_reference.go"
+          TOL = 1e-9
+          corpus = json.load(open(CORPUS))
+          src = open(REFGO).read()
+          # The switch each reference case transcribes (SampleSwitch: "...switch 41.5").
+          switches = set(re.findall(r'SampleSwitch:\s*"[^"]*switch ([0-9.]+)"', src))
+          if not switches:
+              sys.stderr.write("rack_guard_systems_reference.go names no SampleSwitch — the coupling is dead\n")
+              sys.exit(1)
+          # Go member("desc", "CODE", driver, FACTOR): map code -> factor.
+          NUM = r'[0-9][0-9.eE+-]*'
+          go_factor = {}
+          for m in re.finditer(r'\bmember\("(?:[^"\\]|\\.)*",\s*"([^"]+)",\s*(?:[A-Za-z_]\w*|"[0-9.]+"),\s*(' + NUM + r')\)', src):
+              go_factor[m.group(1)] = float(m.group(2))
+          rc = 0
+          for sw in corpus["switches"]:
+              if sw.get("id") not in switches:
+                  continue
+              corpus_factor = {}
+              for k in sw["kit"]:
+                  f = (k.get("rate") or {}).get("factor")
+                  if f is not None:
+                      corpus_factor[k["code"]] = float(f)
+              only_go = sorted(set(go_factor) - set(corpus_factor))
+              only_corpus = sorted(set(corpus_factor) - set(go_factor))
+              if only_go or only_corpus:
+                  sys.stderr.write("switch %s product codes diverge: only-in-go=%s only-in-corpus=%s\n"
+                                   % (sw["id"], only_go, only_corpus))
+                  rc = 1
+              for code, want in corpus_factor.items():
+                  got = go_factor.get(code)
+                  if got is None:
+                      continue
+                  if abs(got - want) > TOL * max(1.0, abs(want)):
+                      sys.stderr.write("switch %s %s: reference factor %r != corpus %r — a misprice\n"
+                                       % (sw["id"], code, got, want))
+                      rc = 1
+          sys.exit(rc)
+      expect:
+        exit: 0
+    cure: "Repricing a rack-guard kit requires editing the checksum-pinned corpus evidence itself, not the Go transcription. If the reference factor diverges from the corpus rate.factor, the transcription drifted — restore it to the evidence (or, for a real repricing, edit switch-kit-rates.json and re-run generate.py so check-vendor-kit-fixture.sh re-pins the checksum)."
+    origin: scripts/check-rack-guard-reference-matches-corpus.sh

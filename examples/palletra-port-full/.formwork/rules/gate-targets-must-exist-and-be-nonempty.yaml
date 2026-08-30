@@ -1,0 +1,113 @@
+# Ported from Palletra scripts/check-gate-targets-must-exist-and-be-nonempty.sh (#1545 /
+# #6761). A repo-wide path-rot meta-gate: it extracts the hardcoded repo-relative
+# target path(s) of every scripts/check-*.go and asserts each still resolves
+# against the tree (EXISTENCE, #1545) AND that a target that is a DIRECTORY holds
+# at least one file (NON-EMPTINESS, #6761). A gate whose only target no longer
+# exists — or whose scan home was emptied by a relocation — passes VACUOUSLY by
+# hitting a "target absent -> skip -> exit 0" guard; this makes that class fail.
+#
+# The real gate delegates target extraction to a helper (bash is too fuzzy
+# to parse path expressions) and runs over ~530 target groups. It
+# fundamentally runs a TOOL over the tree, so it is ported via the ESCAPE HATCH
+# `command` type: a self-contained reproduction that reads each gate's
+# `// gate-target: <path>` directive, asserts each declared path exists, and —
+# for a dir — asserts it holds a file. Exits non-zero on a rotted or emptied
+# target.
+#
+# DIVERGENCE (noted): the shell gate recognized ${ROOT}/<path> / $ROOT/<path>
+# operands, an idiom with no Go spelling, so a converted gate declares its
+# hardcoded repo-relative target in the `// gate-target: <path>` comment
+# directive this extractor reads. It does not implement the full helper's
+# alias-resolved inline operands, TAB-separated fallback GROUPS
+# (any-alt-resolves), or dynamic/may-be-empty escapes. The load-bearing
+# invariant — a hardcoded repo-relative target must exist and a dir target
+# must be non-empty — is reproduced faithfully.
+#
+# NOT OPT-IN (#263.2). A directive-only extractor would check only the gates
+# that volunteered, and a gate that hardcodes a target and declares nothing is
+# the rot case, not the exempt one: it is the shape that reaches its
+# "target absent -> skip -> exit 0" branch with nobody watching. So a
+# scripts/check-*.go carrying a hardcoded repo-relative target LITERAL and no
+# directive is itself a finding, cured by declaring the directive.
+#
+# The literal heuristic, stated so its edges are reviewable rather than
+# discovered: an identifier assigned a bare double-quoted string that is the
+# whole right-hand side, opening with an alphanumeric and containing a `/`,
+# with no `%` (format string) and no `:` before that `/` (URL). It therefore
+# does not see a target that is CONCATENATED, returned by a helper, or built
+# with filepath.Join — those gates read as having no hardcoded target and stay
+# unchecked, which is the same answer the extractor gives a genuinely dynamic
+# target like check-dynamic-target-gate in pass-2. Narrowing that residual
+# means parsing Go, which is what the goast rule type is for; it is not
+# reachable from the command escape hatch this port uses.
+#
+# Directive paths are read to END OF LINE. The first cut of this extractor used
+# the charset [A-Za-z0-9_./-]+, which stops at a space and so answered about a
+# PREFIX of the declared path — green over a rotted target whose prefix was
+# live (fire-3), red over a live target whose prefix was not (pass-3). Reading
+# to end of line is why the directive must also be a whole comment LINE: the
+# charset used to be the only thing stopping a `// gate-target:` mentioned
+# mid-sentence in a gate's own header from declaring whatever punctuation
+# followed it. pass-2 carries exactly that prose mention and is the pin.
+rules:
+  - id: gate-targets-must-exist-and-be-nonempty
+    type: command
+    severity: error
+    scope:
+      include:
+        - "scripts/check-*.go"
+    params:
+      cmd:
+        - bash
+        - "-c"
+        - |
+          fail=0
+          # A hardcoded repo-relative target literal: an identifier assigned a
+          # bare double-quoted string whose value is a relative path. Anchored to
+          # the whole right-hand side so a call argument, a format string (no %)
+          # and a URL (no colon before the first /) are not paths, and required to
+          # start with an alphanumeric so an absolute path and a `//go:build` line
+          # are not either. This is the heuristic that makes the meta-gate
+          # MANDATORY instead of opt-in; its residual is stated in the header.
+          hardcoded='^[[:space:]]*(const[[:space:]]+|var[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*([[:space:]]+string)?[[:space:]]*(=|:=)[[:space:]]*"[A-Za-z0-9_.][^":%]*/[^"%]+"[[:space:]]*$'
+          for g in scripts/check-*.go; do
+            [ -f "$g" ] || continue
+            # A directive is a whole comment LINE, and its path runs to END OF
+            # LINE. Both halves are load-bearing. Reading to end of line is what
+            # lets a target contain a space — a charset that stops at one
+            # silently answers about a PREFIX of the path the gate reads. And
+            # once the path is the rest of the line, the line-start anchor is
+            # what keeps a PROSE mention of `// gate-target:` mid-sentence from
+            # being read as a declaration of whatever follows it.
+            targets=$(grep -oE '^[[:space:]]*//[[:space:]]*gate-target:.*$' "$g" 2>/dev/null \
+              | sed -E 's#^[[:space:]]*//[[:space:]]*gate-target:[[:space:]]*##; s#[[:space:]]+$##' \
+              | grep -v '^$' | sort -u)
+            if [ -z "$targets" ]; then
+              # No directive. Silence here is only correct when there is no
+              # hardcoded target to rot; otherwise the gate is exactly the
+              # unreviewed case this meta-gate exists for.
+              lit=$(grep -nE "$hardcoded" "$g" | head -1)
+              if [ -n "$lit" ]; then
+                echo "$g hardcodes a repo-relative target but declares no // gate-target: directive: $lit" >&2
+                fail=1
+              fi
+              continue
+            fi
+            # IFS= read -r, not word splitting: a target with a space is one
+            # target, not two.
+            while IFS= read -r p; do
+              [ -n "$p" ] || continue
+              if [ ! -e "$p" ]; then
+                echo "$g targets a path that no longer exists: $p" >&2
+                fail=1
+              elif [ -d "$p" ] && [ -z "$(find "$p" -type f -print -quit 2>/dev/null)" ]; then
+                echo "$g scans a code home that is live but holds no files: $p" >&2
+                fail=1
+              fi
+            done <<< "$targets"
+          done
+          exit $fail
+      expect:
+        exit: 0
+    cure: "Repoint the gate's hardcoded repo-relative target (the // gate-target: <path> directive) to where the code lives now, or retire the gate (remove gate + synth + manifest row + enumeration entry) (#1545 / #6761)."
+    origin: scripts/check-gate-targets-must-exist-and-be-nonempty.sh

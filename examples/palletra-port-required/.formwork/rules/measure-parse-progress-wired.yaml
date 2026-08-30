@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-measure-parse-progress-wired.sh.
+# First-slot-ready navigation means the measure screen opens mid-extraction, so
+# BOTH halves of the progress guarantee must hold:
+#   1. plot_screen.dart mounts MeasureParseBanner, AND
+#   2. plot_extraction_banner.dart watches measureParseProgressProvider.
+# The .sh greps each specific file for its own anchor; since each anchor is tied
+# to a distinct file, this is two exists-mode rules scoped to those exact files
+# (a single dir-wide exists rule could not tie a pattern to its required file).
+#
+# Both read their file through code-only-dart, not raw. That projection blanks
+# comment bytes and string CONTENTS and keeps all real code; each anchor here is
+# a bare identifier in code — a widget constructor and a provider passed to
+# ref.watch — so neither can lose its match, and a comment naming the widget or
+# the provider stops counting as mounting or watching it. Raw counted it, so
+# either half of the progress guarantee could be deleted with a note left behind
+# and these rules would stay green (fire-2 of each is that shape; #263.3).
+rules:
+  - id: measure-screen-mounts-extraction-banner
+    type: required-pattern
+    scope:
+      include:
+        - "packages/feature_dimension/lib/presentation/plot_screen.dart"
+    preprocess: code-only-dart
+    params:
+      pattern: 'MeasureParseBanner'
+      mode: exists
+    cure: "plot_screen.dart must mount MeasureParseBanner or a first-slot-ready user is stranded with no progress indicator."
+    origin: scripts/check-measure-parse-progress-wired.sh
+  - id: measure-banner-watches-progress-provider
+    type: required-pattern
+    scope:
+      include:
+        - "packages/feature_dimension/lib/presentation/plot_extraction_banner.dart"
+    preprocess: code-only-dart
+    params:
+      pattern: 'measureParseProgressProvider'
+      mode: exists
+    cure: "plot_extraction_banner.dart must watch measureParseProgressProvider or the banner has no live progress source."
+    origin: scripts/check-measure-parse-progress-wired.sh

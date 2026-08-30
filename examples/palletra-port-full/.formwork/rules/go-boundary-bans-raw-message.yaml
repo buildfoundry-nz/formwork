@@ -1,0 +1,25 @@
+# Ported from Palletra scripts/check-go-weak-type-bans.sh tooth (D): json.RawMessage
+# propagating an undecoded blob past the decode boundary. Banned everywhere
+# except the internal/supplierjson and _examples carve-outs (tests INCLUDED). The
+# .sh greps raw source; preprocess omitted for parity.
+rules:
+  - id: go-boundary-bans-raw-message
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+      exclude:
+        - "**/vendor/**"
+        - "**/gen/**"
+        - "**/generated/**"
+        - "**/internal/proto/**"
+        - "**/internal/supplierjson/**"
+        - "**/_examples/**"
+        - "**/*_pb.go"
+        - "**/zz_generated_*.go"
+        - "**/*_generated.go"
+    params:
+      pattern: '\bjson\.RawMessage\b'
+    cure: "Decode the wire shape into a typed struct/proto at the boundary; do not propagate json.RawMessage past the decode boundary."
+    origin: scripts/check-go-weak-type-bans.sh

@@ -1,0 +1,55 @@
+# Ported from Palletra scripts/check-go-integration-skip-needs-permitted-guard.sh
+# (Phase 5 re-audit R4.5 / #2099 / #7807 EH-1).
+#
+# Go integration tests already gate on `//go:build integration`; layering a
+# SECOND `t.Skip("… not set")` guard turns a missing DB / missing fixtures into
+# a silent pass instead of a loud failure. The .sh STRUCTURAL arm flags every
+# t.Skip / t.Skipf / t.SkipNow — ONLY in files carrying `//go:build integration`
+# — whose IMMEDIATE enclosing guard is not a permitted probe: runtime.GOOS
+# (platform), exec.LookPath (tooling), or os.Getenv (opt-in env). A row-count /
+# DB-state guard (`if len(ids) < 2`) can therefore never legitimize a skip.
+#
+# Ported as go/guard-precedes-call: the sink is a t.Skip* call; the guard is a
+# permitted probe CALL. The analyzer fires on any sink not preceded (in source
+# order, same func) by a guard call.
+#
+# FP FIX: the .sh's structural arm is SCOPED TO `//go:build integration` files
+# only. The port scanned ALL `freightworks/**/*_test.go`, so it fired on ordinary
+# (non-integration) unit tests whose skips the .sh never inspects — a
+# `runtime.GOOS == "windows"` platform skip (extract_text_test.go), an
+# `os.ReadFile` fixture-missing skip (samplepdf_test.go), a nil-pointer precondition
+# skip (sampling_test.go). None of those files carry the integration tag, so the
+# .sh is silent; the port fired → false positives on clean develop. formwork's
+# path-glob scope cannot read a file's `//go:build` CONTENT, so the tag gate is
+# approximated by the repo's naming convention: integration tests are the
+# `*_integration_test.go` files plus everything under a `routes/integration/`
+# tree. That excludes all three FP files while keeping every real integration
+# test (and the fixture, `foo_integration_test.go`) in scope.
+#
+# DIVERGENCE (noted): (1) scope is by the `*_integration_test.go` /
+# `routes/integration/` naming convention, not the `//go:build integration`
+# content the .sh reads — a hypothetical tagged file named plainly, or an
+# integration-named file lacking the tag, is mis-scoped (on the current tree the
+# outcome is identical: the one tagged file named plainly,
+# bom_reprice_contention_probe_test.go, lives under routes/integration/ and is
+# covered; the one integration-named untagged file,
+# ocr_paged_integration_test.go, only skips on exec.LookPath, a permitted guard,
+# so it does not fire). (2) the .sh permits runtime.GOOS (a FIELD, not a
+# CallExpr) which the call-selector analyzer does not model, and it also runs a
+# separate unconditional-skip arm over every *_test.go — neither is modeled
+# here; both are pre-existing port divergences, now moot for this FP class
+# because the mis-scoped files are out of scope.
+rules:
+  - id: go-integration-skip-needs-permitted-guard
+    type: go/guard-precedes-call
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*_integration_test.go"
+        - "freightworks/**/routes/integration/**/*_test.go"
+    params:
+      funcs: '^Test'
+      guard: '^(os\.Getenv|exec\.LookPath)$'
+      sink: '^t\.Skip(f|Now)?$'
+    cure: "A missing DB / seed under //go:build integration is a hard error, not a silent skip — replace t.Skip(...) with t.Fatal(...). Permitted guards: runtime.GOOS, exec.LookPath, os.Getenv only (R4.5 / #2099)."
+    origin: scripts/check-go-integration-skip-needs-permitted-guard.sh

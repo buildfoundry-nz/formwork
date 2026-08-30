@@ -1,0 +1,6 @@
+# basename	lane	ci
+check-a.go	docs	true
+check-b.go	go	true
+check-c.go	dart	true
+check-b.go	always	true
+check-d.go	always	true

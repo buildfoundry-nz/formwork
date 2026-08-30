@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-uxevents-derivations-tested.sh (#2690).
+# In internal/uxevents (the seam where Go owns ALL client-data math, epic
+# #5848), every unexported func — plain, generic, or method — whose BODY performs
+# arithmetic/comparison on wire-derived numerics (/, %, +, binary -, *, a </>
+# bound, or a numeric ==/!=) must be referenced by CODE in a *_test.go in the
+# same package. An untested derivation silently disagreeing with its docstring
+# was the #2690 frame-perf p95 collapse.
+#
+# COMMAND ESCAPE. This is a Go-AST derivation classifier (per-func body scan that
+# disambiguates a numeric operator from a pointer type/deref, a nil/string ==,
+# and a channel <- across plain/generic/method declaration forms) JOINED to a
+# cross-file coverage probe (each derivation name must appear as a code
+# reference — not a comment/string — in some package *_test.go). Neither the
+# body-level numeric-operator AST judgment nor the "referenced in a sibling test
+# file" join is expressible in a declarative go/* analyzer or set-relation, so it
+# runs the real script (verifies in CI, enumerated by `formwork lint`). No fixture.
+rules:
+  - id: uxevents-derivations-tested
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-uxevents-derivations-tested.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/uxevents/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-uxevents-derivations-tested.sh
+      expect:
+        exit: 0
+    cure: "Every unexported derivation in internal/uxevents (a func whose body does arithmetic/comparison on wire-derived numerics) must be pinned by a test that references it in a package *_test.go — an untested derivation is the #2690 frame-perf p95 bug. Add the assertion, or move non-derivation math out of the seam."
+    origin: scripts/check-uxevents-derivations-tested.sh

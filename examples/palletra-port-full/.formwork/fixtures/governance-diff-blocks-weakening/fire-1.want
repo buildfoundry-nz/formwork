@@ -1,0 +1,1 @@
+- suspicious weakening (continue-on-error:true) in .github/workflows/ci.yml: continue-on-error: true

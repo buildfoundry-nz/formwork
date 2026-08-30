@@ -1,0 +1,15 @@
+rules:
+  # Port of check-dart-analyzer-strictness.sh check 4 ("Sets a banned permissive
+  # flag to true"). implicit-casts / implicit-dynamic must be pinned false; any
+  # analysis_options.yaml that sets one to true re-opens the weak-types escape
+  # hatch for a whole package. Line-shaped, so plain RE2 (no lookaround needed).
+  - id: dart-analysis-options-forbid-permissive-flags
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/analysis_options.yaml"
+    params:
+      pattern: '^\s*(implicit-casts|implicit-dynamic):\s+true\b'
+    cure: "Pin implicit-casts: false and implicit-dynamic: false; the strict analyzer posture is the whole point of the config (#2816)."
+    origin: scripts/check-dart-analyzer-strictness.sh

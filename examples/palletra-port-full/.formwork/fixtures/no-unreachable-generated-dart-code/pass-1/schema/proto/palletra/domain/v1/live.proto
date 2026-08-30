@@ -1,0 +1,4 @@
+syntax = "proto3";
+package palletra.domain.v1;
+import "palletra/domain/v1/dep.proto";
+message Live { Dep d = 1; }

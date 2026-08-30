@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-render-forbids-byte-buffered-download.sh (sweep-2 #4).
+# The render leg must NEVER pull the whole source PDF onto the Go heap via the
+# byte-returning GCS Download (sweep-1 #1: 62 concurrent 76.6MiB Download calls
+# wedged the dev pipeline). The source PDF is staged ONCE to a temp file via the
+# streaming StreamTo seam. The .sh bans any `.Download` selector that is not
+# `.StreamTo` / `.Downloader`: `.Download` followed by a non-identifier char
+# or end-of-line. Full-line comments are ignored — decomment-go strips ALL
+# comments (a superset of the .sh's full-line filter), so a Download named in a
+# comment never fires. _test.go is out of scope (fakes may name Download).
+rules:
+  - id: render-forbids-byte-buffered-download
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/pageraster/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\.Download([^A-Za-z0-9_]|$)'
+    cure: "Stage the source PDF to a temp file via the STREAMING seam (r.gcs.StreamTo). The byte-returning Download holds the whole PDF heap-resident per in-flight render and must never reappear (sweep-1 #1 / sweep-2 #4)."
+    origin: scripts/check-render-forbids-byte-buffered-download.sh

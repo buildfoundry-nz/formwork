@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-relocated-tests-commit-message-must-name-new-tests.sh
+# (sweep-5 #5, redesigned sweep-6 #3).
+#
+# Over a commit range (first-parent, no-merges), any commit that RELOCATES a
+# top-level `func Test…` between touched *_test.go files AND also adds a net-new
+# top-level test must name every net-new test verbatim in its commit message —
+# so a substantive new test can't be smuggled inside a move-shaped diff a
+# reviewer reads as mechanical. The trigger is the DIFF SHAPE, not message
+# phrases.
+#
+# PORT MAPPING: COMMAND ESCAPE. The check walks GIT HISTORY: it resolves a
+# merge-base range, iterates commits with git rev-list --first-parent
+# --no-merges, and compares the top-level test names present in each touched
+# file at the commit vs its parent (git show <commit>^:<file>) to distinguish a
+# MOVE from a net-new add, then greps the commit MESSAGE. None of that is a
+# self-contained fixture, and no declarative type inspects per-commit tree
+# diffs or commit messages. This is the sanctioned escape: params.cmd runs the
+# real check, which verifies in CI. No fixture (formwork lint enumerates it).
+rules:
+  - id: relocated-tests-commit-message-must-name-new-tests
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-relocated-tests-commit-message-must-name-new-tests.sh —
+      the validating target's own gate script, which this corpus does not
+      carry and cannot: it is written in that tree's vocabulary, and this
+      repository tracks no shell scripts at all. In a fixture tree bash would
+      exit 127 in the fire tree and the pass tree alike, so the fire proof
+      would be satisfied by the detector NOT EXISTING and the pass proof would
+      report that same missing-detector exit as a finding. What the port
+      asserts here is the SCOPE and the CURE, both readable against the origin
+      script; the detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/**/*_test.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-relocated-tests-commit-message-must-name-new-tests.sh
+      expect:
+        exit: 0
+    cure: "A commit that moves tests between files must either carry NO new test (split the new test into its own RED-paired commit) or name every new test it introduces in the commit message, so the addition is visible and not buried in a move-shaped diff (sweep-5 #5 / sweep-6 #3)."
+    origin: scripts/check-relocated-tests-commit-message-must-name-new-tests.sh

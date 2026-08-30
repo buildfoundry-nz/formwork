@@ -1,0 +1,21 @@
+rules:
+  - id: pages-page-status-enum-banned
+    type: forbidden-pattern
+    severity: error
+    # Rule 3 of check-page-status-schema-drift.sh — comment lines are excluded, so
+    # blank Go comments first (line numbers preserved).
+    preprocess: decomment-go
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/vendor/**"
+        - "**/shared/generated/**"
+        - "**/gen/go/**"
+        - "**/internal/proto/**"
+        - "**/*.pb.go"
+    params:
+      # A cast to the retired palletra.page_phase enum type.
+      pattern: 'palletra\.page_phase\b'
+    cure: "Use palletra.intake_status — the page_phase enum was never on this table."
+    origin: scripts/check-page-status-schema-drift.sh

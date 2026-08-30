@@ -1,0 +1,79 @@
+# Ported from Palletra scripts/check-asadmin-bypass-sites-allowlist.sh
+# (audit-gates Tier 5.8 + sweep-2 #8 + sweep-4 #5 + #3624 + #7456).
+#
+# db.AsSuperuser(...) opens a tx with SET LOCAL ROLE runtime_root_admin — it
+# bypasses every RLS policy on every table. Every production-code use MUST be
+# justified in docs/asadmin-bypass-sites-allowlist.md. The gate fails if any non-test *.go
+# under freightworks/ is an RLS-bypass site — it contains db.AsSuperuser( OR
+# co-locates SET [LOCAL] ROLE with the token runtime_root_admin (after
+# string-aware comment stripping) — and is NOT named (backticked path) in the
+# allowlist. It also enforces the entry format: every bullet must carry the
+# **[PERMANENT]** tag immediately after the backticked path plus an em-dash
+# justification; [UNCLEAR] / [CONVERTIBLE] are banned outright (#7456 closed the
+# UNCLEAR class). Bare-pool writes moved to a go/ast synth; the three lexical arms
+# stay in this shell gate.
+#
+# PORT MAPPING: this couples a lexical Go-file property (is a bypass site) to
+# membership in a markdown allowlist doc, plus a per-bullet doc-format check —
+# a cross-file relationship no declarative per-file predicate expresses. So it
+# uses the ESCAPE HATCH: a command rule reproducing the coupling over the fixture
+# tree. This fixture-provable port reproduces the two load-bearing arms: (A) every
+# non-test .go with db.AsSuperuser( must be named `path` in the allowlist; (B) every
+# allowlist bullet must carry the **[PERMANENT]** tag. Scope-level finding (no want
+# marker); fire-1 has an unlisted db.AsSuperuser( site (and would also catch a
+# tagless bullet), pass-1 lists it with the [PERMANENT] tag + justification.
+rules:
+  - id: asadmin-bypass-sites-allowlist
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/**"
+        - "docs/asadmin-bypass-sites-allowlist.md"
+    params:
+      cmd:
+        - bash
+        - "-c"
+        - |
+          set -uo pipefail
+          ALLOW="docs/asadmin-bypass-sites-allowlist.md"
+          if [ ! -f "$ALLOW" ]; then
+            echo "missing $ALLOW" >&2
+            exit 1
+          fi
+          rc=0
+          # Arm A: every non-test .go bypass site must be named in the allowlist.
+          while IFS= read -r f; do
+            case "$f" in *_test.go) continue ;; esac
+            # bypass site: db.AsSuperuser( OR (SET [LOCAL] ROLE + runtime_root_admin)
+            bypass=0
+            if grep -q 'db\.AsSuperuser(' "$f"; then
+              bypass=1
+            elif grep -q 'runtime_root_admin' "$f" && grep -Eq 'SET[[:space:]]+(LOCAL[[:space:]]+)?ROLE' "$f"; then
+              bypass=1
+            fi
+            [ "$bypass" -eq 1 ] || continue
+            if ! grep -Fq "\`${f}\`" "$ALLOW"; then
+              echo "RLS-bypass site missing from allowlist: $f" >&2
+              rc=1
+            fi
+          done < <(find freightworks -name '*.go' -type f 2>/dev/null)
+          # Arm B: every allowlist bullet must carry the [PERMANENT] tag.
+          while IFS= read -r line; do
+            case "$line" in
+              "- \`freightworks/"*)
+                case "$line" in
+                  *'**[PERMANENT]**'*) : ;;
+                  *)
+                    echo "allowlist entry missing **[PERMANENT]** tag: $line" >&2
+                    rc=1
+                    ;;
+                esac
+                ;;
+            esac
+          done < "$ALLOW"
+          exit $rc
+      expect:
+        exit: 0
+    cure: "Append the file to docs/asadmin-bypass-sites-allowlist.md in the enforced format — `path` **[PERMANENT]** — <justification naming the RLS-bypass reason>. If the mutation can run under db.WithOrg (RLS-respecting), use that instead — the role flip is the escape hatch, not the default. [UNCLEAR] and [CONVERTIBLE] are both banned (#7456): decide the site and justify it as PERMANENT, or convert it."
+    origin: scripts/check-asadmin-bypass-sites-allowlist.sh

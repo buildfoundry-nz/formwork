@@ -1,0 +1,18 @@
+# Ported from Palletra scripts/check-no-classify-suggest-pagination-constant.sh
+# (sweep-7 #3). The import-wizard classify-suggest endpoint is single-pass, so
+# the FE must NOT re-introduce a client-side page-size constant that loops the
+# endpoint by offset. The .sh scans exactly one file —
+# packages/feature_stockroom/lib/data/ingest_repository.dart — for a
+# classifyRecommend{PageSize,Window,BatchSize,Limit} constant (any casing) bound
+# to an int literal. RE2 supports the (?i) flag and the alternation directly.
+rules:
+  - id: no-classify-suggest-pagination-constant
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_stockroom/lib/data/ingest_repository.dart"
+    params:
+      pattern: '(?i)classifyRecommend(PageSize|Window|BatchSize|Limit)\s*=\s*[0-9]+'
+    cure: "The classify-suggest endpoint is single-pass. Make ONE call in IngestRepository.classifyRecommendations and read the whole banded response — do not loop by offset (sweep-7 #3)."
+    origin: scripts/check-no-classify-suggest-pagination-constant.sh

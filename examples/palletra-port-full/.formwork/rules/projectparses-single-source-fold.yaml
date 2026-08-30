@@ -1,0 +1,27 @@
+# Ported from scripts/check-projectparses-single-source-fold.sh (#3259).
+# "What is one sku" folds ONCE, in projectparses.Group; the deleted SQL
+# rail was a lower(trim(COALESCE(unit,'')) normalizer. The .sh fires on a file-level
+# conjunction (mentions extracted_skus AND GROUP BY AND lower(trim(...unit for
+# rule 1; extracted_skus AND inline lower(trim((COALESCE()?unit for rule 2) —
+# a cross-line file-level AND that a line-oriented engine cannot express. The
+# distinctive banned artifact is the single-line inline SQL unit normalizer
+# `lower(trim((COALESCE()?unit`, ported as one forbidden pattern (excluding the
+# canonical group.go + tests + generated). NOTE: dropping the extracted_skus /
+# GROUP BY co-occurrence gates makes this STRICTER (broader), not weaker — it bans
+# every inline lower(trim(unit normalizer outside the canonical file; route unit
+# normalization through projectparses.CanonicalizeUnit instead.
+rules:
+  - id: projectparses-single-source-fold
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/**/*.go'
+      exclude:
+        - '**/*_test.go'
+        - '**/*.pb.go'
+        - '**/internal/projectparses/group.go'
+    params:
+      pattern: '(?i)lower\(trim\((COALESCE\()?unit'
+    cure: 'Route unit normalization through projectparses.CanonicalizeUnit and the fold through projectparses.Group; no inline SQL lower(trim(unit (#3259).'
+    origin: scripts/check-projectparses-single-source-fold.sh

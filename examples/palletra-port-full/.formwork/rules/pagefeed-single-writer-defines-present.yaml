@@ -1,0 +1,18 @@
+# Ported from Palletra scripts/check-single-writer-pagefeed-existence.sh
+# (sweep-1 #3, link 1). The artifact-presence rule is single-sourced: cache.go
+# MUST define `func AssetPresent(` so both the render lookup and the eager-
+# split skip-gate route their probe through one definition. Comment-stripped in
+# the .sh (shared gate lib drop_comments); decomment-go is the faithful port.
+rules:
+  - id: pagefeed-single-writer-defines-present
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/pageraster/pagefeed/cache.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'func AssetPresent\('
+      mode: exists
+    cure: "pagefeed must define the single-source presence rule func AssetPresent(size int64) bool (sweep-1 #3)."
+    origin: scripts/check-single-writer-pagefeed-existence.sh

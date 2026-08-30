@@ -1,0 +1,61 @@
+# Ported from Palletra scripts/check-routes-have-tracing-middleware.sh
+# (SV-ARC-10). The chi Tracing middleware wraps every routed request in an OTel
+# span. The gate pins (1) middleware/tracing.go declares `package middleware`,
+# imports go.opentelemetry.io/otel, and exports `func Tracing(`; and (2) some
+# non-test Go under services/core-api wires it via `.Use(<pkg>.Tracing(`. Each
+# anchor is a required-pattern exists rule (plain grep in the .sh -> preprocess:
+# raw). Port limitation (noted): the .sh FAILS if tracing.go is absent, whereas a
+# formwork exists rule whose file-scope resolves to zero files PASSES at check
+# (formwork lint flags the empty scope); the "if present, must contain" semantics
+# are ported faithfully.
+rules:
+  - id: routes-otel-middleware-package
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/middleware/tracing.go"
+    preprocess: raw
+    params:
+      pattern: '^package[[:space:]]+middleware\b'
+      mode: exists
+    cure: "middleware/tracing.go must declare `package middleware` (SV-ARC-10)."
+    origin: scripts/check-routes-have-tracing-middleware.sh
+  - id: routes-tracing-mw-imports-otel-sdk
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/middleware/tracing.go"
+    preprocess: decomment-go
+    params:
+      pattern: '"go\.opentelemetry\.io/otel"'
+      mode: exists
+    cure: "middleware/tracing.go must import go.opentelemetry.io/otel (SV-ARC-10)."
+    origin: scripts/check-routes-have-tracing-middleware.sh
+  - id: routes-tracing-mw-exports-func
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/middleware/tracing.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\bfunc[[:space:]]+Tracing\('
+      mode: exists
+    cure: "middleware/tracing.go must export func Tracing(...) — the chi span middleware (SV-ARC-10)."
+    origin: scripts/check-routes-have-tracing-middleware.sh
+  - id: routes-tracing-mw-installed
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\.Use\([[:space:]]*[A-Za-z_][A-Za-z0-9_]*\.Tracing\('
+      mode: exists
+    cure: "The top-level chi.Router must install the Tracing middleware via r.Use(<pkg>.Tracing(\"core-api\")) somewhere under services/core-api (SV-ARC-10)."
+    origin: scripts/check-routes-have-tracing-middleware.sh

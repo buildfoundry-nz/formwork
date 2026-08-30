@@ -1,0 +1,25 @@
+# Ported from Palletra scripts/check-job-type-registry-not-reimplemented.sh (#3365 PR-4).
+# projectterms.JobType is the single Go source of truth for the job_type
+# vocabulary; the fold deleted two parallel registries (taskview's taskTypeDisplays
+# label/tone/icon map and jobsactivity's primaryJobTypeOrder ordering slice).
+# This bans re-declaring either identifier as a `var`/`const` anywhere in non-test
+# freightworks Go — the `var|const` anchor is what keeps a bare-identifier grep
+# precise, exactly as the shipped gate relies on it.
+# PREPROCESS: the shipped .sh greps raw (`rg --type go`, no comment stripping) and
+# leans on the var/const anchor rather than decommenting, so this port keeps parity
+# and omits preprocess (raw) even though the batch hint suggested decomment-go.
+# The .sh's exit-2 anti-vacuity guard (JobType must still live in projectterms
+# data.go) is a cross-file existence check outside forbidden-pattern's scope.
+rules:
+  - id: job-type-registry-not-reimplemented
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: '\b(var|const)\s+(taskTypeDisplays|primaryJobTypeOrder)\b'
+    cure: "Read projectterms.JobType (Values/Rank/Lookup/Options); do not re-hardcode a parallel taskTypeDisplays / primaryJobTypeOrder registry (#3365)."
+    origin: scripts/check-job-type-registry-not-reimplemented.sh

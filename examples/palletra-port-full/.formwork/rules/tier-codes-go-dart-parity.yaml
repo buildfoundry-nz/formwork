@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-tier-codes-go-dart-parity.sh (#3365 PR-4).
+# The named-tier integer magnitudes are ONE encoding owned by Go
+# (internal/tier.Code consts: basement -1, ground 0, mezzanine 900, loft
+# 901) and hand-copied into the Flutter tierLabel switch (feature_dimension
+# tier_label.dart) as integer `case N:` labels. Change tier.Mezzanine in Go
+# and every mezzanine page silently renders "Level 900" with no failing test.
+# The gate extracts the code set from BOTH sides and asserts they are IDENTICAL;
+# the Go Unknown sentinel is excluded (no Dart label; not in the alternation).
+#
+# Ported as a set-relation `equal`: A = the four named-tier Code const values
+# from resolve.go; B = the integer case labels of the Dart switch. Any code on
+# one side but not the other is a divergence (the .sh's only_go / only_dart).
+# Scope-level finding (fire-1.want carries `-`).
+#
+# DIVERGENCE (noted): (1) the .sh exits 2 when EITHER set parses empty (an anti-
+# vacuity guard against a source moving); set-relation cannot express that guard,
+# so only the core parity (A == B) is ported (formwork lint owns empty-scope
+# rot). (2) The .sh sed-scopes the Dart harvest to the tierLabel switch body;
+# a per-file glob cannot express that, so B here is every `case N:` in
+# tier_label.dart — faithful as long as that file holds only the label switch,
+# which it does. No preprocess: the .sh greps both sources raw.
+rules:
+  - id: tier-codes-go-dart-parity
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/tier/resolve.go"
+        - "packages/feature_dimension/lib/domain/tier_label.dart"
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/internal/tier/resolve.go"
+        pattern: '\b(?:Basement|Ground|Mezzanine|Loft)\s+Code = (-?\d+)'
+        group: 1
+      b:
+        files:
+          - "packages/feature_dimension/lib/domain/tier_label.dart"
+        pattern: 'case (-?\d+):'
+        group: 1
+      relation: equal
+    cure: "The named-tier magnitudes are one encoding — change them on BOTH sides: the Go internal/tier.Code consts AND the Dart tierLabel switch cases. A Go value with no Dart case renders \"Level <N>\" silently (#3365)."
+    origin: scripts/check-tier-codes-go-dart-parity.sh

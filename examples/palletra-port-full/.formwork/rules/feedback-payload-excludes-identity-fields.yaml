@@ -1,0 +1,28 @@
+# Ported from Palletra scripts/check-feedback-payload-excludes-identity-fields.sh
+# (#1898). The feedback POST path must NOT carry body identity fields —
+# identity of record comes from the verified ID token (CF side), never the
+# spoofable request body. The three CF-recognized identifiers userId /
+# userEmail / userName are banned (word-bounded) across the whole feedback
+# POST path (all three files, so a relocation cannot launder past).
+#
+# preprocess: the .sh strips Dart comments (strip_comments_dart) so a token named
+# only in a `//` rationale comment does not false-fire. formwork has no
+# decomment-dart preprocessor, but decomment-go blanks the same C-style `//`
+# and `/* */` comments Dart uses while preserving string-literal contents, so
+# a `'userId'` string key is still caught (quote-agnostic, matching the .sh's
+# bare-identifier grep) and a comment mention is not. Faithful for the
+# non-triple-quoted Dart these files contain.
+rules:
+  - id: feedback-payload-excludes-identity-fields
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/plt_core/lib/services/critique_payload_builder.dart"
+        - "packages/plt_core/lib/services/browser_feedback_service.dart"
+        - "packages/plt_core/lib/services/critique_service.dart"
+    preprocess: decomment-go
+    params:
+      pattern: '\b(userId|userEmail|userName)\b'
+    cure: "Identity of record comes from the verified ID token (CF side), never the payload body. Drop userId/userEmail/userName from the feedback POST payload."
+    origin: scripts/check-feedback-payload-excludes-identity-fields.sh

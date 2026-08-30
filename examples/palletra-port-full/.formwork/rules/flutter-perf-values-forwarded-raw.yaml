@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-flutter-perf-values-forwarded-raw.sh
+# (C5 perf gate, #8354). The frame-perf and web-vitals producers forward RAW
+# browser timing values verbatim — Go owns every count/p50/p95/max/TTFB/FCP/LCP.
+# If the FE ever derived a percentile, average, or delta itself, the client and
+# server would hold two non-equivalent computations of the same metric (the
+# source-of-truth-divergence trap). So the three perf files carry ZERO arithmetic
+# on any value.
+#
+# preprocess: decomment-go blanks `//` and `/* */` comments (Dart shares Go's
+# comment syntax) BEFORE matching, so arithmetic shown in explanatory prose
+# (`p50/p95/max`, `TTFB / FCP / LCP`, `count + p50` — all in `///` doc comments
+# on develop) is not read as real division/subtraction.
+#
+# FP FIX (was: pattern '[\w.]\s*[-+*/%]\s*[\w.]' with optional whitespace): the
+# .sh ALSO de-strings the body, so a `/` in an import path string
+# (`'package:flutter/foundation.dart'`) or a `-` in a hyphenated entry-type
+# literal is inert. formwork applies one preprocessor per rule and has no
+# decomment+destring-dart, so on develop the import-path slashes
+# (`flutter/foundation`, `web/web.dart`, …) false-fired. Fix: require WHITESPACE
+# on BOTH sides of the operator (`\s+`). `dart format` (enforced) always spaces a
+# real binary operator (`t.responseStart - t.requestStart`), while an import-path
+# `/` and a hyphenated-literal `-` are glued to their operands with no spaces — so
+# the spaced form isolates a genuine timing derivation and skips the inert string
+# slashes/hyphens. Comments carry the doc-prose spaces but are blanked first.
+rules:
+  - id: flutter-perf-values-forwarded-raw
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/plt_core/lib/observability/frame_timing_sampler.dart"
+        - "packages/plt_core/lib/observability/web_vitals.dart"
+        - "packages/plt_core/lib/observability/client_perf_mapping.dart"
+    preprocess: decomment-go
+    params:
+      pattern: '[\w.]\s+[-+*/%]\s+[\w.]'
+    cure: "The perf producers forward raw browser timing values; Go derives every percentile/average/delta. Delete the client-side arithmetic and send the raw value (#8354)."
+    origin: scripts/check-flutter-perf-values-forwarded-raw.sh

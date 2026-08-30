@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-no-refs-to-dropped-annotation-column.sh
+# (sweep-2 #5, hardened sweep-4 #5). A column dropped by a migration must not be
+# referenced by live code or the published proto contract. The .sh keeps a
+# curated deny-list of genuinely-dead tokens (currently just
+# derived_from_annotation_ids) and bans them in freightworks/ + schema/proto/,
+# EXCLUDING migrations/ (legitimate create+drop history) and gatetests/.
+#
+# PARTIAL PORT: the .sh also runs a deny-list-hygiene self-check (each token must
+# be ABSENT from schema.snapshot.sql, flagging a stale entry whose column was
+# re-added). That is a meta-check on the deny-list — orthogonal to a content ban
+# and not expressible as a forbidden-pattern — so it is not modelled here. The
+# primary reference-ban (below) is ported faithfully.
+rules:
+  - id: no-refs-to-dropped-annotation-column
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**"
+        - "schema/proto/**"
+      exclude:
+        - "**/migrations/**"
+        - "**/gatetests/**"
+    params:
+      pattern: 'derived_from_annotation_ids'
+    cure: "The column was dropped by a migration; use its replacement (derived_from_annotation_ids -> annotation_gauges.annotation_id)."
+    origin: scripts/check-no-refs-to-dropped-annotation-column.sh

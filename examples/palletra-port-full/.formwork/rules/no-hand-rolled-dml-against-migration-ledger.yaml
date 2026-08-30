@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-no-forced-migration-ledger-rewrite.sh (#6608),
+# Pattern 2 of 2. The same ledger rewrite, hand-rolled as DML — UPDATE /
+# DELETE FROM / INSERT INTO against a *_schema_migrations table — is how this
+# gate would otherwise be laundered. Only string-literal content is searched
+# (strings-only-go) so the bare table name rowSet passes as a plain arg
+# ("palletra_schema_migrations") is not itself a violation: a DML verb must
+# appear in the same literal line. Case-insensitive; _test.go exempt.
+rules:
+  - id: no-hand-rolled-dml-against-migration-ledger
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: strings-only-go
+    params:
+      pattern: '(?i)(UPDATE|DELETE\s+FROM|INSERT\s+INTO)[^;]*schema_migrations'
+    cure: "Never hand-roll DML against the *_schema_migrations ledger table. A ledger the runner cannot prove consistent is an operator-intervention event — refuse loudly, never rewrite (#6608)."
+    origin: scripts/check-no-forced-migration-ledger-rewrite.sh

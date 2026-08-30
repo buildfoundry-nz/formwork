@@ -1,0 +1,50 @@
+# Ported from Palletra scripts/check-flutter-rail-refresh-through-one-path.sh
+# (#7669 FE coherence). The four rail-surface providers must only be refreshed
+# through the single path WorkflowRailSync.request(); no measure-surface file
+# except workflow_rail_sync.dart may `invalidate(<surface>)` or Riverpod
+# `refresh(<surface>)` one of them directly. A `<notifier>.refresh()` method call
+# is NOT this shape (it does not bind a surface token after refresh() and is not
+# matched). Case-sensitive RE2: lowercase `refresh(`/`invalidate(` bound to a
+# surface token.
+#
+# FP FIX (was: scanned raw text, no carve-out): the .sh does two things this
+# port missed, both of which false-fired on clean develop —
+#   1. It DE-COMMENTS Dart before the match, so a doc comment naming the old
+#      off-path code cannot false-fire. On develop plot_plan_quality_gate.dart
+#      has a `// ...never an ad-hoc ref.invalidate(workflowContextProvider).`
+#      comment. Dart shares Go comment syntax → preprocess: decomment-go blanks
+#      it (a real invalidate/refresh call in CODE still fires).
+#   2. It honours a per-line `rail-refresh-allow: <reason>` carve-out marker for
+#      a legitimate single-surface refresh. On develop the ONLY such live
+#      carve-out is the project-wide resync in
+#      plot_detection_refresh.dart (a marked `ref.invalidate(
+#      workflowPanelsProvider);` that is paired with request()). formwork's
+#      generic marker is `formwork:allow`, a DIFFERENT token from the code's
+#      `rail-refresh-allow`, and the target tree is read-only, so the existing
+#      marker cannot be recognized. That documented single-surface carve-out is
+#      instead expressed as except.paths on that one file — mirroring the gate's
+#      marker exemption for it, while the rule still fires on every other
+#      measure-surface file.
+rules:
+  - id: flutter-rail-refresh-through-one-path
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/**/*.dart"
+        - "packages/plt_canvas_kit/lib/measure/**/*.dart"
+        - "packages/plt_canvas_kit/lib/annotation/**/*.dart"
+      exclude:
+        - "**/workflow_rail_sync.dart"
+        - "**/*.g.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+    except:
+      paths:
+        - "packages/feature_dimension/lib/providers/plot_detection_refresh.dart"
+    preprocess: decomment-go
+    params:
+      pattern: '(invalidate|refresh)[(][[:space:]]*(plotPrimaryActionProvider|workflowPanelsProvider|workflowContextProvider|workflowStagesProvider|workflowSlotStagesProvider)'
+    cure: "Route the refresh through workflowRailSyncProvider(projectId).notifier.request() so all four rail surfaces refetch together; never invalidate/refresh a single surface provider directly. A genuine single-surface carve-out (optimistic reconcile / project-wide resync) belongs in workflow_rail_sync.dart's siblings behind a reviewed marker."
+    origin: scripts/check-flutter-rail-refresh-through-one-path.sh

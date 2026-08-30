@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-no-production-test-seams.sh
+# (sweep-17 #14). A test seam — a module-global mutable function pointer an
+# integration test swaps to drive a deterministic race — must never ship in the
+# production binary. The sweep-16 #5 hook var lived in a route file
+# unconditionally: production picked it up even though no production code ever
+# assigned it.
+#
+# Rule: any non-test Go file under services/ or internal/ that declares an
+# unexported `var <name>Hook(Var) func(` MUST carry a //go:build ...production
+# tag (either `//go:build !production` for the dev variant or
+# `//go:build production` for the prod-noop sibling). An ungated hook var is a
+# test seam in the default build.
+#
+# Ported as a pair-consistency: trigger = the hook-var declaration, requires =
+# a `//go:build …production` build tag in the SAME file. This is exactly the
+# .sh's "a file that declares the seam must be build-tag-gated".
+#
+# DIVERGENCE (noted): the .sh requires the //go:build tag on the file's first
+# non-blank, non-comment line (within head -5). pair-consistency asserts the tag
+# is present ANYWHERE in the file, not specifically at the top — the positional
+# refinement (a build tag is only honoured by the Go toolchain in the file
+# header) is not expressible declaratively. The core seam-must-be-gated coupling
+# is faithful. NOTE: NO decomment preprocessor here — a //go:build directive IS
+# a comment line, so stripping comments would erase the very companion the rule
+# requires.
+rules:
+  - id: no-production-test-seams
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/**/*.go"
+        - "freightworks/internal/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      trigger: '^var\s+[a-z][A-Za-z0-9_]*Hook(Var)?\s+func\('
+      requires: '//go:build\s+.*production'
+    cure: "An unexported module-global hook var is a test seam. Move it into a `//go:build !production` file and add a `//go:build production` noop sibling (or remove the seam) so it never ships in the production binary (sweep-17 #14)."
+    origin: scripts/check-no-production-test-seams.sh

@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-page-status-schema-drift.sh (PR #4968) Rule 1.
+# Bans an `INSERT INTO palletra.pages (... status ...)` whose column list names
+# the retired `status` column (use intake_status). PARTIAL PORT: the shell
+# gate's awk walker is multi-line-aware; formwork forbidden-pattern is line-
+# oriented, so this catches the single-line INSERT form. Comment-stripped.
+rules:
+  - id: pages-insert-status-column-banned
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+      exclude:
+        - "**/vendor/**"
+        - "shared/generated/**"
+        - "**/gen/go/**"
+        - "**/internal/proto/**"
+        - "**/*.pb.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'INSERT\s+INTO\s+palletra\.pages\b[^;]*[(,\s]status[,\s)]'
+    cure: "INSERT INTO palletra.pages must use the intake_status column, never the retired status column."
+    origin: scripts/check-page-status-schema-drift.sh

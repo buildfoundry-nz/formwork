@@ -1,0 +1,72 @@
+# Ported from Palletra scripts/check-dart-base-package-rank-order-enforced.sh (#7846).
+#
+# The .sh enforces the base-package layering DAG: it reads a rank manifest
+# (scripts/plt-layer-order.tsv, package -> integer rank) and, for each
+# packages/plt_*/pubspec.yaml, fails any plt_*->plt_* dependency OR
+# dev_dependency edge whose DEPENDENT has a STRICTLY LOWER rank than the
+# DEPENDENCY (an upward/reverse edge that re-couples the split monolith).
+# Equal ranks (siblings) are allowed; an edge with an unranked endpoint is
+# skipped. There is no formwork declarative type for "compare the ranks of
+# two packages joined through a manifest", so this is the command escape
+# hatch: a self-contained python that reproduces the manifest read + the
+# pubspec section walk + the rank comparison on the tree it runs in. Scope-
+# level finding (no want marker); fire-1 has a reverse edge, pass-1 is clean.
+rules:
+  - id: dart-base-package-rank-order-enforced
+    type: command
+    severity: error
+    scope:
+      include:
+        - "packages/plt_*/pubspec.yaml"
+        - "scripts/plt-layer-order.tsv"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import os, re, glob, sys
+          mani = "scripts/plt-layer-order.tsv"
+          if not os.path.exists(mani):
+              sys.exit(0)
+          rank = {}
+          for raw in open(mani):
+              line = raw.rstrip("\n")
+              if not line.strip() or line.lstrip().startswith("#"):
+                  continue
+              parts = line.split("\t")
+              if len(parts) < 2:
+                  continue
+              pkg, r = parts[0].strip(), parts[1].strip()
+              if r.isdigit():
+                  rank[pkg] = int(r)
+          viol = []
+          for ps in sorted(glob.glob("packages/plt_*/pubspec.yaml")):
+              name = os.path.basename(os.path.dirname(ps))
+              section = None
+              for raw in open(ps):
+                  l = raw.rstrip("\n")
+                  if re.match(r"^[A-Za-z]", l):
+                      if l.startswith("dependencies:"):
+                          section = "dep"
+                      elif l.startswith("dev_dependencies:"):
+                          section = "dep"
+                      else:
+                          section = None
+                      continue
+                  if section != "dep":
+                      continue
+                  m = re.match(r"^  (plt_[A-Za-z0-9_]+):", l)
+                  if not m:
+                      continue
+                  dep = m.group(1)
+                  if name in rank and dep in rank and rank[name] < rank[dep]:
+                      viol.append((name, rank[name], dep, rank[dep]))
+          if viol:
+              for n, nr, d, dr in viol:
+                  sys.stderr.write("upward (reverse) base edge %s(%d) -> %s(%d)\n" % (n, nr, d, dr))
+              sys.exit(1)
+          sys.exit(0)
+      expect:
+        exit: 0
+    cure: "Invert the dependency so the arrow points DOWN in rank (a higher-rank package depends on a lower-rank one), or move the shared primitive into a lower-rank package. If the layering itself changed, renumber scripts/plt-layer-order.tsv deliberately — no per-edge carve-out."
+    origin: scripts/check-dart-base-package-rank-order-enforced.sh

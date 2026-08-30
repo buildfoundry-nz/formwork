@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-annotation-metrics-page-filter-must-use-shared-where-constant.sh
+# (sweep-9c #7). The canonical page-scoped marker_tally read must filter via
+# scanmetric.MarkerTallyByPageWhere (project_id-leading, so it seeks
+# idx_gauges_project_page). An inline `WHERE am.page_id` filters page_id ALONE and
+# bypasses that index. This bans the inline `WHERE am.page_id` shape.
+#
+# FP FIX (was: broadened to ALL freightworks Go). The .sh only scans files that
+# reference scanmetric.MetricFromAnnotationTable (`grep -rl MetricFromAnnotationTable`);
+# an unrelated file with a legit `WHERE am.page_id = $1 AND am.project_id = $2`
+# (e.g. routes/partition_heights/partition_height_groups.go) has no MetricFromAnnotationTable
+# and is NEVER scanned by the gate. The port dropped that file-level precondition and
+# false-fired on it. Restored via `require_present: MetricFromAnnotationTable` —
+# the explicitly-semantic slot for verdict-changing scope (#9; this scope
+# originally rode in `prefilter:`, documented as a pure optimization) —
+# reproducing the gate's `grep -rl` file selection: the ban only applies inside
+# a file that actually builds the SourceTable read.
+# The .sh greps raw content (no de-comment), so no preprocessor is used here — matching
+# its fidelity; internal/scan/metric (which defines the constants) stays exempt.
+# Line-anchored mode is NARROWER than the multiline form this rule briefly used:
+# a WHERE split across lines in a raw string is not seen, exactly as the origin's
+# per-line grep never saw it. pass-2 pins that shape as deliberately out of
+# remit, and pins the SourceTable-less false-positive file staying silent.
+rules:
+  - id: annotation-metrics-page-filter-must-use-shared-where-constant
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/services/core-api/internal/scan/metric/**"
+        - "**/*_test.go"
+    params:
+      pattern: 'WHERE\s+am\.page_id'
+      require_present:
+        - 'MetricFromAnnotationTable'
+    cure: "Filter via scanmetric.MarkerTallyByPageWhere (project_id leads page_id) so the read seeks idx_gauges_project_page; drop the inline WHERE am.page_id (sweep-9c #7)."
+    origin: scripts/check-annotation-metrics-page-filter-must-use-shared-where-constant.sh

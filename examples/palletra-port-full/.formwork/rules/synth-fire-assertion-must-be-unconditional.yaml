@@ -1,0 +1,59 @@
+# Ported from Palletra scripts/check-synth-fire-assertion-must-be-unconditional.sh (#5360).
+# A fire-on-violation assertion is unconditional or it is not a fire assertion.
+# Over freightworks/internal/gatetests/**.go, fail any t.Skip / t.Skipf /
+# t.SkipNow appearing inside the brace-scoped `if err == nil {` block that
+# follows a execScript-family call in the same test func — the neutered pattern
+# where the Skip branch is always taken and the t.Fatalf below it is dead code,
+# so the synth can only ever report PASS or SKIP, never FAIL.
+#
+# PORT MAPPING: the invariant is brace-scope-sensitive — a t.Skip is legal
+# outside the `if err == nil {` block but forbidden inside it after execScript.
+# No per-file Go-AST analyzer here tracks that nested-block condition, so this
+# uses the ESCAPE HATCH: a command rule that runs the .sh's own char-walk awk
+# (brace-depth accounting to frame the err==nil block) over the gatetests
+# tree. fire-1 plants the `if err == nil { ... t.Skip(...) }` neutered guard
+# (exit 1); pass-1 keeps the bare `if err == nil { t.Fatalf(...) }` (exit 0).
+rules:
+  - id: synth-fire-assertion-must-be-unconditional
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          set -u
+          SCAN_DIR="freightworks/internal/gatetests"
+          [ -d "$SCAN_DIR" ] || { echo "OK: no gatetests dir"; exit 0; }
+          hits=$(find "$SCAN_DIR" -type f -name '*.go' | sort | while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            awk -v file="$f" '
+              BEGIN { depth=0; in_err_nil=0; err_nil_depth=-1; seen_runscript=0; pending_err_nil=0 }
+              /^func[ \t]/ { depth=0; in_err_nil=0; err_nil_depth=-1; seen_runscript=0; pending_err_nil=0 }
+              {
+                line=$0
+                if (line ~ /(^|[^A-Za-z0-9_])execScript[A-Za-z0-9_]*\(/) seen_runscript=1
+                if (seen_runscript && line ~ /(^|[^A-Za-z0-9_])err[ \t]*==[ \t]*nil([^A-Za-z0-9_]|$)/) pending_err_nil=1
+                n=length(line)
+                for (i=1;i<=n;i++) {
+                  c=substr(line,i,1)
+                  if (c=="{") { depth++; if (pending_err_nil){in_err_nil=1; err_nil_depth=depth; pending_err_nil=0} }
+                  else if (c=="}") { if (in_err_nil && depth==err_nil_depth){in_err_nil=0; err_nil_depth=-1} depth--; if (depth<0) depth=0 }
+                }
+                if (in_err_nil && line ~ /(^|[^A-Za-z0-9_])t\.Skip(f|Now)?[ \t]*\(/)
+                  printf "%s:%d: t.Skip inside if-err-nil fire assertion\n", file, NR
+                if (line ~ /(^|[^A-Za-z0-9_])err[ \t]*==[ \t]*nil([^A-Za-z0-9_]|$)/ && line ~ /\{/ && line ~ /\}/ && line ~ /t\.Skip(f|Now)?[ \t]*\(/)
+                  printf "%s:%d: t.Skip inside if-err-nil fire assertion\n", file, NR
+              }
+            ' "$f"
+          done)
+          if [ -z "$hits" ]; then echo "OK: every fire assertion is unconditional"; exit 0; fi
+          echo "$hits" >&2
+          exit 1
+      expect:
+        exit: 0
+    cure: "Delete the `if strings.Contains(stdout, \"OK\") { t.Skip(...) }` guard from the synth. A fire assertion is `if err == nil { t.Fatalf(...) }` — bare and unconditional; if the fixture does not drive the gate to non-zero exit, fix the fixture (#5360)."
+    origin: scripts/check-synth-fire-assertion-must-be-unconditional.sh

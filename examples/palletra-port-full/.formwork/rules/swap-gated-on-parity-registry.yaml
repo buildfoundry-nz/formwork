@@ -1,0 +1,36 @@
+# Ported from Palletra scripts/check-swap-gated-on-parity-registry.sh
+# (#6783). SwapSectionAllOrgs supersedes the named section of EVERY org's
+# live default template under db.AsSuperuser (RLS bypassed). It MUST refuse a
+# section absent from the native-vs-Kit parity registry BEFORE it resolves the
+# native spec — a gate that runs after the swap resolves, or not at all, is not
+# a gate. The .sh (b)+(c) uses awk brace-tracking to assert the
+# `.Has(segmentTitle)` guard appears at a LOWER line than the
+# builtinSectionSpec(jobType, segmentTitle) call, comments stripped first.
+#
+# Ported as an ordering rule (within file) over the one section_swap_
+# allorgs.go: the parity guard `.Has(segmentTitle)` (before) must precede the
+# `builtinSectionSpec(jobType, segmentTitle)` call (after). A native-spec resolve
+# on an EARLIER line than the guard is the un-gated shape and fires (reported at
+# the native-spec line); a guard-first ordering passes. decomment-go so a
+# comment mentioning either token cannot satisfy the rule (the .sh strip()).
+#
+# DIVERGENCE (noted): the .sh also requires (a) the internal/parityregistry
+# import be present and treats a MISSING guard / missing return-Errorf as a
+# distinct failure. ordering fires only when BOTH tokens are present and mis-
+# ordered (a lone `after` with no `before` passes), so the "guard entirely
+# absent" and "no parityregistry import" teeth are not modeled — the primary
+# documented invariant (refusal BEFORE the native resolve) is.
+rules:
+  - id: swap-gated-on-parity-registry
+    type: ordering
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/stocktemplates/supersede/section_swap_allorgs.go"
+    preprocess: decomment-go
+    params:
+      before: '\.Has\(segmentTitle\)'
+      after: 'builtinSectionSpec\(jobType, segmentTitle\)'
+      within: file
+    cure: "Place the `if !reg.Has(segmentTitle) { return ...Errorf... }` parity guard BEFORE the builtinSectionSpec(jobType, segmentTitle) call inside SwapSectionAllOrgs; a refusal that runs after the swap resolves the native spec is not a gate (#6783)."
+    origin: scripts/check-swap-gated-on-parity-registry.sh

@@ -1,0 +1,1 @@
+- ./freightworks/services/core-api/internal/foo/foo.go:7:// launder casts through unsafe.Pointer and silences the linter.

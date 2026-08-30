@@ -1,0 +1,4 @@
+frontend
+packages
+docs   # heavy tree, never COPY'd
+shared/generated/dart

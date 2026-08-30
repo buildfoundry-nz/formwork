@@ -1,0 +1,2 @@
+# Scope-level: the routes-log gate runs in a go_touched-gated job, not the always-run one.
+- check-routes-log-pre-500.sh does not run in the always-run (diff_scope != 'docs') job

@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-no-backup-blobs-tracked.sh. No tracked
+# path may end in .bak, .orig, .rej, or ~. A .bak/~ is a stale second definition
+# of everything it names (a 445-line copy of workflow_signoff_step.go rode in on
+# a merge commit); a .orig carries the content the merge REJECTED and a .rej is
+# a hunk that never applied. .gitignore cannot fix it — an ignore rule does not
+# untrack what is already tracked. Extension/suffix only: a file NAMED backup.go
+# is fine.
+#
+# Ported as file-naming:
+#   forbid_ext   — the .bak/.orig/.rej dotted-extension ban (path.Ext match).
+#   require_match — `[^~]$`: a path must end in a non-`~` char; a trailing-`~`
+#                   editor backup fails it. `~` is a suffix, not a dotted
+#                   extension (path.Ext("foo.dart~") == ".dart~"), so it cannot
+#                   ride forbid_ext — the require_match inverse is the faithful
+#                   expression of the `~$` half of the rule.
+# The finding is file-level (the NAME is the violation, no line to anchor), so
+# the fire fixture declares expectations via a fire-1.want manifest naming the
+# offending paths.
+#
+# DIVERGENCE (noted): the .sh enumerates git-TRACKED files (git ls-files) and
+# matches case-INSENSITIVELY (add.go.BAK / queries.go.Orig). formwork scans the
+# working tree and file-naming's forbid_ext is case-sensitive, so a real
+# deployment covers the uppercase variants with extra forbid_ext entries and
+# excludes vendored/build dirs via scope.exclude; the fixture tree carries only
+# the lowercase, canonical forms.
+rules:
+  - id: no-backup-blobs-tracked
+    type: file-naming
+    severity: error
+    scope:
+      include:
+        - "**"
+    params:
+      forbid_ext:
+        - ".bak"
+        - ".orig"
+        - ".rej"
+      require_match: '[^~]$'
+    cure: "Delete the backup/conflict blob: git rm --cached <path> && rm <path>. A .bak/~ is a stale second definition; a .orig carries the REJECTED merge content; a .rej is a hunk that never applied. Never .gitignore them."
+    origin: scripts/check-no-backup-blobs-tracked.sh

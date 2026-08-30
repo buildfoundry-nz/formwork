@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-freightworks-cmd-lifecycle-class.sh (#3661).
+# Bidirectional catalog invariant: every freightworks/cmd/<dir>/ containing
+# `^package main` must appear in cmd/README.md's `## Index` table with a
+# recognized lifecycle class (durable/generator/one-shot/diagnostic/eval/ci), AND
+# every index row must point at a still-existing cmd dir (no stale rows).
+#
+# COMMAND ESCAPE. This gate is a bidirectional cross-file set relation whose
+# forward side keys on a per-directory content probe (`grep ^package main` over
+# each cmd/<dir>) and whose payload is a validated lifecycle-class column parsed
+# out of a Markdown table — neither the "directory basename of files declaring
+# package main" extraction nor the class-vocabulary validation is expressible in
+# a single declarative set-relation/pair-consistency rule. Rather than ship an
+# unfaithful partial, it runs the real script (the maximally faithful check),
+# which verifies in CI and is enumerated by `formwork lint`. No fixture.
+rules:
+  - id: freightworks-cmd-lifecycle-class
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-freightworks-cmd-lifecycle-class.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/cmd/**"
+        - "freightworks/cmd/README.md"
+    params:
+      cmd:
+        - bash
+        - scripts/check-freightworks-cmd-lifecycle-class.sh
+      expect:
+        exit: 0
+    cure: "Every freightworks/cmd/<dir> that declares `package main` must be listed in freightworks/cmd/README.md's `## Index` table with a recognized lifecycle class (durable/generator/one-shot/diagnostic/eval/ci), and every index row must point at a still-existing dir. Add the missing row / fix the class, or delete the stale row (#3661)."
+    origin: scripts/check-freightworks-cmd-lifecycle-class.sh

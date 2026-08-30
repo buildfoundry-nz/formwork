@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-go-test-shard-total.sh (CI redesign
+# go-test shard lock).
+#
+# In .github/workflows/ci.yml the Go-test shard set must be complete:
+#   (1) the UNION of the ./...-glob token sets on the LIVE `# INTEGRATION_RUN`
+#       lane lines must EQUAL the single LIVE `# INTEGRATION_SCOPE` complement-
+#       basis line's set (a glob in neither → never run; in both → run untagged
+#       AND tagged), and
+#   (2) a DERIVED floor: every package root holding a `//go:build integration`
+#       test must fall inside some run lane's scope.
+#
+# Invariant (2) is a whole-tree structural derivation — it greps the ENTIRE
+# freightworks source tree for build-tag test files and cross-references the
+# discovered roots against ci.yml's marker sets. That set-algebra-plus-derived-
+# floor over a live tree has no faithful single declarative rule (a set-relation
+# could express only the union==basis half and would miss the load-bearing
+# floor), so it maps to the `command` escape hatch running the real gate.
+# params.cmd is the real check; expect.exit 0.
+rules:
+  - id: m06-go-test-shard-total
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-go-test-shard-total.sh — the validating
+      target's own gate script, which this corpus does not carry and cannot:
+      it is written in that tree's vocabulary, and this repository tracks no
+      shell scripts at all. In a fixture tree bash would exit 127 in the fire
+      tree and the pass tree alike, so the fire proof would be satisfied by
+      the detector NOT EXISTING and the pass proof would report that same
+      missing-detector exit as a finding. What the port asserts here is the
+      SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - ".github/workflows/ci.yml"
+        - "freightworks/**/*_test.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-go-test-shard-total.sh
+      expect:
+        exit: 0
+    cure: "Keep union(# INTEGRATION_RUN lanes) identical to the # INTEGRATION_SCOPE complement basis in ci.yml, and keep every //go:build integration root inside some run lane (or the tracked ALLOWLIST). A glob in the basis but no lane is never run; a glob in a lane but not the basis runs in both."
+    origin: scripts/check-go-test-shard-total.sh

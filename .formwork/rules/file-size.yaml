@@ -1,0 +1,29 @@
+# formwork's own source is vendored into consumers that enforce a hard 750-line
+# cap over *.go (the validating port's scripts/lib/file-size-caps.sh, ported in
+# examples/palletra-port-full/.formwork/rules/file-size-guardrails.yaml). Until
+# now that ceiling was enforced only downstream, so an over-cap file was
+# discovered after it was written and merged — twice, each costing a dedicated
+# follow-up PR (#32 splitting lint_test.go, #61 splitting the CLI rule-filter
+# tests). Self-hosting the cap moves the failure to `make check`, where it costs
+# a split instead of a round trip.
+#
+# hard_cap (not cap) is deliberate: it is an absolute ceiling that a future
+# per-path override cannot widen, which is the property the vendoring consumer
+# actually depends on.
+#
+# Scope is formwork's own Go source only. examples/ carries ported corpora whose
+# oversized files are fixture material, not vendored source, and .formwork/ is
+# skipped engine-side (internal/scan: skipDirs) so the fire fixture below does
+# not flag itself.
+rules:
+  - id: file-size-vendor-cap
+    type: file-size
+    severity: error
+    scope:
+      include:
+        - "cmd/**/*.go"
+        - "internal/**/*.go"
+        - "tools/**/*.go"
+    params:
+      hard_cap: 750
+    cure: "Split the file so every part is at or below 750 lines. Never widen the cap — consumers that vendor this source enforce it, so an over-cap file breaks them downstream rather than here."

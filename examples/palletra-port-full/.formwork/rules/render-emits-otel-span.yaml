@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-render-emits-otel-span.sh (Plan 4 Phase 11 /
+# §8.1). The production rasteriser MUST open an OpenTelemetry span named
+# "PagePaint" around the page-render flow, or Cloud Trace has no per-render
+# trace anchor and triage falls back to log diving. The .sh requires three
+# anchors in rasterizer.go: otel.Tracer("pageraster"), .Start(ctx, "PagePaint",
+# and defer span.End(). This ports the strongest single anchor — the span-start
+# with its exact name — as required-pattern exists mode over that one file.
+#
+# Not ported as separate anchors: otel.Tracer("pageraster") and
+# defer span.End() (a single exists rule enforces one pattern; the pass fixture
+# still carries all three for realism).
+rules:
+  - id: render-emits-otel-span
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/pageraster/rasterizer/rasterizer.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\.Start\(ctx, "PagePaint"'
+      mode: exists
+    cure: "Rasteriser.Render must open an OTel span named \"PagePaint\" via otel.Tracer(\"pageraster\").Start(ctx, \"PagePaint\", ...) with defer span.End() — the per-render Cloud Trace anchor (§8.1)."
+    origin: scripts/check-render-emits-otel-span.sh

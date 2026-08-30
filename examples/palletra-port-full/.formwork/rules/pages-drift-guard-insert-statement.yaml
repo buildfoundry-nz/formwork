@@ -1,0 +1,23 @@
+rules:
+  - id: pages-drift-guard-insert-statement
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/vendor/**"
+        - "**/shared/generated/**"
+        - "**/gen/go/**"
+        - "**/internal/proto/**"
+        - "**/*.pb.go"
+    params:
+      # Rule 1 of check-page-status-schema-drift.sh: a multi-line INSERT INTO
+      # palletra.pages whose column list names the retired `status` column.
+      table: 'INSERT\s+INTO\s+palletra\.pages'
+      # The awk walker keys on /[(,\s]status[,\s)]/ — the bare `status` column,
+      # never `intake_status` (preceded by `_`, outside the class).
+      forbid:
+        - '[(,\s]status[,\s)]'
+    cure: "Canonical column is palletra.pages.intake_status — never `status`. Migration: 0006_palletra_pages.up.sql."
+    origin: scripts/check-page-status-schema-drift.sh

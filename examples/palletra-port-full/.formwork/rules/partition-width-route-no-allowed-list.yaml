@@ -1,0 +1,16 @@
+# Ported from Palletra scripts/check-partition-width-no-hardcoded-vocab.sh rule 2 (#7909).
+# The manual-set route annotations_partition_width.go must not reintroduce the
+# `allowedPartitionWidthsMm` allowlist; validate against the shared
+# partitionwidth.MaxPartitionWidthMm cap instead. One of four coupled sub-rules split from
+# the .sh.
+rules:
+  - id: partition-width-route-no-allowed-list
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/annotations/annotations_partition_width.go"
+    params:
+      pattern: 'allowedPartitionWidthsMm'
+    cure: "Validate the manual-set width against the shared partitionwidth.MaxPartitionWidthMm cap, not a hardcoded allowedPartitionWidthsMm set (#7909)."
+    origin: scripts/check-partition-width-no-hardcoded-vocab.sh

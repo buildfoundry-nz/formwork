@@ -1,0 +1,30 @@
+# Ported from Palletra scripts/check-pxscale-via-scalecalc.sh (gantry
+# over-detection root-cause gate). PageIntake/AttachedPageMeta.ScaleRatio is
+# meters-per-pixel; it must be DERIVED through scaleRatioFromPage (which routes to
+# internal/scalecalc.UnitsPerPixel), never assigned the raw pages.scale plan
+# denominator. Rule: in freightworks/services/core-api/internal/pageintake/ non-test
+# Go, any assignment to a ScaleRatio field (`.ScaleRatio =`, NOT the `==` comparison,
+# or a struct `ScaleRatio:`) MUST reference scaleRatioFromPage or
+# scalecalc.UnitsPerPixel on the SAME line.
+#
+# The .sh strips `// ` comment tails before matching so a doc comment mentioning
+# ScaleRatio never fires — reproduced here with preprocess: decomment-go (blanks Go
+# comments, line-preserving). Matching is per-line: a negative lookahead clears
+# the line when the canonical derivation is present, then the trigger requires a
+# `.ScaleRatio =` assignment (the `(?!=)` excludes the `==` read) OR a struct
+# `ScaleRatio:` field-set. regexp2 for the lookahead.
+rules:
+  - id: pxscale-via-scalecalc
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/pageintake/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '^(?!.*(?:scaleRatioFromPage|scalecalc\.UnitsPerPixel)).*(?:\.ScaleRatio\s*=(?!=)|ScaleRatio:)'
+      syntax: regexp2
+    cure: "Derive it: in.ScaleRatio = scaleRatioFromPage(drawingScale, resolvedDpi, calibration) — routes through internal/scalecalc.UnitsPerPixel. Never assign the raw pages.scale plan-scale denominator to a meters-per-pixel field."
+    origin: scripts/check-pxscale-via-scalecalc.sh

@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "command": "cat .claude/hooks/some-other-note.txt" }
+    ]
+  }
+}

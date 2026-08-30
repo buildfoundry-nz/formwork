@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-extracted-facts-reads-exclude-superseded.sh
+# (sweep-10 PER-2). palletra.extracted_fields / extracted_skus are
+# APPEND-ONLY: a re-extraction writes a new generation row and flips the prior
+# ones superseded=true. Any read that omits a `superseded` predicate accumulates
+# every past generation and can let a stale high-confidence row win over the
+# corrected current one (the PER-2 bug: a superseded conf-0.99 grade beat the
+# current conf-0.80 value).
+#
+# Ported as a sql/statement-predicate: it selects each SQL statement (in .sql
+# files and reassembled from Go string literals) that reads
+# `FROM palletra.extracted_(fields|skus)` and requires the token
+# `superseded`. INSERT/UPDATE writers use INTO/UPDATE (not FROM), so the table
+# selector never matches them — exactly the .sh's FROM-only anchor. This is the
+# per-statement grain the .sh walks (a backtick raw-string SQL block), so a file
+# mixing a filtered read and an unfiltered read is still caught statement-by-
+# statement. Scope: production Go under freightworks (tests excluded).
+#
+# NOTE: a deliberate all-generations read must still name `superseded` explicitly
+# (e.g. `superseded IN (true,false)`) so the intent stays reviewable — the token
+# requirement, not a specific `= false`, mirrors the .sh.
+rules:
+  - id: extracted-facts-reads-exclude-superseded
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      table: 'FROM[ \t\n]+palletra\.extracted_(fields|skus)'
+      require:
+        - 'superseded'
+    cure: "Add `AND superseded = false` to the SELECT (or name superseded explicitly for a deliberate all-generations read) — extracted_(fields|skus) are append-only (sweep-10 PER-2)."
+    origin: scripts/check-extracted-facts-reads-exclude-superseded.sh

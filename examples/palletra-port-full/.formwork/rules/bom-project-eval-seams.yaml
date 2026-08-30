@@ -1,0 +1,30 @@
+# Ported from Palletra scripts/check-bom-project-eval-seams.sh (#3269/#5999) —
+# Part 1. The project-wide BOM eval symbol EvaluateProjectBomQuantities (and its
+# ...WithVars variant) may be referenced only from the three approved seams:
+# internal/calceval/ (definition), internal/bomfreshness/ (the lazy heal
+# barrier), and routes/worker_hook/ (batch-complete eval). Anywhere else is
+# an ad-hoc project-wide eval that re-opens the #5999 lock-window regression.
+# This is a forbidden reference outside the allowed dirs, comment-stripped.
+#
+# Port note: Part 2 of the .sh (every .EnsureActiveBomEvaluated( caller must
+# reference BOTH WithOrgIsoRetry AND RepeatableRead in the same file) needs a
+# two-companion pair check; pair-consistency carries a single `requires`, so
+# Part 2 is not ported here. `\b` keeps the match off any longer identifier.
+rules:
+  - id: bom-project-eval-seams
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/internal/gatetests/**"
+        - "freightworks/services/core-api/internal/calceval/**"
+        - "freightworks/services/core-api/internal/bomfreshness/**"
+        - "freightworks/services/core-api/routes/worker_hook/**"
+    preprocess: decomment-go
+    params:
+      pattern: '\bEvaluateProjectBomQuantities'
+    cure: "Route a project-wide BOM eval through the lazy read barrier bomfreshness.EnsureActiveBomEvaluated; never open-code calceval.EvaluateProjectBomQuantities in a mutation or consumer (#3269/#5999)."
+    origin: scripts/check-bom-project-eval-seams.sh

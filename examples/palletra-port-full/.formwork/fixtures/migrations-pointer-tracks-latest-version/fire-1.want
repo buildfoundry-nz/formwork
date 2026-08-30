@@ -1,0 +1,4 @@
+# Scope-level: the pointer is stale — the frontier moved to 20000221093000_span_count
+# and LATEST_MIGRATION still names the version before it, so two concurrent
+# migration branches would merge cleanly and collide at boot-migrate.
+- palletra: LATEST_MIGRATION is stale (points to '20000114061500_palletra_add_widget', should be '20000221093000_span_count')

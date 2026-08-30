@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-visionkit-confidence-not-hardcoded.sh
+# (#1896). Visionkit per-detector-family confidence/overlap tuning lives in
+# EXACTLY one place (visionkitconfig.visionkit.config.source.json), injected by
+# the single visionkit.WithDefaults seam. No non-test .go under freightworks may
+# construct a `visionkit.ScanRequest{...}` composite literal that sets the
+# `Certainty:` or `Coverage:` field. Type-anchored on `ScanRequest{` so sibling
+# structs that also have a Certainty field (domainv1.VisionkitAnnotationProperties,
+# visionkit.Prediction) are NOT flagged, and the WithDefaults assignment form
+# (`req.Certainty = cfg.Certainty`) is allowed.
+#
+# Port limitation (noted): the .sh uses `rg --multiline` with `[^}]*` spanning
+# newlines so it catches the field on any line of a multi-line literal.
+# forbidden-pattern is line-oriented (RE2, per-line), so this port faithfully
+# catches the compact single-line literal shape (`ScanRequest{... Certainty:}`)
+# and correctly preserves the type-anchoring; a struct literal gofmt has split
+# across lines is not matched by this line-oriented port.
+rules:
+  - id: visionkit-confidence-not-hardcoded
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: '\bScanRequest\s*\{[^}]*\b(Certainty|Coverage)\s*:'
+    cure: "Remove the Certainty/Coverage literal from the ScanRequest; those knobs come only from visionkit.config.source.json via the visionkit.WithDefaults seam (#1896)."
+    origin: scripts/check-visionkit-confidence-not-hardcoded.sh

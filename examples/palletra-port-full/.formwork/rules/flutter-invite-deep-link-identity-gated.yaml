@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-flutter-invite-link-cleared-on-signout.sh
+# (sweep-5 #1). The durable fix for the 4-cycle pending-invite whack-a-mole is to
+# IDENTITY-GATE the deep-link return: loginRedirect emits the /invite/<token>
+# deep-link ONLY when the invite's bound email matches the signed-in account's
+# email. A blind `return '/invite/$token'` gated only on a non-empty token — with
+# no email comparison — is the F2 next-identity misroute the gate forbids.
+#
+# Ported as a same-file pair-consistency over the Flutter lib surface: the trigger
+# (the `return '/invite/...` deep-link return) obliges the companion (a read of the
+# invite's bound `boundEmail`, the identity-gate anchor) in the same file. A
+# decision file that emits the redirect but never reads boundEmail cannot be
+# comparing identities, so it fires.
+#
+# DIVERGENCE (noted for fidelity): the .sh also (a) requires the signed-in
+# account's email read (currentSessionOrNull / .user.email) alongside boundEmail, and
+# (b) bans the eager-boolean `if (ref.watch(authSignedOutProvider))` clear
+# scoped to the PendingInviteCode notifier's brace-delimited class body. Both need
+# sub-file (method/class-body) scoping or a second required companion that a single
+# same-file pair cannot express; the load-bearing invariant — the deep-link return
+# is identity-gated by the bound boundEmail — is what is carried here.
+rules:
+  - id: flutter-invite-deep-link-identity-gated
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+    params:
+      trigger: 'return\s+''/invite/'
+      requires: 'boundEmail'
+    cure: "Identity-gate the /invite/<token> deep-link return: compare the invite's bound boundEmail against the signed-in account's email (currentSessionOrNull?.user.email) and route ONLY the matching account. Redirecting any ready session on a non-empty token is the F2 next-identity misroute (sweep-5 #1)."
+    origin: scripts/check-flutter-invite-link-cleared-on-signout.sh

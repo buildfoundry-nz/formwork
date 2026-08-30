@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-dart-scan-dirs-must-use-shared-helper.sh (#8997 PR2c).
+# Ratchet meta-gate: a NEW scripts/check-*.go may not hand-roll the Dart
+# library-source scanSourceDirs preamble (a glob over packages/*/lib); it must call
+# the shared dartWalkDirs helper from scripts/lib/file-lists.go. 16
+# grandfathered gates are allowlisted (shrink-only) and carried here as
+# scope.exclude under their post-conversion .go spellings, along with the
+# gate's own file (the original .sh's `self` skip).
+#
+# The original .sh matched the shell for-loop SIG only on non-comment lines
+# (an awk `!/^[[:space:]]*#/` pass). Here `preprocess: decomment-go` blanks Go
+# comments before matching, so the bare `packages/*/lib` literal fires only on
+# real scan code — a comment mentioning the glob shape does not.
+rules:
+  - id: dart-scan-dirs-must-use-shared-helper
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "scripts/check-*.go"
+      exclude:
+        - "scripts/check-dart-scan-dirs-must-use-shared-helper.go"
+        - "scripts/check-dart-forbid-build-context-lint-suppression.go"
+        - "scripts/check-dart-forbid-duplicate-repo-fakes.go"
+        - "scripts/check-dart-forbid-open-coded-spinner.go"
+        - "scripts/check-dart-web-interop-confined-to-platform-edges.go"
+        - "scripts/check-flutter-ci-workflow-structure-checked.go"
+        - "scripts/check-flutter-footer-single-busy-owner.go"
+        - "scripts/check-flutter-load-more-uses-shared-keyset-pager.go"
+        - "scripts/check-flutter-widget-ref-after-await-footer.go"
+        - "scripts/check-flutter-paginated-cursor-must-be-consumed.go"
+        - "scripts/check-flutter-sse-test-double-not-broadcast.go"
+        - "scripts/check-no-refs-to-retired-ts-tree.go"
+        - "scripts/check-no-silent-catch-blocks-in-tests.go"
+        - "scripts/check-no-fe-sku-category-constant.go"
+        - "scripts/check-no-fe-backend-section-policy-drift.go"
+        - "scripts/check-no-hand-rolled-optimistic-update-logic.go"
+        - "scripts/check-page-geometry-route-drops-textruns.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'packages/\*/lib'
+    cure: "Replace the hand-rolled packages/*/lib glob with the shared dartWalkDirs helper from scripts/lib/file-lists.go (#8879)."
+    origin: scripts/check-dart-scan-dirs-must-use-shared-helper.sh

@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+message RatedItem {
+  reserved "active_rate";
+  int32 active_rate = 8; // want: priced-item-current-rate-stays-undeclared
+}

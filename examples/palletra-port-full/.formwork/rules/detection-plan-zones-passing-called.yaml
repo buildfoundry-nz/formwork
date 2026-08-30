@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-detection-plan-zone-gantry-approval.sh (#6386) — Rule C.
+# composeDispatchPlan's zones arm must actually CALL pagesPassingZonesApproval — not
+# merely declare it — so the dispatch fan-out is filtered by the page-scoped zones
+# approval gate before claim/enqueue.
+#
+# Port note: the .sh distinguishes a call from the `func ...` declaration by dropping
+# the declaration line. RE2 has no lookbehind; the anchor instead matches the
+# assignment-call shape `= pagesPassingZonesApproval(` (the real plan.go form
+# `pages = pagesPassingZonesApproval(...)`), which the column-0 `func` declaration
+# — having no `=` before the identifier — cannot satisfy.
+rules:
+  - id: detection-plan-zones-passing-called
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/autodetect/plan.go"
+    preprocess: decomment-go
+    params:
+      pattern: '=\s*pagesPassingZonesApproval\('
+      mode: exists
+    cure: "composeDispatchPlan's zones arm must call pagesPassingZonesApproval(...) (not merely declare it) so dispatch is page-scoped (#6386)."
+    origin: scripts/check-detection-plan-zone-gantry-approval.sh

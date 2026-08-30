@@ -1,0 +1,1 @@
+final cell = DeviceMatrixCell.fromEnvironment();

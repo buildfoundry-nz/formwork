@@ -1,0 +1,14 @@
+The path above is the one the checker reads as the schema snapshot, and here it
+is a DIRECTORY. os.ReadFile then returns EISDIR — an error that is NOT
+os.IsNotExist — which is the case the port used to fold into its "no snapshot,
+skipping" branch and exit 0 over (#262 finding 1). The skip message was false as
+well as silent: the tree HAS something at that path.
+
+A directory is the vector because it is the one a commit can carry. git tracks
+no mode-000 file, and formwork refuses a committed symlink inside a fixture tree
+(internal/fixturetest/run.go), so chmod and symlink both die before review; a
+directory survives a clone, and it is unreadable for root as readily as for
+anyone else, where a runtime chmod would silently pass under a root CI user.
+
+git tracks files rather than directories, so this placeholder is what keeps the
+directory in the tree.

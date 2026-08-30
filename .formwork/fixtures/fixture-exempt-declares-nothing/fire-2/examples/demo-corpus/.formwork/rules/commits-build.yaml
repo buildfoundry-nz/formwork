@@ -1,0 +1,24 @@
+# The block-scalar half of #336. All 68 live declarations in this repository's
+# corpora are written as `>-` with the reason folded below; this is that idiom
+# with the reason deleted — a truncating edit, or a merge that dropped the
+# body. The key is still there, still reads as a declaration, and decodes to
+# the empty string.
+#
+# That decode is why the loader cannot answer this one: "" is what an ABSENT
+# key decodes to as well, so config.Load accepts it as undeclared and
+# fixture-coverage reports the gap wherever the file is loaded. On the content
+# surface nothing loads it, and a reader sees a declared exemption. This rule
+# judges the bytes instead of the decode, which is the only thing available
+# here.
+#
+# The expectation is in the sibling fire-2.want manifest.
+rules:
+  - id: commits-build
+    type: command
+    severity: error
+    fixture_exempt: >-
+    scope:
+      include: ["**/*.go"]
+    params:
+      cmd: ["go", "build", "./..."]
+    cure: "Every commit in the range must build."

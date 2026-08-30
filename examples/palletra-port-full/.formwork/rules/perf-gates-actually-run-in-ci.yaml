@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-perf-gates-actually-run-in-ci.sh (sweep-9c #4). The
+# EXPLAIN query-plan perf gates (TestQuerySpeedHotPaths / TestQuerySpeedMetricReads)
+# self-skip unless RUN_PERF_GATES is set (assertPerfGates). They are the
+# missing-index / seq-scan-cliff backstop for the prod scaling surge, but were
+# DEAD in CI: RUN_PERF_GATES was set in NO workflow, so the gates skipped on every
+# push and their fail-on-any guarantee was vacuous. RULE: if any *_test.go
+# references RUN_PERF_GATES, at least one .github/workflows/*.yml MUST set it, or
+# the gate runs nowhere.
+#
+# Ported as a set-relation SUBSET: side A = the RUN_PERF_GATES token as it appears
+# in test files; side B = the RUN_PERF_GATES token as it appears in workflow YAML.
+# A must be a subset of B — a token used in a test but absent from every workflow
+# is the unwired-gate finding. The clean "no perf gate present" case is honored
+# for free: A is empty, and the empty set is a subset of anything.
+#
+# DIVERGENCE (noted): the .sh scopes side A to *_test.go under freightworks and
+# side B to .github/workflows; this port mirrors those globs exactly. The literal
+# token is the only element on either side, so subset degenerates to "if the
+# token is used in a test it must be set in a workflow" — the exact invariant.
+rules:
+  - id: perf-gates-actually-run-in-ci
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*_test.go"
+        - ".github/workflows/**/*.yml"
+        - ".github/workflows/**/*.yaml"
+    params:
+      a:
+        files:
+          - "freightworks/**/*_test.go"
+        pattern: '(RUN_PERF_GATES)'
+        group: 1
+      b:
+        files:
+          - ".github/workflows/**/*.yml"
+          - ".github/workflows/**/*.yaml"
+        pattern: '(RUN_PERF_GATES)'
+        group: 1
+      relation: subset
+    cure: "A *_test.go gates a t.Skip on RUN_PERF_GATES but NO .github/workflows/*.yml sets it, so the EXPLAIN perf gates are DEAD in CI. Add RUN_PERF_GATES=1 to the Go integration job (push only) so the missing-index / seq-scan backstop actually runs (sweep-9c #4)."
+    origin: scripts/check-perf-gates-actually-run-in-ci.sh

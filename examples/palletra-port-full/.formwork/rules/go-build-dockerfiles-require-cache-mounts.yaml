@@ -1,0 +1,45 @@
+# Ported from Palletra scripts/check-go-build-dockerfiles-require-cache-mounts.sh
+# (#1484). For every Dockerfile whose RUN content invokes `go build`, the gate
+# enforces THREE structural facts: (1) a `# syntax=docker/dockerfile:1` parser
+# directive on the FIRST non-blank line, (2) every `go mod download` RUN mounts
+# `--mount=type=cache,target=/go/pkg/mod`, and (3) every `go build` RUN mounts
+# BOTH `/root/.cache/go-build` AND `/go/pkg/mod` — checked on the JOINED logical
+# RUN command (continuation `\`-lines merged) with comment lines and non-RUN
+# directives stripped, so a rationale comment naming a flag can never satisfy it.
+#
+# ESCAPE (type: command). No declarative formwork type reproduces the gate's
+# core mechanism: it JOINS backslash-continuation lines into one logical RUN
+# command and then asserts the mount flags live on the SAME joined command as
+# the `go build`/`go mod download` verb, AND it asserts a parser directive on
+# the first NON-BLANK line specifically. A line-oriented (or even whole-file
+# multiline) pattern cannot faithfully bound "these flags are on the same RUN as
+# this verb, after joining continuations" nor "on the first non-blank line" — a
+# lossy approximation would either miss a split RUN or false-fire on a flag that
+# sits on a different RUN. The real script is the faithful check; it verifies in
+# CI and self-contained-fixtures cannot express the RUN-join semantics.
+rules:
+  - id: go-build-dockerfiles-require-cache-mounts
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-go-build-dockerfiles-require-cache-mounts.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "**/Dockerfile"
+    params:
+      cmd:
+        - "bash"
+        - "scripts/check-go-build-dockerfiles-require-cache-mounts.sh"
+      expect:
+        exit: 0
+    cure: "Add the BuildKit cache mounts to the offending RUN(s): `RUN --mount=type=cache,target=/go/pkg/mod go mod download` and `RUN --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg/mod ... go build ...`, plus `# syntax=docker/dockerfile:1` on the first line. The sticky-disk builder persists both caches across runs (#1484)."
+    origin: scripts/check-go-build-dockerfiles-require-cache-mounts.sh

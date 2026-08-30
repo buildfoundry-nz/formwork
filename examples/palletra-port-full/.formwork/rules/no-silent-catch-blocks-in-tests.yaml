@@ -1,0 +1,34 @@
+# Ported from Palletra scripts/check-no-silent-catch-blocks-in-tests.sh
+# (audit-gates WI-105). Tests must not swallow exceptions in empty-body
+# catch blocks — a silent `catch (_) {}` ships regressions under green CI.
+# Bans (single line): Dart `catch (x) {}` / `on T catch (x) {}` and TS
+# `catch {}` / `catch (x) {}` / `catch (x: T) {}` whose body between the braces
+# is only whitespace + a single // line comment.
+#
+# APPROXIMATION: the .sh uses ripgrep --pcre2 --multiline, so it also catches
+# empty catch bodies that SPAN lines (a body of only comments across several
+# lines). formwork forbidden-pattern is line-oriented, so this rule catches the
+# common single-line empty catch only; a multi-line empty body is not caught.
+# The union pattern handles both the Dart and TS shapes (the optional catch
+# clause covers TS bare `catch {}`); all RE2-safe, no lookaround/backrefs.
+rules:
+  - id: no-silent-catch-blocks-in-tests
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/test/**/*.dart"
+        - "frontend/integration_test/**/*.dart"
+        - "packages/*/test/**/*.dart"
+        - "packages/*/lib/testing/**/*.dart"
+        - "tests/**/*.ts"
+        - "tests/**/*.tsx"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+        - "**/*.d.ts"
+    params:
+      pattern: '(?:on\s+\w+\s+)?\bcatch\b\s*(?:\(\s*[_a-zA-Z]\w*(?:\s*:\s*\w+)?\s*\)|\(\s*\))?\s*\{\s*(?://[^\n]*)?\}'
+    cure: "Surface the exception: fail (Dart: fail('reason: $e'); TS: throw e), rethrow, or log + assert. A silent empty-body catch hides regressions under green CI."
+    origin: scripts/check-no-silent-catch-blocks-in-tests.sh

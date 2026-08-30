@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-go-weak-type-bans.sh tooth (C): runtime
+# reflection bypass. `reflect.<Exported>` in non-test app code is banned; the
+# .sh carve-out excludes internal/supplierjson, _examples and *_test.go (reflection
+# in tests is legitimate). Raw grep in the .sh; preprocess omitted for parity.
+#
+# FP FIX: the .sh discovers Go MODULES via `find . -maxdepth 3 -name go.mod
+# -not -path './node_modules/*' -not -path './.worktrees/*'
+# -not -path './.claude/worktrees/*'` — so a vendored Go module checked into
+# node_modules (e.g. node_modules/flatted/golang/.../flatted.go, which uses
+# reflect.*) is NEVER scanned. The port's `**/*.go` include did scan it and
+# fired on legitimate third-party code. node_modules / .worktrees /
+# .claude/worktrees are now excluded to match the .sh module-discovery filter.
+rules:
+  - id: go-app-code-bans-reflect
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+      exclude:
+        - "**/node_modules/**"
+        - "**/.worktrees/**"
+        - "**/.claude/worktrees/**"
+        - "**/*_test.go"
+        - "**/vendor/**"
+        - "**/gen/**"
+        - "**/generated/**"
+        - "**/internal/proto/**"
+        - "**/internal/supplierjson/**"
+        - "**/_examples/**"
+        - "**/*_pb.go"
+        - "**/zz_generated_*.go"
+        - "**/*_generated.go"
+    params:
+      pattern: '\breflect\.[A-Z][A-Za-z0-9_]*\b'
+    cure: "Remove reflect.* from app code; name a real interface with the method set you need, or use the proto-generated type (allowed only in internal/supplierjson, _examples and *_test.go)."
+    origin: scripts/check-go-weak-type-bans.sh

@@ -1,0 +1,6 @@
+#!/bin/zsh
+# VIOLATION: zsh is POSIX sh only under emulation, which this shebang does not
+# request. The name ends in "sh", so the limb accepted it; the pre-push hook is
+# checked by the same loop as pre-commit, and both ends of that loop are proved.
+setopt shwordsplit
+exec ./scripts/check-file-size.sh

@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-dart-pdf-page-identity-single-source.sh
+# (#1708 closeout), RULE B: no `.projectId` / `.pageNumber` field read outside
+# `_fingerprintOf`. The .sh exempts a `this.` constructor formal and the
+# `_fingerprintOf` parameter (canonically `w`). regexp2 lookbehind fires a read
+# UNLESS its receiver is the whole word `this` or the whole word `w`.
+#
+# FALSE-POSITIVE FIX. The oracle runs decomment-dart first; the port scanned raw
+# and so matched the `.pageNumber` inside PdfUnderlay's own DOC COMMENT
+# (`/// … open-coded `widget.projectId`/`.pageNumber` comparisons …`), which
+# false-fired on clean develop. Dart shares Go's `//` and `/* */` comment syntax
+# (and `///` doc comments start with `//`), so `preprocess: decomment-go` blanks
+# those comment tails before matching — the port's own decomment-dart step. The
+# real out-of-source reads (e.g. `widget.projectId` in reset/handle-source/drop
+# sites) are CODE, not comments, and still fire.
+rules:
+  - id: pdf-backdrop-identity-read-not-inlined
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/plt_page_raster/lib/presentation/pdf_underlay.dart"
+    preprocess: decomment-go
+    params:
+      pattern: '(?<!\bthis)(?<!\bw)\.(?:projectId|pageNumber)\b'
+      syntax: regexp2
+    cure: "Route page-identity reads through _fingerprintOf(widget) so the reset / handle-source / drop-guard sites cannot drift; only `this.` (constructor formal) and the _fingerprintOf param may read .projectId / .pageNumber (#1708)."
+    origin: scripts/check-dart-pdf-page-identity-single-source.sh

@@ -1,0 +1,30 @@
+# Ported from Palletra scripts/check-backend-docs-links-resolve.sh (Rule 3, the
+# un-rottable-link core): every local .md/.sh link inside docs/backend-standards.md
+# must resolve to a real file.
+#
+# FP FIX (was: root-relative capture). The .sh resolves each link relative to the
+# DOC's directory (docs/), whereas doc-path-exists resolves the captured token against
+# the repo ROOT. The real doc's links are ALL doc-relative — `../scripts/x.sh`,
+# `../CLAUDE.md` (== root) and `./resilience-principles.md` (== docs/) — so the port
+# resolved every one against the wrong base and false-fired on ~76 live, resolvable
+# links. Fixed by making the capture root-relative-correct:
+#   * a leading `../` (doc-relative-to-root, the common case) is consumed by the
+#     non-capturing `(?:\.\./)?` prefix, so `../scripts/x.sh` is captured as
+#     `scripts/x.sh` and resolves correctly from root;
+#   * `./`-prefixed links (doc-relative-to-docs) start with a dot, which the leading
+#     `[^)#:\s.]` class refuses to capture, so they are skipped rather than mis-resolved
+#     against root (a noted divergence: those in-docs siblings go unchecked here, but
+#     the gate stays SILENT on clean develop instead of screaming false positives);
+#   * a bare root-relative path (`docs/foo.md`, the fixture shape) is captured and
+#     resolved from root unchanged, so the invariant still fires on a genuine dead link.
+rules:
+  - id: backend-governance-doc-links-must-resolve
+    type: doc-path-exists
+    severity: error
+    scope:
+      include:
+        - "docs/backend-standards.md"
+    params:
+      pattern: '\]\((?:\.\./)?([^)#:\s.][^)#:\s]*\.(?:md|sh))'
+    cure: "Every local .md/.sh link in docs/backend-standards.md must resolve to a real file; fix or remove the dead link so the backend-governance front door cannot rot."
+    origin: scripts/check-backend-docs-links-resolve.sh

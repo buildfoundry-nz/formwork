@@ -1,0 +1,17 @@
+# Which lint checks this corpus does not answer for, and why.
+#
+# NOTHING. Every check formwork lint knows how to run runs here, and the board
+# is `formwork lint: 5/5 checks passed`. Re-derive rather than quoting this
+# sentence — it has been wrong in a sibling corpus before:
+#
+#   $ formwork lint -C examples/palletra-port-flutter-forbid | tail -1
+#
+# This corpus is FIXTURE MATERIAL: a thin slice of a much larger tree, ported so
+# each rule has something real to discriminate on. `formwork test` — does each
+# rule fire on its fire fixture and stay quiet on its pass fixture — is the
+# question it exists to answer, and `make selftest` asks it. That does not buy
+# it an exemption from the repo-shaped checks: it used to skip exemption-hygiene,
+# and paying for the skip cost 6 justification comments on scope.exclude entries
+# the slice does not reach. They are written on the entries themselves.
+version: 1
+skip: []

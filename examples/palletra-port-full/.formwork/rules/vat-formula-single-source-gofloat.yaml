@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-vat-formula-single-source.sh, RULE B.
+# The Go-float VAT rate/amount shape `<...vat...> / 100` (a vat identifier divided
+# by 100) must live only in internal/vatmath/vatmath.go. Catches both the inline
+# `subtotal * opts.VATPercent / 100` and the hoisted-rate `vat := opts.VATPercent
+# / 100` forms. An unrelated `upliftPercent / 100` (no vat token) never fires, and
+# the SQL `vat_percent::numeric / 100` form is RULE A's job (the `::` breaks the
+# identifier run). Case-insensitive, comment-stripped (decomment-go), sanctioned
+# file exempted by exact path suffix.
+rules:
+  - id: vat-formula-single-source-gofloat
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/vatmath/vatmath.go"
+    preprocess: decomment-go
+    params:
+      pattern: '(?i)[A-Za-z0-9_.]*vat[A-Za-z0-9_.]* */ *100'
+    cure: "Import internal/vatmath and use vatmath.VatAmount(netAmount, vatPercent) for the Go-float VAT path — never inline a vat identifier divided by 100."
+    origin: scripts/check-vat-formula-single-source.sh

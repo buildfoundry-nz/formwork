@@ -1,0 +1,43 @@
+# Ported from Palletra
+# scripts/check-priced-page-metric-recompute-covered-by-test.sh (sweep-10
+# MC-1, hardened by sweep-21-closeout #12). Every page-metric code wired into an
+# approve section's PageTallyCodes is a PRICED metric: on approve it MUST
+# materialize into palletra.page_gauges via pagerefresh.Recompute. A break in
+# that wiring silently zeros the Kit line the metric feeds ($0-pricing, #1655).
+# Coverage is proven by a REAL recompute integration test, never a string
+# mention: for each priced code derived at RUNTIME from
+# internal/workflow/approve/*.go PageTallyCodes, some `//go:build integration`
+# test must BOTH drive the recompute (Recompute( / the approve-step path) AND
+# read the code back from page_gauges (the table, or the aggregatedGaugeByCode /
+# readPricedPageGauge read helpers), with the code literal BOUND to the read.
+#
+# This is a cross-file SET-RELATION with a proximity-bound literal check —
+# derive-a-set-then-require-covered, not any per-file/per-statement predicate — so
+# it maps to the command ESCAPE HATCH: a self-contained Go reproduction
+# (checks/check.go, committed in each fixture) re-derives the priced-code set from
+# the fixture's approve/*.go and requires every code to sit in a corpus test that
+# drives recompute and reads it back. The finding is scope-level (no want marker
+# — see fire-1.want): fire-1 adds a priced code with no covering recompute test;
+# pass-1 covers the same code with a real recompute integration test.
+#
+# DIVERGENCE (noted): faithful to the .sh's derive→drive→read→bind shape, but the
+# reproduction uses a trimmed helper/anchor set (Recompute(|approve-step|
+# ApproveStage to drive; page_gauges|aggregatedGaugeByCode|readPricedPageGauge
+# to read) rather than the full semantic-anchor list — the mechanism, not the
+# exact anchor roster, is what ports.
+rules:
+  - id: priced-page-metric-recompute-covered-by-test
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - go
+        - run
+        - checks/check.go
+      expect:
+        exit: 0
+    cure: "For every priced page-metric code in an approve section's PageTallyCodes, add a //go:build integration test that drives pagerefresh.Recompute (or the approve-step path) AND reads the code back from palletra.page_gauges — a bare string mention in a migration-seed or BOM test does NOT count (sweep-10 MC-1 / closeout #12)."
+    origin: scripts/check-priced-page-metric-recompute-covered-by-test.sh

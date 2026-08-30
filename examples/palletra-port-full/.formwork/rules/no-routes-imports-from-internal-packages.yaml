@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-no-routes-imports-from-internal-packages.sh (#2512).
+# The dependency arrow is routes -> internal only. No non-test *.go under
+# freightworks/internal/ or freightworks/services/core-api/internal/ may import
+# ANY package under services/core-api/routes/ (root package or subpackage).
+# The .sh anchors the import literal on quotes; the RE2 pattern does the same,
+# with (/[^"]*)? matching both the routes root package and any subpackage.
+rules:
+  - id: no-routes-imports-from-internal-packages
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/internal/**/*.go"
+        - "freightworks/services/core-api/internal/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: '"github\.com/palletra/freightworks/services/core-api/routes(/[^"]*)?"'
+    cure: "internal/ must never import services/core-api/routes/. Move the helper into an internal package (bomdoc recipe) or narrow your inputs so the routes type is unnecessary (gaugeseed recipe). No allowlist (#2512)."
+    origin: scripts/check-no-routes-imports-from-internal-packages.sh

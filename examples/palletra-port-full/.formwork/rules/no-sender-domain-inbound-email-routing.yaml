@@ -1,0 +1,18 @@
+# Ported from Palletra scripts/check-inbound-email-recipient-token-routing.sh (#8792),
+# pattern C (NEGATIVE invariant). The retired From-domain routing key `email_domain`
+# was the spoofable domain-match input that let a forged From route mail into
+# another org. Its PRESENCE anywhere in non-test routes/mail_intake/ is the
+# violation — a forbidden-pattern.
+rules:
+  - id: no-sender-domain-inbound-email-routing
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/mail_intake/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: 'email_domain'
+    cure: "Route inbound mail off the recipient inbound token, not the sender's email domain; the email_domain column must never drive org selection (#8792)."
+    origin: scripts/check-inbound-email-recipient-token-routing.sh

@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-dart-no-tier-value-literals.sh
+# (sweep-8 #7). The manual-tier picker must render the server's
+# AssignableTiers set, never an FE-hardcoded list. Fingerprint: the two
+# tier sentinels written adjacently — 900 (mezzanine) + 901 (loft) — as
+# `900, 901` in either order, which ordinary code does not co-locate. Bans it
+# across all Dart library source (frontend/lib + packages/*/lib), excluding
+# generated part files.
+rules:
+  - id: dart-no-tier-value-literals
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+    params:
+      pattern: '900\s*,\s*901|901\s*,\s*900'
+    cure: "Render the server-owned set from the page payload (page.assignableTiers, populated by scanproject.AssignableTiers) as MeasureTierBanner._TierPicker does — never hardcode the tier list on the FE."
+    origin: scripts/check-dart-no-tier-value-literals.sh

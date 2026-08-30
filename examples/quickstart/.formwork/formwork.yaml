@@ -1,0 +1,25 @@
+version: 1
+
+# Lanes group rules for different moments. A lane selects rules — it never
+# changes what a rule means, so a finding is the same finding whichever lane
+# surfaced it.
+#
+# Run one with `formwork check --lane <name>`. With no --lane, every rule runs.
+lanes:
+  # What a pre-commit hook runs: fast rules only, so the hook stays quick
+  # enough that nobody is tempted to pass --no-verify.
+  pre-commit:
+    all: true
+    cost: fast
+
+  # What CI runs: everything, including any heavy rule that shells out to an
+  # external tool. `ci: true` marks this as the lane a CI job should use.
+  ci:
+    all: true
+    ci: true
+
+  # Lanes can also select by tag rather than "everything". This one runs only
+  # the rules tagged `sql` — useful when a migration is the only thing that
+  # changed and you want the fast answer.
+  migrations:
+    tags: [sql]

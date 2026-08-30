@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-detection-plan-zone-gantry-approval.sh (#6386) — Rule B.
+# The single file internal/autodetect/plan.go must reference
+# detectiongates.CheckGantriesApprovalGate, so gantryPairsPassingApproval consults the
+# page-scoped gantries gate. Comments are stripped so a prose mention cannot satisfy it.
+rules:
+  - id: detection-plan-gantries-approval-gate
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/autodetect/plan.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'CheckGantriesApprovalGate'
+      mode: exists
+    cure: "plan.go must keep calling detectiongates.CheckGantriesApprovalGate so the gantries detection plan is page-scoped (#6386)."
+    origin: scripts/check-detection-plan-zone-gantry-approval.sh

@@ -1,0 +1,123 @@
+# Ported from Palletra scripts/check-source-enumeration-single-source.sh (#8879 /
+# #3168 meta-gate). Nine shared helper functions may each be DEFINED at
+# most once across scripts/ — a re-inlined local copy is exactly the drift the
+# lib extraction removes. The original .sh hardcoded the same nine names in
+# FUNCS and, per function, counted anchored definition lines across
+# scripts/**/*.sh, failing when any count exceeded 1. This port counts
+# anchored Go function definitions (`^func name(`) across scripts/**/*.go
+# instead.
+#
+# Mapping: this is a per-identifier COUNT constraint, so it ports to one
+# `pattern-count` rule per function (op: at-most, n: 1) — the conjunction of
+# the nine is the gate, matching the original's per-name loop. A call site
+# (`dartSourcePaths(m)`) does not begin with `func` and is not counted,
+# exactly as the anchored definition pattern excludes it.
+rules:
+  - id: dart-source-files-fn-single-definition
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "scripts/**/*.go"
+    params:
+      pattern: '^func dartSourcePaths\('
+      op: at-most
+      n: 1
+    cure: "Delete the duplicate dartSourcePaths() definition and use the shared helper in scripts/lib/file-lists.go instead — it is the single source (#8879)."
+    origin: scripts/check-source-enumeration-single-source.sh
+  - id: dart-all-paths-single-definition
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "scripts/**/*.go"
+    params:
+      pattern: '^func dartAllPaths\('
+      op: at-most
+      n: 1
+    cure: "Delete the duplicate dartAllPaths() definition and use the shared helper in scripts/lib/file-lists.go instead (#8879)."
+    origin: scripts/check-source-enumeration-single-source.sh
+  - id: dart-walk-dirs-single-definition
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "scripts/**/*.go"
+    params:
+      pattern: '^func dartWalkDirs\('
+      op: at-most
+      n: 1
+    cure: "Delete the duplicate dartWalkDirs() definition and use the shared helper in scripts/lib/file-lists.go instead (#8879)."
+    origin: scripts/check-source-enumeration-single-source.sh
+  - id: go-src-files-single-definition
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "scripts/**/*.go"
+    params:
+      pattern: '^func goSrcFiles\('
+      op: at-most
+      n: 1
+    cure: "Delete the duplicate goSrcFiles() definition and use the shared helper in scripts/lib/file-lists.go instead (#2248)."
+    origin: scripts/check-source-enumeration-single-source.sh
+  - id: tracked-paths-glob-single-definition
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "scripts/**/*.go"
+    params:
+      pattern: '^func flListedPathsMatchingGlob\('
+      op: at-most
+      n: 1
+    cure: "Delete the duplicate flListedPathsMatchingGlob() definition and use the shared helper in scripts/lib/file-lists.go instead (#6882)."
+    origin: scripts/check-source-enumeration-single-source.sh
+  - id: dart-generated-paths-single-definition
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "scripts/**/*.go"
+    params:
+      pattern: '^func dartGeneratedPaths\('
+      op: at-most
+      n: 1
+    cure: "Delete the duplicate dartGeneratedPaths() definition and use the shared helper in scripts/lib/file-lists.go instead (#6882)."
+    origin: scripts/check-source-enumeration-single-source.sh
+  - id: decomment-go-single-definition
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "scripts/**/*.go"
+    params:
+      pattern: '^func stripCommentsGo\('
+      op: at-most
+      n: 1
+    cure: "Delete the duplicate stripCommentsGo() definition and use the shared helper in scripts/lib/decomment.go instead — the single source for the decomment helpers (#3168)."
+    origin: scripts/check-source-enumeration-single-source.sh
+  - id: decomment-dart-single-definition
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "scripts/**/*.go"
+    params:
+      pattern: '^func stripCommentsDart\('
+      op: at-most
+      n: 1
+    cure: "Delete the duplicate stripCommentsDart() definition and use the shared helper in scripts/lib/decomment.go instead (#3168)."
+    origin: scripts/check-source-enumeration-single-source.sh
+  - id: decomment-yaml-single-definition
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "scripts/**/*.go"
+    params:
+      pattern: '^func stripCommentsYaml\('
+      op: at-most
+      n: 1
+    cure: "Delete the duplicate stripCommentsYaml() definition and use the shared helper in scripts/lib/decomment.go instead (#3168)."
+    origin: scripts/check-source-enumeration-single-source.sh

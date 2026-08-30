@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-no-hand-rolled-crew-card.sh — TIER 1.
+# (sweep-2 #14 / sweep-3 #9 / sweep-4 #9 / sweep-6 #3.) The muted member-tile
+# SHELL (a low-emphasis muted surface color carrying .withValues(alpha…) paired
+# with cornerRadiusSm, in any of three implementations — BoxDecoration,
+# ClipRRect+ColoredBox, or Card/Sku+RoundedRectangleBorder, either source
+# order) lives only in CrewTile.
+#
+# The .sh has two tiers with different scope+conditions, so it ports to two
+# forbidden-pattern rules (this is tier 1). TIER 1 = the DEDICATED member
+# surfaces (feature_membership/ + feature_workspace/ presentation): the bare shell alone
+# fires, no member-row type required. The shell's ${PCRE} 6-way alternation is
+# already pure consuming regex (bounded lazy (?:.|\n){0,200}? windows, NO
+# lookaround), so it ports to linear RE2 unchanged — a plain multiline
+# forbidden-pattern. The match starts at the shell's anchor token
+# (BoxDecoration(/ClipRRect(/ColoredBox(/Card(), so the finding is reported on
+# that line. crew_tile.dart (the canonical home, which sits inside this scope)
+# is carved out by path.
+rules:
+  - id: no-hand-rolled-member-tile-primary-scope
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_membership/lib/presentation/**/*.dart"
+        - "packages/feature_workspace/lib/presentation/**/*.dart"
+      exclude:
+        - "**/crew_tile.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+    params:
+      # Origin: rg --pcre2 --multiline 6-way alternation over the muted-tile shell.
+      # Pure consuming regex (no lookaround) => linear RE2 unchanged. (?:.|\n){0,N}?
+      # crosses lines without backtracking; LocateLine anchors on the shell's opening
+      # token line (fixture want-marker).
+      pattern: 'BoxDecoration\((?:.|\n){0,200}?(?:surfaceContainer[A-Za-z]*|surfaceVariant|baseColors\.[A-Za-z_]+)\.withValues\(\s*alpha(?:.|\n){0,200}?cornerRadiusSm|BoxDecoration\((?:.|\n){0,200}?cornerRadiusSm(?:.|\n){0,200}?(?:surfaceContainer[A-Za-z]*|surfaceVariant|baseColors\.[A-Za-z_]+)\.withValues\(\s*alpha|ClipRRect\((?:.|\n){0,200}?cornerRadiusSm(?:.|\n){0,200}?ColoredBox\((?:.|\n){0,80}?(?:surfaceContainer[A-Za-z]*|surfaceVariant|baseColors\.[A-Za-z_]+)\.withValues\(\s*alpha|ColoredBox\((?:.|\n){0,80}?(?:surfaceContainer[A-Za-z]*|surfaceVariant|baseColors\.[A-Za-z_]+)\.withValues\(\s*alpha(?:.|\n){0,200}?ClipRRect\((?:.|\n){0,80}?cornerRadiusSm|(?:Card|Sku)\((?:.|\n){0,200}?(?:surfaceContainer[A-Za-z]*|surfaceVariant|baseColors\.[A-Za-z_]+)\.withValues\(\s*alpha(?:.|\n){0,200}?RoundedRectangleBorder\((?:.|\n){0,80}?cornerRadiusSm|(?:Card|Sku)\((?:.|\n){0,200}?RoundedRectangleBorder\((?:.|\n){0,80}?cornerRadiusSm(?:.|\n){0,200}?(?:surfaceContainer[A-Za-z]*|surfaceVariant|baseColors\.[A-Za-z_]+)\.withValues\(\s*alpha'
+      multiline: true
+    cure: "Render the row through the shared CrewTile (packages/feature_membership/lib/presentation/crew_tile.dart): CrewTile(primary: …, secondary: …, trailing: …)."
+    origin: scripts/check-no-hand-rolled-crew-card.sh

@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-no-locally-defined-empty-state-widgets.sh (#6755).
+# Shared-widget anti-drift finisher: no Dart library source OUTSIDE
+# packages/plt_widgets/lib/ may DECLARE a class in a shared shape family
+# (BlankState* | NavRow* | ToggleRow*, public or _-private, behind any Dart
+# class-modifier stack). Line-anchored on the class declaration; generated
+# files and the shared plt_widgets home are excluded.
+rules:
+  - id: no-locally-defined-empty-state-widgets
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "packages/plt_widgets/lib/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+    params:
+      pattern: '^(abstract |base |final |sealed |interface |mixin )*class _?(BlankState|NavRow|ToggleRow)[A-Za-z0-9_]*'
+    cure: "Extend / reuse the shared widget in packages/plt_widgets/lib/ (BlankStateView, ToggleRow); if the variant is missing, add it there and migrate onto it — do not fork a private copy (#6755)."
+    origin: scripts/check-no-locally-defined-empty-state-widgets.sh

@@ -1,0 +1,13 @@
+name: plt_canvas_kit
+description: Higher-layer canvas engine (rank 2).
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  meta: ^1.15.0
+  # DOWNWARD EDGE: rank-2 canvas_kit depends on rank-0 plt_base. The arrow
+  # points down in rank — legitimate layering, no violation.
+  plt_base:
+    path: ../plt_base

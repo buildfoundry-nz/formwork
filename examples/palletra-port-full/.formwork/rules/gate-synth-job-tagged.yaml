@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-gate-synth-job-tagged.sh (sweep-2 #4).
+# The gatetests synths carry //go:build gate, so a plain `go test`
+# compiles them out. The synth workflow MUST invoke go test on the
+# gatetests package WITH `-tags gate`, or the job passes vacuously.
+# The .sh filters workflow lines matching `go test .*internal/gatetests`
+# and requires `-tags[ =]gate` among them; the alternation below asserts a
+# single command line carries BOTH tokens in either order (exists mode over the
+# one workflow file). Divergence: the .sh treats a MISSING workflow file as a
+# skip/pass; exists-mode instead requires the anchor present (in Palletra the
+# file exists, so the behavior matches on the real tree).
+rules:
+  - id: gate-synth-job-tagged
+    type: required-pattern
+    scope:
+      include:
+        - ".github/workflows/gate-synth-tests.yml"
+    preprocess: raw
+    params:
+      pattern: 'go test.*-tags[ =]gate.*internal/gatetests|go test.*internal/gatetests.*-tags[ =]gate'
+      mode: exists
+    cure: "Run the gatetests package with '-tags gate' in gate-synth-tests.yml or the //go:build gate synths compile out and the job passes vacuously (sweep-2 #4)."
+    origin: scripts/check-gate-synth-job-tagged.sh

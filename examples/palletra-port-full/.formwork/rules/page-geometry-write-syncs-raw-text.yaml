@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-page-geometry-write-syncs-raw-text.sh
+# (audit-#17). The search route prefilters pages in the DB via
+# palletra.page_layout.plain_text (the page's text runs, newline-joined) instead
+# of decoding every page's layout_payload blob. That prefilter is only correct
+# if plain_text stays in lockstep with the payload: every code path that WRITES a
+# page_layout row (INSERT or UPDATE) must set plain_text too, or the column goes
+# stale/NULL and the DB filter silently drops that page from search results.
+#
+# Ported as a sql/statement-predicate. `table` SELECTS every INSERT INTO / UPDATE
+# of palletra.page_layout (readers use `FROM`, which the selector never
+# matches — the .sh's write-only anchor). Each selected write STATEMENT must
+# satisfy `require: plain_text` WITHIN that statement, which is exactly the .sh's
+# per-statement binding (#7396): the token must appear in the same INSERT/UPDATE
+# literal, not merely somewhere else in the file, so a new UPDATE that omits
+# plain_text cannot hide behind an unrelated plain_text SELECT.
+#
+# DIVERGENCE (noted): the .sh's forcing-function escape — a genuine non-text
+# UPDATE (e.g. touching only updated_at) satisfies the gate with a one-line
+# COMMENT naming plain_text — does not carry over, because sqltext scans only the
+# reassembled SQL literal, never the Go comment around it. Such a write must
+# instead include `plain_text` inside the statement (e.g. `SET …, plain_text =
+# plain_text`) to pass here. This is stricter, never laxer, than the .sh.
+rules:
+  - id: page-geometry-write-syncs-raw-text
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      table: '(INSERT INTO|UPDATE)[ \t\n]+palletra\.page_layout'
+      require:
+        - 'plain_text'
+    cure: "Set plain_text in every palletra.page_layout INSERT/UPDATE (it is the search DB-prefilter mirror; see internal/textsearch.RawText). A writer that omits it silently stales the column and drops the page from search (audit-#17)."
+    origin: scripts/check-page-geometry-write-syncs-raw-text.sh

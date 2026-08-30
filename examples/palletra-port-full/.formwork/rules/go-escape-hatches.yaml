@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-go-escape-hatches.sh (full-repo Go
+# escape-hatch gate).
+#
+# A ~20-rule Go escape-hatch sweep: bans any/interface{} double-cast laundering,
+# unsafe.*, //nolint & //lint:ignore & //staticcheck:ignore, forbidden //go:
+# pragmas, non-comma-ok type assertions, slog.Debug/fmt.Println/Printf in
+# non-test code, CGo import "C", RETURNING (SELECT ...) SQL, and more. No
+# baseline, no allowlist for the core patterns.
+#
+# The gate is a many-pattern ripgrep sweep across every Go module (with a
+# disk-headroom retry harness, a per-line comma-ok filter, and context-window
+# org_id checks). No single declarative type captures the union of ~20 text
+# patterns plus the AST-ish comma-ok filter and the cross-file recompute joins,
+# so it ports to the `command` escape hatch: a self-contained grep reproducing
+# the load-bearing text-pattern rules (laundering, unsafe.*, linter-silence
+# directives, forbidden //go: pragmas, CGo import "C"). Scope-level finding —
+# fire-1 carries a .go file with escape-hatch patterns, pass-1 is clean.
+#
+# APPROXIMATION (noted): this reproduces the text-pattern rules only; the
+# comma-ok AST filter (rule 5), the tenant-mutation context-window org_id check
+# (rule 11), the routes-recompute cross-file joins (rule 12), and the os.Getenv
+# path allowlist (rule 15) are not modeled by the grep. The core "no
+# unsafe/laundering/nolint/pragma/CGo" invariant is faithful.
+rules:
+  - id: go-escape-hatches
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - "sh"
+        - "-c"
+        - "! grep -rnE '\\bunsafe\\.(Pointer|Slice|String|SliceData|StringData)\\b|//[[:space:]]*(nolint([:[:space:]]|$)|lint:(file-)?ignore|staticcheck:ignore)|\\.\\(any\\)\\.\\(|\\.\\(interface\\{\\}\\)\\.\\(|^//go:(linkname|nocheckptr|nosplit|noinline|nowritebarrier|systemstack|uintptrescapes)\\b|^[[:space:]]*\"C\"$' --include=*.go ."
+      expect:
+        exit: 0
+    cure: "Use a proto-generated/concrete type instead of any/interface{} laundering; fix the underlying issue rather than //nolint-ing it; unsafe.*, forbidden //go: pragmas and CGo import \"C\" are forbidden in app code."
+    origin: scripts/check-go-escape-hatches.sh

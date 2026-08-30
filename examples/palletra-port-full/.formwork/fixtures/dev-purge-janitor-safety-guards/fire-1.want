@@ -1,0 +1,5 @@
+# Scope-level. The pin carries the `want 0: ` boundary because the detector's whole
+# verdict is an `echo` literal inside its own `bash -c` body, so the bare sentence is
+# already in the argv every finding of this rule renders; anchoring at the frame's end
+# is what makes it hold that the tool PRINTED it.
+- want 0: lost MAX_AGE validation

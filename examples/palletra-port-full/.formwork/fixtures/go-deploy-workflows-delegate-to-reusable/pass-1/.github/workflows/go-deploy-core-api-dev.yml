@@ -1,0 +1,11 @@
+name: go-deploy-core-api-dev
+on:
+  push:
+    branches: [develop]
+jobs:
+  deploy:
+    uses: ./.github/workflows/go-deploy-core-api.yml
+    with:
+      env: dev
+      service: core-api
+    secrets: inherit

@@ -1,0 +1,3 @@
+syntax = "proto3";
+package palletra.domain.v1;
+message Dead { string id = 1; }

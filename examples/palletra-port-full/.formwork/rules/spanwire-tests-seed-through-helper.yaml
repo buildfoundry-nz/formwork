@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-spanwire-tests-seed-through-helper.sh (#6407).
+# The spanwire integration tests must seed the org/user/project/version/
+# run/page graph through the shared primeDimPage helper, never re-inline it. Any
+# spanwire *_test.go OTHER than the helper home (prime_integration_test.go)
+# that raw-STOREs into a seed-graph table fails. Case-insensitive, whitespace-
+# tolerant around the schema dot; comment-aware via decomment-go so a doc
+# comment naming an INSERT cannot false-positive. RE2 keeps the .sh's \b and
+# (?i); no lookaround needed.
+rules:
+  - id: spanwire-tests-seed-through-helper
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workerharness/spanwire/**/*_test.go"
+      exclude:
+        - "**/prime_integration_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '(?i)insert\s+into\s+(platform\s*\.\s*organizations|users\b|palletra\s*\.\s*(projects|project_revisions|extraction_attempts|pages))'
+    cure: "Replace the inline INSERT chain with primeDimPage(t, ctx, pool, <slug>) (prime_integration_test.go) so a schema change is one edit."
+    origin: scripts/check-spanwire-tests-seed-through-helper.sh

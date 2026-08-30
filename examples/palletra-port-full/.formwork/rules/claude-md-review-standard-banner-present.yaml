@@ -1,0 +1,97 @@
+# Ported from Palletra scripts/check-review-standard-banner-wired.sh (required-anchor).
+# The gate asserts the whole review-standard wiring is present as one un-rottable
+# unit: five limbs across CLAUDE.md, AGENTS.md, the SessionStart banner text,
+# .claude/settings.json, the failure-modes hook, and the skill. Each limb is a
+# grep-for-presence of one token in one file, so each ports to a required-pattern
+# in exists mode over that single-file scope (exists-mode passes when the scope
+# matches zero files, faithfully mirroring the .sh "no CLAUDE.md -> exit 0"
+# carve-out). A missing token in a present file fires a scope-level finding.
+rules:
+  - id: claude-md-review-standard-banner-present
+    type: required-pattern
+    scope:
+      include:
+        - "CLAUDE.md"
+    params:
+      pattern: 'REVIEW STANDARD: DEVIATIONS ARE REWORKED, NOT WAIVED'
+      mode: exists
+    cure: "Restore the review-standard banner sentinel at the top of CLAUDE.md."
+    origin: scripts/check-review-standard-banner-wired.sh
+
+  - id: review-standard-claude-md-names-standard
+    type: required-pattern
+    scope:
+      include:
+        - "CLAUDE.md"
+    params:
+      pattern: 'layered-review'
+      mode: exists
+    cure: "CLAUDE.md must keep naming the layered-review standard it assesses work against."
+    origin: scripts/check-review-standard-banner-wired.sh
+
+  - id: review-standard-banner-txt-names-standard
+    type: required-pattern
+    scope:
+      include:
+        - ".claude/hooks/review-standard-banner.txt"
+    params:
+      pattern: 'layered-review'
+      mode: exists
+    cure: "The SessionStart banner (.claude/hooks/review-standard-banner.txt) must name the layered-review standard."
+    origin: scripts/check-review-standard-banner-wired.sh
+
+  - id: review-standard-banner-wired-into-sessionstart
+    type: required-pattern
+    scope:
+      include:
+        - ".claude/settings.json"
+    params:
+      pattern: 'review-standard-banner\.txt'
+      mode: exists
+    cure: ".claude/settings.json must wire review-standard-banner.txt into SessionStart or the banner never reaches an agent."
+    origin: scripts/check-review-standard-banner-wired.sh
+
+  - id: review-standard-agents-md-names-standard
+    type: required-pattern
+    scope:
+      include:
+        - "AGENTS.md"
+    params:
+      pattern: 'layered-review'
+      mode: exists
+    cure: "AGENTS.md (the non-CLAUDE.md agent entry point) must name the layered-review standard."
+    origin: scripts/check-review-standard-banner-wired.sh
+
+  - id: review-standard-failuremodes-extracted-live
+    type: required-pattern
+    scope:
+      include:
+        - ".claude/hooks/review-standard-failure-modes.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\.claude/skills/layered-review/SKILL\.md'
+      mode: exists
+    cure: "The failure-modes hook must extract its slice LIVE from .claude/skills/layered-review/SKILL.md, not a pasted copy that drifts."
+    origin: scripts/check-review-standard-banner-wired.sh
+
+  - id: review-standard-failuremodes-wired-into-sessionstart
+    type: required-pattern
+    scope:
+      include:
+        - ".claude/settings.json"
+    params:
+      pattern: 'review-standard-failure-modes\.go'
+      mode: exists
+    cure: ".claude/settings.json must wire review-standard-failure-modes.go into SessionStart."
+    origin: scripts/check-review-standard-banner-wired.sh
+
+  - id: review-standard-skill-failuremodes-section-present
+    type: required-pattern
+    scope:
+      include:
+        - ".claude/skills/layered-review/SKILL.md"
+    params:
+      pattern: '## What this review checks'
+      mode: exists
+    cure: "SKILL.md must keep the '## What this review checks' section the SessionStart hook extracts, or the injected slice is empty."
+    origin: scripts/check-review-standard-banner-wired.sh

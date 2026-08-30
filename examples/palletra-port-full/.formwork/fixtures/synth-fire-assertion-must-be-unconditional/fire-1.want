@@ -1,0 +1,1 @@
+- freightworks/internal/gatetests/gate_simulated_test.go:15: t.Skip inside if-err-nil fire assertion

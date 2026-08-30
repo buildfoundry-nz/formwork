@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-sku-readers-read-the-entity.sh
+# (#2413 PH-4), RULE B (BOM reader). The internal/skuspromote package must
+# contain at least one non-test file that calls projectparses.EntitySkus(
+# — proving the BOM reader resolves a sku's identity from the entity
+# (palletra.project_skus + sku_membership), not by re-folding raw
+# sightings. Exists-mode over the package's non-test Go is the faithful port of
+# the .sh's per-package go_src_files scan.
+rules:
+  - id: sku-reader-promote-reads-entity
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/skuspromote/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'projectparses\.EntitySkus\('
+      mode: exists
+    cure: "The BOM reader (internal/skuspromote) must call projectparses.EntitySkus — resolve identity from the entity, never re-fold (#2413)."
+    origin: scripts/check-sku-readers-read-the-entity.sh

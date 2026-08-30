@@ -1,0 +1,2 @@
+// GENERATED CODE
+class Live {}

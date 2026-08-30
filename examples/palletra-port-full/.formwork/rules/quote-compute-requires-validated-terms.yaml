@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-quote-compute-requires-validated-terms.sh
+# (sweep-9c #2 gate). quoterates.Compute applies
+# subtotal*(1+(markup+contingency)/100) over raw percentage inputs. Any Go file
+# that calls it MUST first validate the commercial terms
+# (validatePricingTerms), or a negative/absurd percent writes a wrong
+# customer-facing total onto the immutable built_quotes artifact. The
+# internal/quoterates package that DEFINES Compute is exempt.
+#
+# Ported verbatim as pair-consistency: a non-test Go file referencing
+# `quoterates.Compute(` (trigger) MUST also reference `validatePricingTerms(`
+# (requires), same file. preprocess: raw — the .sh uses plain grep (a commented
+# call counts either way), so raw is the faithful match. The internal/quoterates
+# definition site and *_test.go files are carved out of scope.
+rules:
+  - id: quote-compute-requires-validated-terms
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/quoterates/**"
+    preprocess: raw
+    params:
+      trigger: 'quoterates\.Compute\('
+      requires: 'validatePricingTerms\('
+    cure: "Every quoterates.Compute caller must call validatePricingTerms( first, rejecting out-of-range markup/contingency before pricing writes to the immutable built_quotes artifact (sweep-9c #2)."
+    origin: scripts/check-quote-compute-requires-validated-terms.sh

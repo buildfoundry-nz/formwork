@@ -1,0 +1,2 @@
+# The whole file is the violation, so the expectation is path-only (line 0).
+internal/oversized.go

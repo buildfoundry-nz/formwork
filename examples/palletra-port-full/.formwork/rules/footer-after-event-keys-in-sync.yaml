@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-footer-after-event-keys-in-sync.sh
+# (layered-review C3-FR-3 / #3872). GetMainActionResponse.after is a map
+# keyed by a CLOSED event-key set that is dual-sourced by hand across the language
+# boundary: Go primaryaction.FooterSignal* consts (+ AllFooterActions) and Dart
+# FooterPostEvent string consts (+ FooterPostEvent.all). Add a key on one side
+# and forget the other, and either the server ships a cell the FE never looks up,
+# or the FE looks up a key the server never fills — a silent footer-flip miss with
+# no failing test.
+#
+# Ported as a set-relation EQUAL join: the Go FooterSignal* string values and the
+# Dart FooterPostEvent string-const values must be the same set. A key present on
+# only one side is reported.
+#
+# DIVERGENCE (noted for fidelity): the .sh exits 2 when either extracted set is
+# EMPTY (a source moved / the const shape drifted). set-relation cannot express
+# that anti-vacuity guard — an empty set trivially satisfies nothing-to-diff — so
+# only the core equality is ported; formwork lint owns empty-scope rot. The Dart
+# extraction here is file-scoped rather than class-body-scoped, so the fixture
+# keeps the FooterPostEvent consts as the only `static const x = '...'` in the
+# file (FooterPostEvent.all re-lists identifiers, contributing no literals).
+rules:
+  - id: footer-after-event-keys-in-sync
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workflow/primaryaction/footer_signals.go"
+        - "packages/plt_canvas_kit/lib/measure/domain/footer_post.dart"
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/internal/workflow/primaryaction/footer_signals.go"
+        pattern: 'FooterSignal[A-Za-z]+\s*=\s*"([a-z_]+)"'
+        group: 1
+      b:
+        files:
+          - "packages/plt_canvas_kit/lib/measure/domain/footer_post.dart"
+        pattern: "static const [A-Za-z_][A-Za-z0-9_]* = '([a-z_]+)';"
+        group: 1
+      relation: equal
+    cure: "The after[event] key set is one contract. Add/remove the key on BOTH sides — Go primaryaction.FooterSignal* + AllFooterActions, and Dart FooterPostEvent string consts + FooterPostEvent.all — plus the dual-encode table in the route (#3872)."
+    origin: scripts/check-footer-after-event-keys-in-sync.sh

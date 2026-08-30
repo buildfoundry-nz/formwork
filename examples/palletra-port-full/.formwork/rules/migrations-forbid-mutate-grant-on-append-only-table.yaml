@@ -1,0 +1,34 @@
+# Ported from Palletra scripts/check-migrations-forbid-mutate-grant-on-append-only-table.sh
+# (sweep-9c #5). Tables declared IMMUTABLE / append-only MUST NOT grant the
+# tenant role runtime_api UPDATE or DELETE on the parent table, or the log can
+# be silently corrupted. The schema snapshot is end-state truth, so the committed
+# GRANT there is read. REGISTRY (the inclusion set of protected parent tables) =
+# { marker_predictions }.
+#
+# Rule A (forbidden): a GRANT line for palletra.marker_predictions that
+#   carries UPDATE or DELETE. The trailing ` TO runtime_api;` anchors the exact
+#   parent-table name so partition children (…_2026q2 TO …) don't match.
+# Rule B (required exists): SOME GRANT line for the table must be present — a
+#   missing GRANT is itself a failure in the .sh.
+rules:
+  - id: migrations-forbid-mutate-grant-on-append-only-table
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+    params:
+      pattern: '(?i)GRANT.*(UPDATE|DELETE).*ON TABLE palletra\.marker_predictions TO runtime_api;'
+    cure: "append-only palletra.marker_predictions must grant runtime_api SELECT,INSERT only; add 'REVOKE UPDATE, DELETE ON palletra.marker_predictions FROM runtime_api' in a migration (sweep-9c #5)."
+    origin: scripts/check-migrations-forbid-mutate-grant-on-append-only-table.sh
+  - id: migrations-append-only-grant-recorded
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+    preprocess: raw
+    params:
+      pattern: '(?i)GRANT.*ON TABLE palletra\.marker_predictions TO runtime_api;'
+      mode: exists
+    cure: "The snapshot must carry a runtime_api GRANT line for palletra.marker_predictions (expected SELECT,INSERT); a missing grant fails (sweep-9c #5)."
+    origin: scripts/check-migrations-forbid-mutate-grant-on-append-only-table.sh

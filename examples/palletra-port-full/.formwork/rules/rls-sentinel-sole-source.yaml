@@ -1,0 +1,47 @@
+# Ported from Palletra scripts/check-rls-sentinel-sole-source.sh (#2912).
+# db.WithOrgIso seeds the app.current_* RLS session variables; the optional
+# site and user dimensions fall back to the all-zeros UUID sentinel, which means
+# exactly one thing ("this dimension is absent") identically for every
+# dimension. It therefore has exactly ONE sanctioned name, nullUUID, and exactly
+# ONE declaration; the all-zeros literal appears ONLY on that canonical line.
+# The .sh wraps a stdlib go/ast value-flow checker enforcing three rules over
+# non-test .go under freightworks/internal/db/:
+#   RULE A — SINGLE SOURCE: exactly one canonical `const nullUUID = "0000…"`, and
+#     the literal appears only there.
+#   RULE B — NO ALIASED SECOND NAME (value-subtree references bare nullUUID).
+#   RULE C — NO CROSS-DIMENSION SEED (a local reaching both getters, or a
+#     set_config('app.current_*_id', $N) positional arg wired to the sibling
+#     dimension's value).
+#
+# PORT MAPPING: RULE A is a single-source literal-count invariant, faithfully
+# reproducible on the tree; it uses the ESCAPE HATCH — a self-contained Go
+# reproduction (checks/check.go) that counts the all-zeros literal (comments
+# stripped) and requires exactly one occurrence, on a canonical `nullUUID =`
+# declaration line.
+# The finding is scope-level (no want marker). fire-1 declares a SECOND sentinel
+# literal under a second name (`const nullSiteID = "0000…"`); pass-1 keeps the
+# one canonical nullUUID and seeds the optional dimension from the BARE
+# identifier.
+#
+# DIVERGENCE (noted): RULES B (aliased second name) and C (cross-dimension seed
+# via set_config positional-arg value-flow) require the go/ast VALUE-FLOW
+# analysis the .sh exists to provide — the exact operator-spelling / comma /
+# paren / positional-arg bypass class a text reproduction cannot faithfully
+# close — and are OMITTED. Only RULE A, the single-source literal invariant, is
+# ported.
+rules:
+  - id: rls-sentinel-sole-source
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/internal/db/**/*.go"
+    params:
+      cmd:
+        - go
+        - run
+        - checks/check.go
+      expect:
+        exit: 0
+    cure: "Keep ONE dimension-neutral sentinel, declared once — `const nullUUID = \"00000000-0000-0000-0000-000000000000\"` — and seed every optional RLS dimension from the BARE identifier (depotID := nullUUID). Never add a second name or a second all-zeros literal (#2912)."
+    origin: scripts/check-rls-sentinel-sole-source.sh

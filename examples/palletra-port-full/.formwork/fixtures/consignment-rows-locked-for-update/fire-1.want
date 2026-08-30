@@ -1,0 +1,1 @@
+freightworks/dispatch/writer.go:3 guarded lock on ops.consignments (via "c")

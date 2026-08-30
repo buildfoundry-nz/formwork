@@ -1,0 +1,36 @@
+# Ported from Palletra scripts/check-dart-forbid-open-coded-tap-dedup.sh
+# (audit #7440 / DUP). The canonical owner is TapDebounceMixin in
+# **/tap_debounce.dart; every tool layer must mix it in and call confirmTap(event)
+# rather than hand-roll the pointer tap-dedup state machine. This rule ports
+# the .sh's Shape A — the private field/const the seven forked copies used
+# (`_confirmingTap` / `_debounceWindow`) — across all Dart library source, exempting
+# the one canonical home.
+#
+# APPROXIMATION: the .sh also has two same-file co-presence heuristics —
+# Shape B (`Duration(milliseconds: 80)` co-present with `PointerDownEvent`)
+# and Shape C (`event.buttons ==/!= kPrimaryButton` co-present with
+# `PointerDeviceKind.(touch|stylus)`) — which are rename-catch fallbacks that
+# require ANDing two patterns across a whole file. formwork's line-oriented
+# forbidden-pattern cannot express file-level co-presence, so only Shape A (the
+# primary fingerprint) is ported here; a same-file pair-consistency rule type
+# would be needed for B/C.
+rules:
+  - id: dart-forbid-open-coded-tap-dedup
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/tap_debounce.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+    params:
+      pattern: '_confirmingTap|_debounceWindow'
+    cure: "Mix TapDebounceMixin into the State and replace the preamble with `if (!confirmTap(event)) return;`. Canonical home: packages/plt_canvas_kit/lib/annotation/presentation/tools/tap_debounce.dart."
+    origin: scripts/check-dart-forbid-open-coded-tap-dedup.sh

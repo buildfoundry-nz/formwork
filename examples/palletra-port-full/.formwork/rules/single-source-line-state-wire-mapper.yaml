@@ -1,0 +1,30 @@
+# Ported from Palletra scripts/check-line-state-appearance-single-source.sh
+# (PH-5 RS-4 / #7209), Rule B. The generated wire enum cases
+# (AFFECTED_LINE_STATE_*) may be consumed ONLY by the canonical wire->domain
+# mapper; every other FE reader must call impactedLineStateFromProto and never
+# re-switch on the wire constants. A forked wire switch elsewhere is the
+# forbidden-pattern hit. The generated *.pb*.dart that DEFINE the constants and
+# test files are out of scope.
+rules:
+  - id: single-source-line-state-wire-mapper
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/**/*.dart"
+        - "frontend/**/*.dart"
+      exclude:
+        - "packages/plt_skus/lib/data/impacted_line_state_mapper.dart"
+        - "**/test/**"
+        - "**/*_test.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+        - "**/*.pbgrpc.dart"
+    params:
+      pattern: 'AFFECTED_LINE_STATE_[A-Z_]+'
+    cure: "Map the wire enum through impactedLineStateFromProto in plt_skus/lib/data/impacted_line_state_mapper.dart; do not re-switch on the AFFECTED_LINE_STATE_* wire constants (#7209)."
+    origin: scripts/check-line-state-appearance-single-source.sh

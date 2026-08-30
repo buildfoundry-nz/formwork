@@ -1,0 +1,82 @@
+# Ported from Palletra scripts/check-primary-action-footer-label-parity.sh
+# (W-LABELS gate). primaryaction.go is the SOLE owner of the Measure footer
+# copy (Server-owned logic); the label consts are pinned to frozen canonical
+# literals captured at migration time. A drifted or missing const value fails.
+#
+# The .sh extracts each const's double-quoted value and compares it to a frozen
+# literal. The faithful port is one required-pattern (exists) per const, whose
+# pattern is the exact `<const> = "<frozen literal>"` assignment — if the value
+# drifts (or the const is removed/renamed), the anchor is no longer present and
+# the rule fires. labelReviewPendingPrefix keeps its intentional trailing
+# space inside the quotes.
+#
+# APPROX: the .sh exits 2 (setup error) if primaryaction.go is missing/moved;
+# exists-mode instead fires a violation (still non-pass) when the scope matches
+# no file — both are failures. See notes.
+rules:
+  - id: confirm-scale-footer-label-parity
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workflow/primaryaction/primaryaction.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'labelScaleConfirm\s*=\s*"Confirm Scale"'
+      mode: exists
+    cure: "primaryaction.go owns the copy — keep labelScaleConfirm = \"Confirm Scale\" or update both the const and this frozen literal in the same PR (W-LABELS)."
+    origin: scripts/check-primary-action-footer-label-parity.sh
+  - id: confirm-scale-footer-label-approve
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workflow/primaryaction/primaryaction.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'labelAccept\s*=\s*"Approve"'
+      mode: exists
+    cure: "Keep labelAccept = \"Approve\" or update both the const and this frozen literal in the same PR (W-LABELS)."
+    origin: scripts/check-primary-action-footer-label-parity.sh
+  - id: confirm-scale-footer-label-skip-step
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workflow/primaryaction/primaryaction.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'labelSkipAction\s*=\s*"Skip"'
+      mode: exists
+    cure: "Keep labelSkipAction = \"Skip\" or update both the const and this frozen literal in the same PR (W-LABELS)."
+    origin: scripts/check-primary-action-footer-label-parity.sh
+  - id: confirm-scale-footer-label-section-complete
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workflow/primaryaction/primaryaction.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'labelSectionDone\s*=\s*"Section Complete"'
+      mode: exists
+    cure: "Keep labelSectionDone = \"Section Complete\" or update both the const and this frozen literal in the same PR (W-LABELS)."
+    origin: scripts/check-primary-action-footer-label-parity.sh
+  - id: measure-footer-label-proceed-to-skus
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workflow/primaryaction/primaryaction.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'labelProceedToSkus\s*=\s*"Continue to Skus"'
+      mode: exists
+    cure: "Keep labelProceedToSkus = \"Continue to Skus\" (#4224 renamed the terminal to advance into Skus) or update both the const and this frozen literal in the same PR (W-LABELS)."
+    origin: scripts/check-primary-action-footer-label-parity.sh
+  - id: confirm-scale-footer-label-review-pending-prefix
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workflow/primaryaction/primaryaction.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'labelReviewPendingPrefix\s*=\s*"Review Pending in "'
+      mode: exists
+    cure: "Keep labelReviewPendingPrefix = \"Review Pending in \" (trailing space — the footer composes \"Review Pending in {label}\") or update both the const and this frozen literal in the same PR (W-LABELS)."
+    origin: scripts/check-primary-action-footer-label-parity.sh

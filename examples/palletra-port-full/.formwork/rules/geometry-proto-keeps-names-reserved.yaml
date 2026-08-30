@@ -1,0 +1,18 @@
+# Ported from Palletra scripts/check-geometry-proto-keeps-numbers-reserved.sh (sweep-1 #4),
+# tooth 1b. Companion to geometry-proto-keeps-numbers-reserved: the descoped field
+# NAMES must stay reserved too. required-anchor: `reserved "vectors", "images";`
+# must be present uncommented. The .sh strips proto // comments; ported with
+# decomment-go as the decomment-proto approximation (shared comment/string syntax).
+rules:
+  - id: geometry-proto-keeps-names-reserved
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "schema/proto/palletra/domain/v1/page_layout.proto"
+    preprocess: decomment-go
+    params:
+      pattern: 'reserved\s+"vectors"\s*,\s*"images"\s*;'
+      mode: exists
+    cure: "PageDimensions must keep `reserved \"vectors\", \"images\";` — the descoped names stay reserved so a revived field can never reuse them (sweep-1 #4)."
+    origin: scripts/check-geometry-proto-keeps-numbers-reserved.sh

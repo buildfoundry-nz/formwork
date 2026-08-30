@@ -1,0 +1,25 @@
+# Ported from Palletra scripts/check-no-lateral-bom-imports.sh (#2512/#3887).
+# The routes/bom import is forbidden from two source trees, folded into one
+# rule (same import literal, combined scope):
+#   Rule A - no non-test *.go under services/core-api/routes/ (outside
+#            routes/bom itself) may import routes/bom (lateral coupling).
+#   Rule B - no non-test *.go under freightworks/internal/ or
+#            services/core-api/internal/ may import routes/bom (inversion).
+# The trailing quote in the literal keeps routes/bom_templates from matching.
+# routes/bom importing itself is exempt via scope.exclude.
+rules:
+  - id: no-lateral-bom-imports
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+        - "freightworks/internal/**/*.go"
+        - "freightworks/services/core-api/internal/**/*.go"
+      exclude:
+        - "freightworks/services/core-api/routes/bom/**"
+        - "**/*_test.go"
+    params:
+      pattern: '"github\.com/palletra/freightworks/services/core-api/routes/bom"'
+    cure: "Domain access goes through services/core-api/internal/bomdoc; handlers moved to routes/bom_templates + routes/pricing/lineitems (#3887). Import those, not routes/bom."
+    origin: scripts/check-no-lateral-bom-imports.sh

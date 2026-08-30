@@ -1,0 +1,31 @@
+# Ported from Palletra scripts/check-dart-response-decoding-boundary.sh (forbidden-pattern).
+# Enforces wire-boundary decode narrowing. Limb 2 (raw response.body /
+# response.bodyBytes reads outside the typed wrapper layer) is a clean line
+# pattern and is ported below. The typed wrapper layer is carved out by scope:
+# plt_core/lib/network, plt_core/lib/sse, and every packages/*/lib/data (incl.
+# the nested lib/*/data form) are the legitimate decode+narrow home.
+#
+# Divergence note: limb 1 ("jsonDecode(...) not narrowed into a fromJson on the
+# SAME line") requires a negative-lookahead (match jsonDecode AND NOT fromJson on
+# one line). RE2 has no lookaround and this binary exposes no regexp2 syntax, so
+# limb 1 cannot be expressed as a single forbidden-pattern without over-forbidding
+# the legitimate inline-narrowed form; it is not ported here (see notes).
+rules:
+  - id: dart-raw-response-body-outside-wrapper-banned
+    type: forbidden-pattern
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "packages/plt_core/lib/network/**"
+        - "packages/plt_core/lib/sse/**"
+        - "packages/*/lib/data/**"
+        - "packages/*/lib/*/data/**"
+    params:
+      pattern: '\b(response|res|resp)\.(body|bodyBytes)\b'
+    cure: "Read response.body/bodyBytes only inside the typed wrapper layer (plt_core/lib/network|sse or a feature data-source); decode + narrow there and return a typed value."
+    origin: scripts/check-dart-response-decoding-boundary.sh

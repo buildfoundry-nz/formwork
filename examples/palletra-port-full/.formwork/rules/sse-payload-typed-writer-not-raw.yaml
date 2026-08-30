@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-stream-payload-typed.sh (Rule A, #3149 RS-3).
+# Non-test Go OUTSIDE internal/projectfeed/ must not name the raw writer
+# `projectfeed.WriteEvent(` or `projectfeed.WriteSignalParams{` — the one
+# seam where a caller could hand back an untyped structpb.Struct. Production
+# emitters go through the typed projectfeed.Write<Event>() builders.
+rules:
+  - id: sse-payload-typed-writer-not-raw
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/internal/projectfeed/**"
+    preprocess: decomment-go
+    params:
+      pattern: 'projectfeed\.WriteEvent\(|projectfeed\.WriteSignalParams\{'
+    cure: "Emit via the typed projectfeed.Write<Event>() builders, not the raw WriteEvent/WriteSignalParams (structpb can smuggle back the untyped payload) (#3149)."
+    origin: scripts/check-stream-payload-typed.sh

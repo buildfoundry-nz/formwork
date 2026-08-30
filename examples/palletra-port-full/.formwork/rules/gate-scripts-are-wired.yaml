@@ -1,0 +1,48 @@
+# Ported from Palletra scripts/check-gate-scripts-are-wired.sh (Phase-5 T0.1).
+# Every scripts/check-*.go MUST be invoked from .github/workflows/ci.yml OR
+# .husky/pre-commit (pooled via gate-manifest.tsv, or bespoke by literal name),
+# else it ships + registers + sits dead-on-disk forever (theatre). The full gate
+# also validates the manifest/bespoke-roll well-formedness, runs-where lane
+# accuracy, and fast-gate-must-be-in-CI backstops.
+#
+# Why the ESCAPE HATCH (type: command): the gate scans a whole directory of
+# sibling gate sources, cross-references two hook/CI surfaces plus two TSV
+# registries, and classifies each gate's cost by grepping its body — a
+# multi-file join over the tree, not a per-file pattern. This command reproduces
+# the CORE dead-on-disk rule on the fixture tree: every scripts/check-*.go
+# (minus the two path-based carve-outs) must appear by name in the
+# comment-stripped ci.yml or pre-commit. fire-1 leaves one gate wired nowhere;
+# pass-1 wires them all. Scope-level finding (no want marker).
+rules:
+  - id: gate-scripts-are-wired
+    type: command
+    severity: error
+    scope:
+      include:
+        - "scripts/check-*.go"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          CI=".github/workflows/ci.yml"
+          PC=".husky/pre-commit"
+          { [ -f "$CI" ] && [ -f "$PC" ]; } || exit 0   # missing surfaces -> skip
+          cic="$(sed -e '/^[[:space:]]*#/d' -e 's/[[:space:]]#.*$//' "$CI")"
+          pcc="$(sed -e '/^[[:space:]]*#/d' -e 's/[[:space:]]#.*$//' "$PC")"
+          rc=0
+          for s in scripts/check-*.go; do
+            [ -f "$s" ] || continue
+            b="$(basename "$s")"
+            case "$b" in
+              check-gate-scripts-are-wired.go|check-claude-md-gate-enumeration.go) continue ;;
+            esac
+            if ! grep -qwF "$b" <<<"$cic" && ! grep -qwF "$b" <<<"$pcc"; then
+              rc=1
+            fi
+          done
+          exit $rc
+      expect:
+        exit: 0
+    cure: "Wire every scripts/check-*.go into .github/workflows/ci.yml and/or .husky/pre-commit (pooled in gate-manifest.tsv or bespoke by literal name). A gate that runs nowhere is theatre (Phase-5 T0.1 / #8997)."
+    origin: scripts/check-gate-scripts-are-wired.sh

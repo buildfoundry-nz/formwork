@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-flutter-dio-traceparent-interceptor.sh
+# (B0, #5848), Rule 2. trace_header_interceptor.dart must be web-FREE: it mints
+# ids from dart:math Random.secure() and must NOT import package:web/,
+# dart:js_interop, or dart:html, so it loads under a VM `flutter test`. The .sh
+# strips comments then greps for those web-only imports; RE2 alternation over
+# the single file is the faithful port.
+rules:
+  - id: trace-context-interceptor-no-web-deps
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/plt_core/lib/network/trace_header_interceptor.dart"
+    params:
+      pattern: 'package:web/|dart:js_interop|dart:html'
+    cure: "trace_header_interceptor.dart must mint ids from dart:math Random.secure() — remove any package:web/, dart:js_interop, or dart:html import so it stays VM-testable (#5848)."
+    origin: scripts/check-flutter-dio-traceparent-interceptor.sh

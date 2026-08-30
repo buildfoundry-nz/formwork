@@ -1,0 +1,25 @@
+# Ported from Palletra scripts/check-no-reaching-into-canvas-measure-internals.sh (#8593).
+# plt_canvas_kit/lib/measure/** is measure application state; reaching into it
+# directly makes it a de-facto shared surface. The sanctioned seam is
+# package:plt_measure_model/... Forbids importing package:plt_canvas_kit/measure/
+# from any package OTHER than the three allowlisted ones (owner plt_canvas_kit,
+# seam plt_measure_model, primary consumer feature_dimension) and from the
+# frontend/lib app shell. The .sh scans each package's lib/ and test/ trees.
+rules:
+  - id: no-reaching-into-canvas-measure-internals
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "packages/*/test/**/*.dart"
+        - "frontend/lib/**/*.dart"
+    params:
+      pattern: 'package:plt_canvas_kit/measure/'
+    except:
+      paths:
+        - "packages/plt_canvas_kit/**"
+        - "packages/plt_measure_model/**"
+        - "packages/feature_dimension/**"
+    cure: "Depend on package:plt_measure_model/... (the sanctioned narrow seam) instead of reaching into plt_canvas_kit/measure/** (#8593)."
+    origin: scripts/check-no-reaching-into-canvas-measure-internals.sh

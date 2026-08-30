@@ -1,0 +1,70 @@
+# Ported from Palletra scripts/check-governance-diff-weakening.sh (the Governance Diff Sentinel,
+# #6012).
+#
+# Over a git diff the original .sh guarded the protected governance surfaces
+# (derived from scripts/lib/policy-protected-paths.sh): it failed on net-removal
+# of watched gate references and on ADDITIVE weakening idioms introduced into a
+# protected file — continue-on-error:true, if:false, --no-verify, a
+# `<gate>.sh ... || true` swallow, and `(flutter|dart) analyze ... --no-fatal`.
+#
+# The gate fundamentally INSPECTS A GIT RANGE, which the declarative git-diff type
+# would express — but a git-diff rule cannot be exercised against a fixture tree
+# (a fixture dir is not a git repo). So this is the command escape hatch: a
+# self-contained python reproducing the additive-weakening scan over the protected
+# governance FILES present in the tree it runs in. The `<gate>.sh || true` ban is
+# kept shell-shaped on purpose: it is a textual ban over workflow YAML, where a
+# swallowed gate invocation can still be spelled that way.
+#
+# DIVERGENCE (noted): the original .sh scanned only ADDED, non-comment diff lines
+# and also ran a net-removal + high-churn pass; this static port flags the
+# weakening idioms wherever they appear in a protected file (it has no diff to
+# bound them). Scope-level finding (no want marker); fire-1 plants a weakening
+# idiom in a protected workflow, pass-1's protected files are clean.
+rules:
+  - id: governance-diff-blocks-weakening
+    type: command
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/**"
+        - "scripts/**"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import os, re, sys
+          # Protected governance surfaces present in the tree (mirrors the
+          # policy-protected-paths derivation: workflows + gate scripts).
+          weakenings = [
+              (re.compile(r"continue-on-error:\s*true"), "continue-on-error:true"),
+              (re.compile(r"if:\s*false(\s|$)"), "if:false"),
+              (re.compile(r"--no-verify"), "--no-verify"),
+              (re.compile(r"check-[a-z0-9-]+\.sh[^|]*\|\|\s*true"), "gate || true"),
+              (re.compile(r"(flutter|dart)\s+analyze.*--no-fatal"), "analyze --no-fatal"),
+          ]
+          viol = []
+          for base in (".github/workflows", "scripts"):
+              for root, _, names in os.walk(base):
+                  for n in names:
+                      p = os.path.join(root, n)
+                      try:
+                          text = open(p, errors="replace").read()
+                      except OSError:
+                          continue
+                      for raw in text.splitlines():
+                          # A doc-comment line that merely NAMES an idiom is inert.
+                          if raw.lstrip().startswith("#"):
+                              continue
+                          for rx, label in weakenings:
+                              if rx.search(raw):
+                                  viol.append((p, label, raw.strip()))
+          if viol:
+              for p, label, line in viol:
+                  sys.stderr.write("suspicious weakening (%s) in %s: %s\n" % (label, p, line))
+              sys.exit(1)
+          sys.exit(0)
+      expect:
+        exit: 0
+    cure: "Never soften a protected governance file: remove continue-on-error:true / if:false / --no-verify / a `<gate>.sh || true` swallow / `analyze --no-fatal`. A gate's non-zero exit must stay load-bearing; a sanctioned governance edit goes through the policy-exception-approved review, not an in-place weakening (#6012)."
+    origin: scripts/check-governance-diff-weakening.sh

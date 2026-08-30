@@ -1,0 +1,25 @@
+# Ported from Palletra scripts/check-approval-metrics-single-source.sh (#3986) — Rule B.
+# The auto-policy metadata.source discriminator has one definition,
+# audit.SourceAutoRule. A bare "auto_rule" string literal outside internal/audit
+# means a reader/writer re-open-coded the discriminator instead of routing through
+# the const / signoffstats.IsAutoApproval. Tests and internal/audit are exempt.
+#
+# Port note: the .sh's hinted preprocessor was strings-only-go, but that strips the
+# surrounding quotes; decomment-go is used instead so the exact quoted literal
+# "auto_rule" is matched while full-line and trailing comments (docs naming the
+# wire value) are stripped — the same effect the .sh gets by dropping comment lines.
+rules:
+  - id: auto-policy-literal-confined-to-audit-package
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/services/core-api/internal/audit/**"
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '"auto_rule"'
+    cure: "Use audit.SourceAutoRule (or signoffstats.IsAutoApproval); the \"auto_rule\" string has one definition in internal/audit (#3986)."
+    origin: scripts/check-approval-metrics-single-source.sh

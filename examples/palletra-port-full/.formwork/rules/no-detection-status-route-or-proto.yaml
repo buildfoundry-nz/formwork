@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-no-gauge-status-endpoint.sh
+# (Measure-port audit #9, decision MEASURE-K19-DETECTION-STATUS).
+# The dead detection-status polling endpoint + PipelineStatusResponse proto were
+# removed (Flutter reconciles detection via the project_activity SSE stream). This
+# gate pins that removal. The .sh runs two checks; this rule unions them:
+#   - proto:  PipelineStatusResponse must not reappear (schema/proto)
+#   - go:     ScanStatus\b or the detection-status route path must not
+#             reappear (freightworks/services/core-api), gatetests excluded.
+# Union pattern: PipelineStatusResponse | ScanStatus\b | detection-status.
+#
+# The id is spelled `detectionstatus` (no internal hyphen) on purpose so the
+# `want: <id>` fixture marker does NOT itself match the `detection-status`
+# alternative and self-trip the fixture.
+rules:
+  - id: no-detection-status-route-or-proto
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "schema/proto/**"
+        - "freightworks/services/core-api/**"
+      exclude:
+        - "**/internal/gatetests/**"
+    params:
+      pattern: 'PipelineStatusResponse|ScanStatus\b|detection-status'
+    cure: "The detection-status endpoint + PipelineStatusResponse proto are removed (Flutter uses the project_activity SSE stream + fetchPipelineStatus). Do not reintroduce the route, handler, or proto message."
+    origin: scripts/check-no-gauge-status-endpoint.sh

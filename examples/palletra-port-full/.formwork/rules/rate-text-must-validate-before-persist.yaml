@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-rate-text-must-validate-before-persist.sh
+# (sweep-3 #5 follow-up gate). The PATCH /priced-items/{id} handler bound
+# req.TariffText straight into `UPDATE ... rate = COALESCE($7::numeric, rate)`
+# without calling shared.ValidateRateInput first, letting negative values,
+# scientific notation, leading "+"/".", or >4 decimals reach the numeric(12,4)
+# column and surface as a 500 (SQLSTATE 22P02 / 22003). The gate widens the
+# contract: every routes/stockroom/*.go non-test file that READS a TariffText field
+# from a request MUST call shared.ValidateRateInput in the same file.
+#
+# Ported verbatim as pair-consistency: a file reading `req.TariffText` or
+# `req.GetRateInput(` (trigger) MUST also call `shared.ValidateRateInput(`
+# (requires). preprocess: raw — the .sh uses plain rg. *_test.go excluded.
+rules:
+  - id: rate-text-must-validate-before-persist
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/stockroom/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: raw
+    params:
+      trigger: 'req\.TariffText\b|req\.GetRateInput\('
+      requires: 'shared\.ValidateRateInput\('
+    cure: "Every routes/stockroom/ handler that reads req.TariffText / req.GetRateInput() must call shared.ValidateRateInput in the same file, or an invalid rate string reaches the numeric(12,4) column and 500s (sweep-3 #5 follow-up)."
+    origin: scripts/check-rate-text-must-validate-before-persist.sh

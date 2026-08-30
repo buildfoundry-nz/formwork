@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-claude-md-referenced-paths-must-exist.sh (the doc-honesty
+# gate). CLAUDE.md is the map every agent loads first to learn WHERE the code
+# lives; a ghost path (e.g. the deleted frontend/lib/features/... the #7395 trap
+# still cited) sends agents to grep the wrong subtree, find nothing, and declare
+# code unaffected. Every repo-source path CLAUDE.md names must exist on disk.
+#
+# doc-path-exists captures each repo-source path token (one starting with a known
+# top-level source dir and containing a "/") and stats it against the repo root.
+#
+# FP FIX: the original port's character class simply stopped at the first glob or
+# placeholder char, which KEPT the partial segment before it — so `scripts/check-*.sh`
+# captured `scripts/check-`, `packages/feature_<feature>/...` captured
+# `packages/feature_`, neither of which exists → false positives on clean develop.
+# The .sh instead trims to the longest CONCRETE prefix by dropping the WHOLE
+# segment that carries a glob/placeholder (so those reduce to a bare top-level dir
+# it then skips), skips ephemeral/generated dirs (build/out/dist/generated/
+# coverage/node_modules/.dart_tool — absent in a clean checkout), and strips the
+# `...` module-path placeholder (`github.com/.../freightworks/...`). This pattern
+# reproduces all three faithfully in RE2 (no lookahead): each captured `/segment`
+# must contain a real alphanumeric (drops `...` placeholders); a trailing
+# delimiter is CONSUMED (not `/`, so a segment carrying `*`/`<`/`{`/`:`/`%` right
+# after it forces that partial segment to be dropped rather than captured); and an
+# optional, NON-captured ephemeral tail (build/out/dist as whole segments,
+# generated/coverage/node_modules/dart_tool as substrings) is swallowed so those
+# reduce to their concrete non-ephemeral prefix. A genuinely missing path (the
+# fixture's frontend/lib/features/measure) is captured whole and still fires.
+rules:
+  - id: claude-md-referenced-paths-must-exist
+    type: doc-path-exists
+    severity: error
+    scope:
+      include:
+        - "CLAUDE.md"
+    params:
+      pattern: '((?:frontend|packages|freightworks|scripts|docs|schema|shared|\.github|\.husky|\.claude)(?:/[A-Za-z0-9_.-]*[A-Za-z0-9][A-Za-z0-9_.-]*)*?)(?:/(?:(?:build|out|dist)(?:/[A-Za-z0-9_.-]+)*|[A-Za-z0-9_.-]*(?:generated|coverage|node_modules|dart_tool)[A-Za-z0-9_.-]*(?:/[A-Za-z0-9_.-]+)*))?(?:[\s)\]},.:;"''|`]|$)'
+    cure: "Update CLAUDE.md to the real location. A ghost path in the map sends agents to grep the wrong subtree (the #7395 frontend trap: FE code is in packages/, NOT frontend/lib/features). Fix the doc; do not create the directory to satisfy the gate."
+    origin: scripts/check-claude-md-referenced-paths-must-exist.sh

@@ -1,0 +1,10 @@
+{
+  "switches": [
+    {"id": "41.5", "kit": [
+      {"code": "KIT-A", "rate": {"factor": 0.001, "per": 1000.0, "basis_measures": ["40.1"]}, "description": "Ferrostock Sample Wrap", "uom": "m2", "shrinkage": 0.0},
+      {"code": "KIT-B", "rate": {"factor": 0.002, "basis_measures": ["40.1"]}, "description": "Sample Edge Tape", "uom": "m2", "shrinkage": 0.0}
+    ]}
+  ],
+  "measures": [],
+  "meta": {"counts": {"switches": 1, "edges": 2}}
+}

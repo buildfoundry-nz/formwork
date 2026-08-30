@@ -1,0 +1,1 @@
+- scripts/check-orphan-target-gate.go hardcodes a repo-relative target but declares no // gate-target: directive: 18:const targetDir = "freightworks/services/core-api/internal/gone"

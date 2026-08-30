@@ -1,0 +1,51 @@
+# Ported from Palletra scripts/check-deferral-wording.sh (Phase-6 evidence-grep
+# mirror: M8/L3/M9 deferral-phrase blocks). Ports the STRUCTURAL deferral phrases
+# into ONE RE2 alternation.
+#
+# FP FIX (two causes):
+#  1. Compiled build artifacts. The .sh runs via ripgrep, which honours
+#     .gitignore, so `frontend/build/**` (the *.dill Dart build caches that embed
+#     source strings) is never scanned. formwork walks the real filesystem, so
+#     the 22 dill FPs need explicit scope.exclude of build / .dart_tool /
+#     node_modules.
+#  2. The `parked` alternative lacked word boundaries: `parked[[:space:]]+(...|for|...)`
+#     matched "parked forever" (sse_retry.dart) as `parked for`. The .sh's
+#     pattern is `\bparked\s+(pending|for|until|awaiting)\b` — the trailing \b
+#     stops "forever". Both boundaries restored here.
+# Silent on develop, still fires on "deferred until" (fire-1 fixture).
+rules:
+  - id: deferral-wording
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**"
+        - "schema/proto/**"
+        - "packages/**"
+        - "frontend/**"
+        - "scripts/**"
+        - ".github/**"
+      exclude:
+        - "docs/**"
+        - "archive/**"
+        - "shared/generated/**"
+        - "**/build/**"
+        - "**/.dart_tool/**"
+        - "**/node_modules/**"
+        - "**/*_test.go"
+        - "**/*_test.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbserver.dart"
+        - "**/*.pbgrpc.dart"
+        - "**/test/**"
+        - "**/integration_test/**"
+        - "scripts/check-deferral-wording.sh"
+        - "scripts/ci/evidence-grep-checks-1.sh"
+    params:
+      pattern: 'deferred until|next sweep|scaffold[[:space:]]+reserved|501[[:space:]]+not[_-]implemented|ships[[:space:]]+under[[:space:]]+its[[:space:]]+own[[:space:]]+PR|scheduled[[:space:]]+for[[:space:]]+(removal|deletion|L[0-9]+)|kept[[:space:]]+for[[:space:]]+future|owner TBD|tier into|not yet proven|\bparked[[:space:]]+(pending|for|until|awaiting)\b'
+    cure: "Reword the phrase to a present-tense factual statement of the contract. Never paper over deferred work in source comments or error strings (Phase-6 evidence-grep enforces the same at PR time)."
+    origin: scripts/check-deferral-wording.sh

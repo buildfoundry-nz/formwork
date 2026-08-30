@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-no-annotation-metrics-unscoped-groupby.sh
+# (#3451 / sweep closeout CRITICAL #3). The K13 editable flag used to be an
+# unscoped aggregate join:
+#   LEFT JOIN (SELECT am.annotation_id, bool_and(...) FROM
+#              palletra.annotation_gauges am GROUP BY am.annotation_id) …
+# Under RLS that HashAggregates every metric row in the org on every annotation
+# read. The cure is a correlated `SELECT bool_and(...) … WHERE annotation_id =
+# a.id` (idx_gauges_annotation seek). A scoped aggregate that carries a WHERE is
+# allowed; an unscoped GROUP BY annotation_id (named) or positional GROUP BY <n>
+# with no WHERE is the violation.
+#
+# Ported as a sql/statement-predicate over Go string literals (sqltext
+# reassembles backtick SQL from the AST, so Go `//` comments never enter the
+# text — the .sh's strings-only/decomment intent, native to the analyzer):
+#   table   — selects statements that reference annotation_gauges AND carry a
+#             GROUP BY of annotation_id (optional `alias.`) or a positional
+#             GROUP BY <digit>.
+#   require — `WHERE`: a selected group-by statement with no WHERE is the
+#             full-org HashAggregate; a scoped aggregate (WHERE present) passes.
+#
+# DIVERGENCE (noted): the .sh scopes the "no WHERE" test to the region BETWEEN
+# `FROM annotation_gauges` and the next WHERE; this port requires a WHERE
+# anywhere in the statement. Both accept the canonical scoped shape (a correlated
+# SELECT has no GROUP BY at all → never selected) and both reject the bare
+# unscoped GROUP BY. NO preprocessor is set: sqltext must parse raw Go.
+rules:
+  - id: no-annotation-metrics-unscoped-groupby
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      table: '(?is)annotation_gauges.*GROUP BY\s+((\w+\.)?annotation_id|\d)'
+      require:
+        - '(?i)WHERE'
+    cure: "Replace the unscoped `FROM palletra.annotation_gauges … GROUP BY annotation_id` aggregate with a correlated `SELECT bool_and(...) … WHERE annotation_id = a.id` (idx_gauges_annotation seek) — an unscoped GROUP BY HashAggregates every metric row in the org under RLS (#3451)."
+    origin: scripts/check-no-annotation-metrics-unscoped-groupby.sh

@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-stockroom-normalize-canonical.sh (sweep-13 §A2).
+# stockroom.CanonicalizeKey (internal/stockroom/dedupe.go) is the single canonical producer
+# of platform.priced_lines.canonical_key. Any OTHER Go func in freightworks whose
+# name is canonicalize<...>Key / canonicalize<...>Item drifts from canonical and
+# reintroduces the cross-path duplicate-key bug. Tests (_test.go) and generated
+# proto (*.pb.go) are exempt; the canonical site dedupe.go is exempt.
+rules:
+  - id: stockroom-normalize-canonical
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/*.pb.go"
+        - "**/internal/stockroom/dedupe.go"
+    params:
+      pattern: 'func\s+(\([^)]*\)\s+)?canonicalize[A-Za-z0-9_]*(Key|Item)\s*\('
+    cure: "Route the call site through stockroom.CanonicalizeKey (internal/stockroom/dedupe.go) instead of declaring another normalize-key/item helper."
+    origin: scripts/check-stockroom-normalize-canonical.sh

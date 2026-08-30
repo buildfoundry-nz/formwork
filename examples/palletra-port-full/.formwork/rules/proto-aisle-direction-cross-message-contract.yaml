@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-proto-aisle-direction-cross-message-contract.sh
+# (sweep-9b #10 / CD-1, #8010). The aisle direction round-trips over
+# protojson between two DIFFERENT messages — VisionkitAnnotationProperties
+# (marker_properties.proto) and AisleAttributes
+# (jsonb_annotation_fields.proto) — which works ONLY because BOTH declare a
+# field literally named aisle_direction of type AisleDirection. If one message
+# renames the field/type but not the other, GetAisleDirection() silently returns
+# nil on re-read. The .sh requires the anchor in BOTH files, so this ports as
+# required-pattern mode: every-file (each in-scope proto file must match) — a
+# single exists rule would pass with only one file declaring it, weaker than the
+# gate.
+rules:
+  - id: proto-aisle-direction-cross-message-contract
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "schema/proto/palletra/domain/v1/marker_properties.proto"
+        - "schema/proto/palletra/domain/v1/jsonb_annotation_fields.proto"
+    params:
+      pattern: '\bAisleDirection\s+aisle_direction\s*='
+      mode: every-file
+    cure: "Keep BOTH VisionkitAnnotationProperties and AisleAttributes declaring a field named aisle_direction of type AisleDirection so the protojson by-name round-trip holds (sweep-9b #10 / #8010)."
+    origin: scripts/check-proto-aisle-direction-cross-message-contract.sh

@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-no-bare-card-widget.sh (#3231). The raw Sku
+# Card( widget must not be constructed under frontend/lib + packages/*/lib;
+# every card goes through ShellCard (packages/plt_widgets/lib/shell_card.dart, the
+# owner file, exempt). ShellCard(/DirectiveCard() and CardTheme/CardThemeData must
+# not match.
+# APPROXIMATION: the .sh uses a PCRE2 negative lookbehind (?<![A-Za-z0-9_$]).
+# RE2 has no lookbehind, so this consumes a boundary char instead:
+# (^|[^A-Za-z0-9_$])Card\( — same effect (ShellCard( has an identifier char right
+# before Card, and CardTheme has no ( immediately after Card).
+rules:
+  - id: no-bare-card-widget
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+        - "**/plt_widgets/lib/shell_card.dart"
+    params:
+      pattern: '(^|[^A-Za-z0-9_$])Card\('
+    cure: "Replace the raw Card(...) with an ShellCard from packages/plt_widgets/lib/shell_card.dart (#3231)."
+    origin: scripts/check-no-bare-card-widget.sh

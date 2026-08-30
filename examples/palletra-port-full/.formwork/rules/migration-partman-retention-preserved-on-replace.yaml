@@ -1,0 +1,68 @@
+# Ported from Palletra scripts/check-migration-partman-retention-preserved-on-replace.sh (#5482).
+# A partman retention window (public.part_config.retention) is the ONLY thing that
+# ages a per-partition telemetry table out. The #5482 regression PURGEd the old
+# retention-bearing palletra.skus_extraction_runs and registered a singular
+# replacement with create_parent ONLY — silently losing the window, invisible to
+# CI because retention lives in part_config, not the schema snapshot. Rule: an
+# up.sql that REMOVES a retention-bearing parent (DROP TABLE, or part_config
+# DELETE) AND registers a create_parent replacement MUST establish retention on at
+# least one registered parent, or carry a `RETENTION-DROPPED-BY-DESIGN` marker.
+# Retention-bearing and create_parent parent sets are both derived from the tree.
+#
+# Why the ESCAPE HATCH (type: command): the retention-bearing set is derived from
+# `SET retention ... part_config` statements ANYWHERE in the migration tree, the
+# create_parent set from another cross-tree scan, and the two are joined per-file
+# with statement-scoped DROP/DELETE detection — a multi-file, multi-statement join
+# no declarative type expresses. This command reproduces the gate on the fixture
+# tree. fire-1 drops the retention-bearing parent + registers a replacement with
+# no retention and no marker; pass-1 records the drop with the marker.
+# Scope-level finding (no want marker).
+rules:
+  - id: migration-partman-retention-preserved-on-replace
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.up.sql"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          MIG="freightworks/services/core-api/migrations"
+          [ -d "$MIG" ] || exit 0
+          # R = parents ever given a retention window (SET retention + part_config).
+          R="$(while IFS= read -r f; do
+                 sed 's/--.*$//' "$f" | awk 'BEGIN{RS=";"}{s=tolower($0); if(index(s,"set retention")>0 && index(s,"part_config")>0) print $0}' \
+                   | grep -oiE "'[a-z0-9_]+\.[a-z0-9_]+'" | tr -d "'"
+               done < <(find "$MIG" -type f -name '*.up.sql') | tr 'A-Z' 'a-z' | sort -u)"
+          [ -n "$R" ] || exit 0
+          rc=0
+          while IFS= read -r up; do
+            [ -f "$up" ] || continue
+            newparents="$(grep -hoE "p_parent_table[[:space:]]*:=[[:space:]]*'[a-z0-9_]+\.[a-z0-9_]+'" "$up" \
+                          | grep -oE "'[a-z0-9_]+\.[a-z0-9_]+'" | tr -d "'" | tr 'A-Z' 'a-z' | sort -u)"
+            [ -n "$newparents" ] || continue        # no create_parent -> not a replace
+            flat="$(sed 's/--.*$//' "$up" | tr '\n' ' ' | tr 'A-Z' 'a-z' | tr -s ' ')"
+            removed=""
+            while IFS= read -r t; do
+              [ -n "$t" ] || continue
+              if grep -qE "drop table (if exists )?$t[^a-z0-9_]" <<<"$flat" \
+                 || grep -qE "delete from public.part_config.*'$t'" <<<"$flat"; then
+                removed="yes"
+              fi
+            done <<<"$R"
+            [ -n "$removed" ] || continue           # removes no retention parent
+            covered=0
+            while IFS= read -r p; do
+              [ -n "$p" ] || continue
+              grep -qxF "$p" <<<"$R" && covered=1
+            done <<<"$newparents"
+            grep -qF "RETENTION-DROPPED-BY-DESIGN" "$up" && continue
+            [ "$covered" -eq 1 ] || rc=1
+          done < <(find "$MIG" -type f -name '*.up.sql')
+          exit $rc
+      expect:
+        exit: 0
+    cure: "A rename-and-replace that drops a retention-bearing partman parent must restore retention on the replacement parent (the 0015 pattern), or record the drop in docs/plans/phase-6-decisions-log.md and mark the migration with `-- RETENTION-DROPPED-BY-DESIGN(<parent>): <why>` (#5482)."
+    origin: scripts/check-migration-partman-retention-preserved-on-replace.sh

@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-page-readiness-enum-error-handled.sh
+# (sweep-18 #5). page_readiness_validator.go casts its stage-name slice to
+# palletra.workflow_stage[]; on an unmatched code the cast fails SQLSTATE 22P02.
+# The fail-loud path needs three anchors present; this is one of them. exists-
+# mode over the exact file; file absent => passes (package renamed/removed).
+rules:
+  - id: page-readiness-22p02-sqlstate-check
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workerharness/page_readiness_validator.go"
+    preprocess: decomment-go
+    params:
+      pattern: '"22P02"'
+      mode: exists
+    cure: "page_readiness_validator.go must check the \"22P02\" SQLSTATE so a stage-enum cast failure fails loud, not swallowed."
+    origin: scripts/check-page-readiness-enum-error-handled.sh

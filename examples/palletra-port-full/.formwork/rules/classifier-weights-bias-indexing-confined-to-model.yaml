@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-classifier-weights-bias-indexing-confined-to-model.sh
+# (sweep-10 #5). The per-class dot-product (bias + Σ w·x) is single-sourced in
+# local.Model.RawScores. Within the classifier packages, only local/model.go
+# (RawScores) and local/serialize.go (Save/Load) may index `.Weights[` / `.Bias[`.
+# A second weight-indexing scorer anywhere else is a re-forked rawScores that can
+# drift from what inference emits (train/serve skew). The .sh decomments Go `//`
+# comments (so a `// m.Weights[c]` mention does not false-fire), matched by
+# decomment-go.
+rules:
+  - id: classifier-weights-bias-indexing-confined-to-model
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/parsecompose/classifier/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    except:
+      paths:
+        - "freightworks/services/core-api/internal/parsecompose/classifier/local/model.go"
+        - "freightworks/services/core-api/internal/parsecompose/classifier/local/serialize.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\.(Weights|Bias)\['
+    cure: "Route scoring through local.Model.RawScores — the single method that indexes m.Weights[c]/m.Bias[c]. A second dot-product drifts from inference (sweep-10 #5)."
+    origin: scripts/check-classifier-weights-bias-indexing-confined-to-model.sh

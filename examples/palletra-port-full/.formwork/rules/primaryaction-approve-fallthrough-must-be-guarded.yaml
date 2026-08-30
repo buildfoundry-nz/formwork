@@ -1,0 +1,34 @@
+# Ported from Palletra scripts/check-primaryaction-approve-fallthrough-must-be-guarded.sh
+# (Z4 / Z6 gate). An empty hand-drawable section is vacuously complete in
+# React, so an unconditional terminal `return Action{Kind: KindConfirm}` in the
+# Go decider would emit an enabled no-op "Approve" for an empty section (the
+# dead-button Z6 bug). Decide must route the empty, non-eligible section away
+# from the approve tail with a `OpenStepVisibleCount == 0` guard.
+#
+# The .sh's named regression is verbatim: "Removing the guard (re-introducing
+# the unconditional approve tail) fails the gate." That is a pair-consistency:
+# a file carrying the bare KindConfirm tail (trigger) MUST also carry the
+# empty-section visible-count guard (requires), same file.
+#
+# preprocess: decomment-go so a commented mention of the guard cannot satisfy
+# the requires (matching the .sh, which extracts real Decide code, not prose).
+#
+# NOTE (fidelity): the .sh ALSO asserts strict ORDER (guard before the approve
+# return) and scopes the walk to func Decide's body. pair-consistency drops the
+# strict-order sub-case; that reorder is not the named regression (deleting the
+# guard is), and structurally the guard sits near the top of Decide while the
+# approve tail is terminal, so the guard-removal case is the real-world failure
+# this ports faithfully.
+rules:
+  - id: primaryaction-approve-fallthrough-must-be-guarded
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workflow/primaryaction/primaryaction.go"
+    preprocess: decomment-go
+    params:
+      trigger: 'return Action\{Kind:\s*KindConfirm'
+      requires: 'OpenStepVisibleCount\s*==\s*0'
+    cure: "Guard the bare KindConfirm tail: keep `if in.OpenStepVisibleCount == 0 && !in.SectionReady { return resolveFinishAction(in) }` before the terminal `return Action{Kind: KindConfirm ...}` in func Decide, or an empty section shows an enabled no-op Approve (Z4/Z6)."
+    origin: scripts/check-primaryaction-approve-fallthrough-must-be-guarded.sh

@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-no-dead-go-funcs.sh — whole-module dead Go
+# function gate (#6722, #2346, #4844, #6922). "Unreachable from every main"
+# is a whole-program REACHABILITY property grep cannot see: a live reader and a
+# dead one are byte-for-byte the same shape; only call-graph reachability tells
+# them apart. So the gate runs golang.org/x/tools/cmd/deadcode (pinned to the
+# module's own x/tools version) over the WHOLE freightworks module in TWO passes —
+# Pass A (no -test) catches production-dead self-tested code; Pass B
+# (-test -tags=integration) catches funcs dead even to tests — and fails on ANY
+# unreachable func not on the in-script EXCEPT_A/EXCEPT_B evidence lists.
+#
+# Why the ESCAPE HATCH (type: command): it shells out to
+# `go run golang.org/x/tools/cmd/deadcode ./...`, which needs the full cgo module
+# build (pdftrace -> PDFium), not a tmpdir fixture. That is an external analyzer
+# over a compiled call graph — the sanctioned command escape. It lives in CI's
+# go-checks job (PDFium installed) where it verifies; locally it self-skips when
+# the toolchain can't build the module. `formwork lint` enumerates it. No fixture.
+rules:
+  - id: no-dead-go-funcs
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-no-dead-go-funcs.sh — the validating
+      target's own gate script, which this corpus does not carry and cannot:
+      it is written in that tree's vocabulary, and this repository tracks no
+      shell scripts at all. In a fixture tree bash would exit 127 in the fire
+      tree and the pass tree alike, so the fire proof would be satisfied by
+      the detector NOT EXISTING and the pass proof would report that same
+      missing-detector exit as a finding. What the port asserts here is the
+      SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-no-dead-go-funcs.sh
+      expect:
+        exit: 0
+    cure: "An unreachable func reappeared or a new one was added. Wire it into a reachable path, delete it, or (if it is a genuine test-only helper / dark-rollout / in-progress-epic seam) add it to EXCEPT_A / EXCEPT_B in the gate with the evidence for why."
+    origin: scripts/check-no-dead-go-funcs.sh

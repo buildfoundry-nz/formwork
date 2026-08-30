@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-no-extraction-bom-reprice.sh (#8260).
+# The BOM must not be re-priced per page during extraction (it scaled pricing
+# with pages x detector-types and serialized concurrent IdentificationJobs on the
+# single boms totals row). The .sh runs two rules:
+#   A. the removed per-SavePage re-price seam WithPostCommit /
+#      LiveCheckAfterPersist must not return, in non-test Go under freightworks.
+#   B. internal/parsewrite must not call EvaluateProjectBomQuantities /
+#      EvaluateBomLineQuantities directly.
+#
+# PARTIAL PORT: this rule ports Rule A (the broad seam ban) faithfully. Rule B
+# cannot be folded into the same forbidden-pattern rule: EvaluateProjectBomQuantities
+# / EvaluateBomLineQuantities are LEGITIMATE functions elsewhere (the pricing
+# screen path), so banning them requires the NARROW parsewrite-only scope
+# that a single rule's scope cannot combine with Rule A's broad freightworks scope.
+rules:
+  - id: no-extraction-bom-reprice
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: 'WithPostCommit|LiveCheckAfterPersist'
+    cure: "The per-SavePage BOM re-price seam was removed (#8260). Extraction must not re-price the BOM per page; pricing is a batch/user-action concern reached after the approve/measure choke point."
+    origin: scripts/check-no-extraction-bom-reprice.sh

@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-environment-gate-fail-closed.sh (#6608),
+# pattern 2: the fail-open shape `!= "production"` is banned anywhere in
+# non-test Go, whatever variable feeds it. That comparison grants permission by
+# default and revokes it only on an exact match — permissive in production,
+# where the feeding var is usually unset. Comments are stripped (decomment-go)
+# so the rationale prose quoting the anti-pattern is exempt.
+rules:
+  - id: fail-open-production-check-banned
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '!=\s*"production"'
+    cure: "Invert to opt-IN: ask env.IsDevEnvironment() (== a known-permissive value), so a missing/unknown variable can only make the gate stricter, never grant permission."
+    origin: scripts/check-environment-gate-fail-closed.sh

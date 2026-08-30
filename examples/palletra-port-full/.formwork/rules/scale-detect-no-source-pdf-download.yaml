@@ -1,0 +1,52 @@
+# Ported from Palletra scripts/check-gauge-scan-single-page.sh (#7490/#6407).
+# After the eager per-page split, both post-render single-page seams (scalewire,
+# spanwire) run over a SINGLE-PAGE artifact: the source comes from the
+# pageFeed seam (never a whole-doc download of t.OriginPDFKey), and every
+# artifact read targets page 1 (soloPageIndex, never t.PageNumber). The .sh's
+# PRIMARY rules are POSITIVE-TOKEN (every download( must carry PagePaintKey in
+# its top-level args; every read must carry soloPageIndex) — a per-CALL,
+# top-level-arg-scoped assertion no declarative formwork type expresses. What IS
+# faithfully portable is the .sh's two NEGATIVE nets, which ban the exact
+# regression shapes by literal token on de-commented Go:
+#   NEG1 — download(...t.OriginPDFKey...) — the #4870/#2765 whole-doc-staging OOM.
+#   NEG2 — scale.Detect / pdftrace.ExtractPageContent / IdentifyScaleViaOCRHighDPI
+#          taking a literal PageNumber — the #7139 page-N renumbering landmine.
+# Both regexes are ported verbatim from the .sh (NEG1_RE / NEG2_RE) and run over
+# comment-stripped source (preprocess: decomment-go) so a doc comment naming a
+# banned shape cannot false-fire.
+#
+# DIVERGENCE (noted): the .sh's positive-token aliasing coverage (an aliased
+# local `key := t.OriginPDFKey` / `pn := t.PageNumber` that defeats a literal
+# ban) is NOT reproduced — forbidden-pattern is a positive-substring ban, not a
+# "every call must carry token X" per-call check. The two concrete named
+# regression shapes are caught identically; the aliasing decoy is the documented
+# gap.
+rules:
+  - id: scale-detect-no-source-pdf-download
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workerharness/scalewire/**/*.go"
+        - "freightworks/services/core-api/internal/workerharness/spanwire/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'download\([^)]*\.OriginPDFKey'
+    cure: "Fetch the source PDF via the pageFeed(...) seam, never download(t.OriginPDFKey) — the whole-document stage is the #4870/#2765 OOM shape. Only the display PNG (t.PagePaintKey) is downloaded."
+    origin: scripts/check-gauge-scan-single-page.sh
+  - id: scale-detect-no-literal-page-number
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workerharness/scalewire/**/*.go"
+        - "freightworks/services/core-api/internal/workerharness/spanwire/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '(scale\.Detect|pdftrace\.ExtractPageContent|IdentifyScaleViaOCRHighDPI)\([^)]*[^A-Za-z0-9_)]PageNumber([^A-Za-z0-9_]|$)'
+    cure: "The single-page artifact must be read at soloPageIndex, never t.PageNumber — a page-N read targets a nonexistent page and silently degrades (#7139)."
+    origin: scripts/check-gauge-scan-single-page.sh

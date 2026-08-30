@@ -1,0 +1,31 @@
+# Ported from Palletra scripts/check-flutter-integration-tests-cover-slot-wire.sh
+# (sweep-1 #16). The integration_test/ tree MUST reference the canonical-workflow
+# slot wire — at least one `?slot=` query param OR a `slotKey:` named arg —
+# somewhere, or the slot critical path is uncovered and could silently revert to
+# the legacy no-slot path. The .sh does a recursive grep -E across the tree, so
+# exists-mode over the whole integration_test/ tree is the faithful port.
+#
+# This one stays on RAW, and unlike its siblings in this corpus it has no
+# comment-safe alternative. Raw means a comment naming ?slot= satisfies it —
+# a real weakness, stated here rather than hidden — but the `?slot=` half of the
+# pattern matches INSIDE a Dart string literal (the URL a spec builds), and the
+# only Dart projection formwork ships, code-only-dart, blanks string contents
+# along with comments. Probed on a spec that reaches the wire through the URL
+# only: raw accepts it, code-only-dart reports "required pattern not found" —
+# a false fire against a spec that does cover the slot path. Closing the comment
+# hole here needs a decomment-dart projection (blank comments, keep string
+# contents), the Dart counterpart of decomment-go; formwork ships
+# comments-only-dart and code-only-dart and no such variant, and
+# internal/preprocess is where it would live.
+rules:
+  - id: flutter-integration-tests-cover-slot-wire
+    type: required-pattern
+    scope:
+      include:
+        - "frontend/integration_test/**"
+    preprocess: raw
+    params:
+      pattern: '\?slot=|slotKey:'
+      mode: exists
+    cure: "Keep plot_slot_flow_critical_path_test.dart (or an equivalent slot-driving Patrol test) referencing ?slot= / slotKey: (sweep-1 #16)."
+    origin: scripts/check-flutter-integration-tests-cover-slot-wire.sh

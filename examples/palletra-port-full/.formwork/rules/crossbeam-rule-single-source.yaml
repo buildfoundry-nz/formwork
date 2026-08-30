@@ -1,0 +1,28 @@
+# Ported from Palletra scripts/check-crossbeam-rule-single-source.sh (#4937).
+# The racking crossbeam span->profile rule lives ONLY in internal/metrics/crossbeam:
+# the clear-span thresholds (1.5/2.7/3.3 m, boundary-guarded) and the quoted load
+# profiles "B50"/"B75"/"B90" must never be re-inlined in the crossbeam-consuming
+# surfaces.
+# Scope is the four consuming packages, each at its OWN package level (maxdepth 1):
+# a `<dir>/*.go` glob matches files directly in the dir but not sub-packages, so
+# the sibling pagegantry leaf (which legitimately uses 2.7 as gantryClearanceMinM)
+# is never reached — pagecrossbeam is listed explicitly instead of recursing page/**.
+# PREPROCESS: the shipped .sh strips // comments (`sed 's://.*::'`) before matching,
+# so this port uses decomment-go.
+rules:
+  - id: crossbeam-rule-single-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/metrics/page/*.go"
+        - "freightworks/services/core-api/internal/metrics/page/pagecrossbeam/*.go"
+        - "freightworks/services/core-api/internal/projectgauges/*.go"
+        - "freightworks/services/core-api/routes/annotations/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '(^|[^0-9.])(1\.5|2\.7|3\.3)([^0-9]|$)|"B50"|"B75"|"B90"'
+    cure: "Resolve the bucket through the shared helper — import internal/metrics/crossbeam and call crossbeam.Resolve / crossbeam.AllowedOverride / crossbeam.ProfileOptions; never re-inline the 1.5/2.7/3.3 span thresholds or the {B50,B75,B90} profile set (#4937)."
+    origin: scripts/check-crossbeam-rule-single-source.sh

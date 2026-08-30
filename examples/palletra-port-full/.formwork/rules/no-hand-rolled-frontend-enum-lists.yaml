@@ -1,0 +1,34 @@
+# Ported from Palletra scripts/check-no-hand-rolled-frontend-enum-lists.sh (Phase 5 re-audit
+# WI-11). Business enumerations must be served from Go — a hardcoded
+# `static const [List<...>] <id> = [<enum values>]` in FE library code is the
+# Server-Owned-Logic violation. Anchors on the FIRST list element (a quoted
+# string, a CONSTANT_CASE token, or an Enum.value) to distinguish a business-enum
+# CODE list from a UI config-object list ([_MenuEntry(label:'Home')...]).
+# Scope: frontend/lib + every packages/*/lib. Carve-out: **/presentation/task_tokens.dart
+# (a UI badge-token catalog, not a server-validated enum). Pattern is RE2-safe
+# (POSIX/hex classes, non-capturing groups; no lookaround/backrefs).
+#
+# APPROXIMATION: the .sh uses ripgrep --multiline --multiline-dotall, matching
+# enum lists whose first element sits on a following line
+# (`static const List<String> x = [\n 'a',\n];`). formwork forbidden-pattern is
+# line-oriented, so this rule catches single-line enum lists only; a list whose
+# first element is on the next line is not caught.
+rules:
+  - id: no-hand-rolled-frontend-enum-lists
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+    except:
+      paths:
+        - "**/presentation/task_tokens.dart"
+    params:
+      pattern: 'static\s+const\s+(?:List<[^>]+>\s+)?[A-Za-z_]\w*\s*=\s*(?:const\s*)?(?:<[^>]+>\s*)?\[\s*(?:[\x27"]|\b[A-Z][A-Z0-9_]{2,}\b|\b[A-Z][A-Za-z0-9_]*\.[a-z_])'
+    cure: "Move the list to the server-served response (e.g. extend ListTaskViewsResponse and seed the slice in internal/taskview). FE renders whatever the server emits, in declared order (Server-owned logic)."
+    origin: scripts/check-no-hand-rolled-frontend-enum-lists.sh

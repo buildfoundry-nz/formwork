@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-no-references-to-retired-override-flag.sh (sweep-13 I3, #8170).
+# palletra.annotation_gauges.is_manual_flag was a proven-redundant derived flag
+# (is_manual_flag = adjusted_value IS NOT NULL) dropped by 20000507115900. It must
+# never return to the committed schema snapshot.
+#
+# APPROXIMATION: the .sh is table-scoped — it isolates the
+# `CREATE TABLE palletra.annotation_gauges (...)` block and only bans
+# is_manual_flag THERE, so an is_manual_flag column on a DIFFERENT table is allowed.
+# formwork forbidden-pattern is line-oriented and cannot isolate a multi-line
+# CREATE TABLE block, so this rule scopes to the snapshot file and bans the
+# is_manual_flag column token anywhere in it (a stricter superset — no other table
+# carries an is_manual_flag column today, so behavior is equivalent on the real
+# tree). The word-boundary class mirrors the .sh's `(^|[^a-z_])..([^a-z_]|$)`.
+rules:
+  - id: no-references-to-retired-override-flag
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+    params:
+      pattern: '(^|[^a-z_])is_manual_flag([^a-z_]|$)'
+    cure: "is_manual_flag is a proven-redundant derived flag (= adjusted_value IS NOT NULL, SV-3 #4244/#6722, dropped by #8170). Consume adjusted_value (overridden iff adjusted_value IS NOT NULL) instead of re-adding a stored boolean."
+    origin: scripts/check-no-references-to-retired-override-flag.sh

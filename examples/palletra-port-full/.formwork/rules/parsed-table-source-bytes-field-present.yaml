@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-parsed-table-source-field-consumed.sh (sweep-3 #9).
+# Anti-vacuity guard: parse.go must still declare `RawBytes int` on
+# stockroomparse.ParsedSheet. If the field were dropped the consumer gate below would
+# become a silent no-op, so the type must keep declaring it. exists-mode over the
+# exact type file.
+rules:
+  - id: parsed-table-source-bytes-field-present
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/stockroom/parse/parse.go"
+    preprocess: raw
+    params:
+      pattern: '^\s+RawBytes\s+int'
+      mode: exists
+    cure: "stockroomparse.ParsedSheet must keep declaring `RawBytes int`; the consumer gate must be updated in lock-step with any type change."
+    origin: scripts/check-parsed-table-source-field-consumed.sh

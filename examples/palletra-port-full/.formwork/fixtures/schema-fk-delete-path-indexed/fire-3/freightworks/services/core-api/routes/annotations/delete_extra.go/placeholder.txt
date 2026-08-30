@@ -1,0 +1,20 @@
+The parent of this file is named delete_extra.go and is a DIRECTORY. It sits in
+the request path the checker globs for `DELETE FROM palletra.` seeds, so it is a
+path that NAMES Go source and cannot be read.
+
+That is the whole fixture. Everything else here is pass-1 byte for byte, so the
+only thing separating a green run from a red one is a seed the run could not
+look at (#262 finding 2). Before the fix the walk returned nil for any directory
+before it ever looked at the suffix, and the read loop `continue`d past any file
+it could not open, so the DELETE seed set shrank toward empty in silence and the
+gate printed the same `OK — … (2 table(s) in the delete closure)` line as the
+untouched pass tree. Shrink it all the way and the line reads `(0 table(s) in
+the delete closure)`, still at exit 0: an FK gate that judged no FK.
+
+A directory is the vector for the same reason as fire-2: git tracks no mode-000
+file and formwork refuses a committed symlink inside a fixture tree, so a
+directory is the only unreadable path a commit can carry — and it is unreadable
+for root, where a runtime chmod would silently pass under a root CI user.
+
+git tracks files rather than directories, so this placeholder is what keeps the
+directory in the tree.

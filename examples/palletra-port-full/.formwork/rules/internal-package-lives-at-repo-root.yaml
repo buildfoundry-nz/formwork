@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-internal-package-lives-at-repo-root.sh (SV-ARC-7).
+# A non-core-api binary (any service under freightworks/services/<svc>/ where
+# <svc> != core-api, or any freightworks/cmd/<bin>/) must not import
+# github.com/palletra/freightworks/services/core-api/internal/ — shared
+# code moves UP to freightworks/internal/ rather than being cut-and-pasted or
+# cross-imported. Non-test only. Scope is expressed as services/** + cmd/**
+# with core-api and *_test.go excluded (mirrors the .sh's owner classification).
+rules:
+  - id: internal-package-lives-at-repo-root
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/**/*.go"
+        - "freightworks/cmd/**/*.go"
+      exclude:
+        - "freightworks/services/core-api/**"
+        - "**/*_test.go"
+    params:
+      pattern: '"github\.com/palletra/freightworks/services/core-api/internal/'
+    cure: "Move the shared package up from services/core-api/internal/<pkg>/ to freightworks/internal/<pkg>/ and import that instead (SV-ARC-7)."
+    origin: scripts/check-internal-package-lives-at-repo-root.sh

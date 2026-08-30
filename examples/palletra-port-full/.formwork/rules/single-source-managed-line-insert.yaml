@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-single-source-managed-line-insert.sh
+# (#1920 Fold 2). The managed-line source token
+# 'auto_derived'::palletra.line_origin is the exact drift signal of a
+# re-typed managed bom_line_items INSERT. It is banned in every non-test Go file
+# outside the sanctioned single-source file internal/curatedline/curatedline.go.
+# Go line-comments are stripped (decomment-go), *_test.go excluded, and the
+# canonical owner is carved out by path suffix.
+rules:
+  - id: single-source-managed-line-insert
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/curatedline/curatedline.go"
+    preprocess: decomment-go
+    params:
+      pattern: '''auto_derived''::palletra\.line_origin'
+    cure: "Delete the inline managed INSERT and call the shared writer curatedline.Insert(...) — one source (#1920)."
+    origin: scripts/check-single-source-managed-line-insert.sh

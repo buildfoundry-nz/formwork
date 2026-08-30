@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+# The helper is consulted exactly once.
+SCHEMA_SYNC_DECISION=$(go run scripts/dev/schema-regen-choice.go)

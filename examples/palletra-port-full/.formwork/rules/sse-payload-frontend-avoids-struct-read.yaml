@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-stream-payload-typed.sh (Rule B, #3149 RS-3).
+# Non-generated Dart under packages/ or frontend/lib/ must not read a payload by
+# raw `.payload.fields[...]` string key — the exact drift seam #3149 killed.
+# Consumers read the typed variant (event.sheetPhase.pageId, ...) instead.
+# NOTE: the .sh strips full-line // comment matches; formwork has no decomment-
+# dart preprocessor yet, so this runs raw (a `.payload.fields` inside a comment
+# would false-positive — a minor, more-conservative divergence).
+rules:
+  - id: sse-payload-frontend-avoids-struct-read
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+    params:
+      pattern: '\.payload\.fields\b'
+    cure: "Read the typed payload variant (event.sheetPhase.pageId, ...), not raw .payload.fields[key] (#3149)."
+    origin: scripts/check-stream-payload-typed.sh

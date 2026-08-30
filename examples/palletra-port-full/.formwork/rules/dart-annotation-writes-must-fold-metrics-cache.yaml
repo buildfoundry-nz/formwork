@@ -1,0 +1,30 @@
+# Ported from Palletra scripts/check-dart-annotation-writes-must-fold-metrics-cache.sh
+# (#8390). A mutation's server envelope (ImpactedPage) feeds TWO Measure caches
+# off the ONE response: the raw annotation cache (notifier.applyImpactedPage)
+# AND the ProjectTally display projection the sidebar cards render. They must
+# move together — a write that folds only the annotation cache leaves the
+# projection stale, the source-of-truth divergence #8390 closed.
+#
+# The .sh is per-class (segments each file at its class declarations). formwork's
+# simplest faithful capture is file-level pair-consistency conditioned on the
+# fold itself: a file that folds the annotation cache (notifier.applyImpactedPage
+# — trigger) must also fold the projection (metrics.applyImpactedPage, or
+# metrics.refresh for a project-wide rollup — requires). The conditionality (a
+# non-folding write, e.g. the label-rename, answers no ImpactedPage and is not
+# obliged to fold metrics) is preserved; the per-class granularity (a conformant
+# sibling class cannot mask a divergent one) is the nuance lost. No preprocess:
+# formwork has no decomment-dart, so a commented fold would false-trigger — the
+# fixtures keep folds in real code.
+rules:
+  - id: dart-annotation-writes-must-fold-metrics-cache
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+    params:
+      trigger: 'notifier\.applyImpactedPage\('
+      requires: 'metrics\.applyImpactedPage\(|metrics\.refresh\('
+    cure: "Beside 'notifier.applyImpactedPage(resp.impactedPage)' add 'metrics.applyImpactedPage(resp.impactedPage)' (or 'metrics.refresh()' for a project-wide rollup) so both caches fold from the ONE response envelope (#8390)."
+    origin: scripts/check-dart-annotation-writes-must-fold-metrics-cache.sh

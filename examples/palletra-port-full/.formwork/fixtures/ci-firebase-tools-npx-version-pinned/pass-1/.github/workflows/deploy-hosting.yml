@@ -1,0 +1,9 @@
+name: Deploy Hosting
+on:
+  push:
+    branches: [develop]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npx firebase-tools@15.31.4 deploy --only hosting

@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-astenantorg-in-production-use.sh (sweep-2 SV-ARC-1 / SG-5).
+# db.AsTenantOrg is the worker tenant seam (#4528). It must have at least one
+# PRODUCTION call site: `AsTenantOrg(` must appear in some non-test .go under
+# freightworks OTHER THAN its definition file internal/db/pool.go — an anti-theatre
+# check that the seam is adopted, not just defined. The .sh rg's for the call and
+# excludes pool.go, so this is an exists-mode required-pattern with pool.go
+# excluded from scope.
+rules:
+  - id: astenantorg-in-production-use
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/db/pool.go"
+    params:
+      pattern: 'AsTenantOrg\('
+      mode: exists
+    cure: "Convert a worker-pipeline writer to call db.AsTenantOrg (production call site), not just define it (sweep-2 SV-ARC-1)."
+    origin: scripts/check-astenantorg-in-production-use.sh

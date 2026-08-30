@@ -1,0 +1,32 @@
+# Ported from Palletra scripts/check-completion-delta-marshal-order.sh
+# (#7662 RS-4, Rule B — the serialization-order invariant). WorkflowProgressDelta
+# is a PROJECTION of Measure-rail state at commit time; it must never enter the
+# body that idempotency.Execute caches and replays. The contract: build the
+# response WITHOUT the delta, marshal it (that is what gets cached), THEN assign
+# `.CompletionDiff =` onto the fresh response only. Reordering the two lines is
+# the whole bug (#7662 PR3a-2), and it is a one-line edit.
+#
+# ordering (within file): `shared.EncodeOpts.Marshal(` (before) must precede the
+# first `.CompletionDiff =` assignment (after). An assignment on an earlier line
+# than the marshal fires — the cached body would then carry the stale projection
+# and a replay would permanently rewind the rail. decomment-go so a doc-comment
+# describing the shape can neither satisfy nor trip the rule. Rules A (no
+# CompletionDiff: composite literal in an idempotency.Execute file) and C
+# (package-scope WriteLiveOrCachedResponse companion) are out of scope for a
+# single ordering rule.
+rules:
+  - id: marshal-completion-delta-first
+    type: ordering
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      before: 'EncodeOpts\.Marshal\('
+      after: '\.CompletionDiff\s*='
+      within: file
+    cure: "Marshal the delta-free response first (that body is cached), then assign resp.CompletionDiff = delta onto the fresh response. A delta marshalled into the cached body rewinds the rail on every replay (#7662 RS-4)."
+    origin: scripts/check-completion-delta-marshal-order.sh

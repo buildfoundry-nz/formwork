@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-no-legacy-embedding-model-name.sh (#4158). The
+# removed second embedding model text-embedding-005 must not reappear in
+# non-test production Go under freightworks (its catalog vector had no reader and
+# its cost was cut). This ports Rule A (the namesake model-name ban). Rule B
+# (no UPDATE/INSERT write to platform.sku_catalog.embedding) is a
+# multi-line statement-scoped SQL match, not RE2 line-expressible, and is not
+# folded in; see notes.
+rules:
+  - id: no-legacy-embedding-model-name
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: 'text-embedding-005'
+    cure: "Do not reintroduce text-embedding-005; gemini-embedding-001 (sku/ratecard) and multimodalembedding@001 (plan fingerprints) are the only embedding models (#4158)."
+    origin: scripts/check-no-legacy-embedding-model-name.sh

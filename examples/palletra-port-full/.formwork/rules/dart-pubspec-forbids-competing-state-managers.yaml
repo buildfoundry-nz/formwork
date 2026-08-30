@@ -1,0 +1,33 @@
+# Ported from Palletra scripts/check-dart-pubspec-forbids-competing-state-managers.sh. The .sh does two
+# things: (1) requires minimum pinned versions for the Flutter/Dart SDK and,
+# when present, flutter_riverpod / riverpod_annotation / go_router / dio; and
+# (2) BANS competing state-manager packages (provider, get, redux,
+# flutter_redux, mobx, flutter_bloc, scoped_model) that conflict with the
+# chosen Riverpod 3.x posture. This rule ports half (2) — the banned-package
+# ban — as a forbidden-pattern over every pubspec.yaml in the tree.
+#
+# NOT PORTED (needs a numeric version-comparison / conditional-when-present
+# rule type, not forbidden/required-pattern): half (1), the minimum-version
+# pins for the SDK and the optional deps. That half is version arithmetic no
+# line pattern can perform faithfully; the banned-package ban is the cleanly
+# expressible portion and is what the wave classified as forbidden-pattern.
+rules:
+  - id: dart-pubspec-forbids-competing-state-managers
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/pubspec.yaml"
+      exclude:
+        - "**/node_modules/**"
+        - "**/.worktrees/**"
+        - "**/.git/**"
+        - "**/.dart_tool/**"
+        - "**/build/**"
+        - "**/vendor/**"
+        - "**/.claude/**"
+        - "**/.codex/**"
+    params:
+      pattern: '^\s+(provider|get|redux|flutter_redux|mobx|flutter_bloc|scoped_model):'
+    cure: "Remove the competing state-manager dependency; the codebase must pick one, and it is Riverpod 3.x (flutter_riverpod ^3.2 / riverpod_annotation ^4). provider/get/redux/flutter_redux/mobx/flutter_bloc/scoped_model conflict with that posture."
+    origin: scripts/check-dart-pubspec-forbids-competing-state-managers.sh

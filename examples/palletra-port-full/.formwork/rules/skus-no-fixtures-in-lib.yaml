@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-skus-no-fixtures-in-lib.sh (#4372).
+# The Skus page renders read-only off the live projection
+# (GET /api/pricing/{id}/skus); the fake surfaces StubSkusRepository
+# and the skus_stub_fixtures.dart module were deleted (#8496/#4372) and
+# must not return to any package lib/. Fakes belong in test/ against the
+# SkusRepository interface, never in lib/.
+#
+# Faithful port: forbid the two SPECIFIC identifiers (never the bare words
+# stub/fixture, which appear legitimately in other packages' lib/testing/
+# doubles and doc comments) in hand-written lib/ Dart. Generated output and
+# lib/generated/ are exempt via scope.exclude.
+#
+# APPROX: the .sh also bans a file NAMED *skus_stub_fixtures*.dart even if
+# its content never self-names. forbidden-pattern is content-based, so the
+# filename-only shape is covered only insofar as such a file (or its importers)
+# names the module — the common case. See notes.
+rules:
+  - id: skus-no-fixtures-in-lib
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+        - "**/lib/generated/**"
+    params:
+      pattern: 'StubSkusRepository|skus_stub_fixtures'
+    cure: "The Skus page is read-only off GET /api/pricing/{id}/skus; do not reintroduce StubSkusRepository or skus_stub_fixtures in lib/. Fake the SkusRepository interface in test/ instead (#8496/#4372)."
+    origin: scripts/check-skus-no-fixtures-in-lib.sh

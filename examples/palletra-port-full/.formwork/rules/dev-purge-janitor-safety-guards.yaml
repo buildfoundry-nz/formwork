@@ -1,0 +1,50 @@
+# Ported from Palletra scripts/check-dev-purge-janitor-safety-guards.sh.
+#
+# scripts/purge-dev-projects.go DELETES rows, so two safety guards are
+# mandatory and must not regress: (Q5-3) a hard DEV env-gate fingerprinted by the
+# e2e-critical-%@palletra.example users that only exist in dev; (Q5-4) MAX_AGE
+# validated against a plain "<int> <unit>" interval BEFORE it is spliced into the
+# SQL interval literal. This gate asserts both textual guards are present AND
+# EXECUTES the janitor with an injection MAX_AGE to prove it prints
+# 'invalid MAX_AGE' before any DB call.
+#
+# The behavioral half fundamentally RUNS A TOOL (it executes the janitor), so
+# this is the command escape hatch: a self-contained check reproducing the two
+# presence greps plus the injection-execution assertion against the janitor in
+# the fixture tree. The janitor is run as `go run scripts/purge-dev-projects.go`
+# — explicitly listing the file compiles it despite its //go:build ignore line,
+# so the fixture MUST stay valid, compilable Go: a non-compiling janitor would
+# exit non-zero for the wrong reason and this gate would fire on the compile
+# error instead of on the missing guard. (The psql-only unreachable-DB ABORT
+# arm is environment-gated in the original and omitted here — psql is not
+# present on the fixture path.)
+# Scope-level finding (no want marker); fire-1's janitor lost a guard / accepts
+# the injection, pass-1's janitor is hardened.
+rules:
+  - id: dev-purge-janitor-safety-guards
+    type: command
+    severity: error
+    scope:
+      include:
+        - "scripts/purge-dev-projects.go"
+    params:
+      cmd:
+        - bash
+        - "-c"
+        - |
+          set -u
+          J="scripts/purge-dev-projects.go"
+          [ -f "$J" ] || { echo "janitor missing" >&2; exit 1; }
+          # Q5-3: dev env-gate fingerprint present.
+          grep -qw 'e2e-critical-%@palletra.example' "$J" || { echo "lost dev env-gate" >&2; exit 1; }
+          # Q5-4: MAX_AGE interval validation present.
+          grep -qw 'minute|hour|day|week' "$J" || { echo "lost MAX_AGE validation" >&2; exit 1; }
+          # A6-2: an injection MAX_AGE must be rejected by the MAX_AGE validation
+          # SPECIFICALLY — assert the 'invalid MAX_AGE' message, not just non-zero.
+          out="$(go run "$J" "postgresql://x" "1 day' OR true --" 2>&1 || true)"
+          grep -q 'invalid MAX_AGE' <<<"$out" || { echo "injection MAX_AGE not rejected: $out" >&2; exit 1; }
+          exit 0
+      expect:
+        exit: 0
+    cure: "Restore the dev env-gate (the e2e-critical-%@palletra.example fingerprint) and the MAX_AGE '<int> <unit>' interval validation in scripts/purge-dev-projects.go; both must fail closed BEFORE any DB call. A row-deleting janitor without them is never acceptable."
+    origin: scripts/check-dev-purge-janitor-safety-guards.sh

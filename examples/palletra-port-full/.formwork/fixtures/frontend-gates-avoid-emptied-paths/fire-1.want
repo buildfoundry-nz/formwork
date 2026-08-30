@@ -1,0 +1,4 @@
+# Scope-level. Pinned on the offending gate's file:line rather than the verdict
+# sentence above it: that sentence is an `echo` literal in the rule's own argv, so it
+# discriminates nothing.
+- scripts/check-dart-example.go:12:

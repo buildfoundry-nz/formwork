@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-endcap-canopy-size-registries-coupled.sh
+# (sweep-20 #4722). Endcap + canopy sizes live in TWO independent Go
+# registries that must stay coupled:
+#   OFFERED      — internal/kitimport/declared_options.go: the switch Var of
+#                  each declaredOptions row whose Code is "PLT.EndCap.*" /
+#                  "PLT.Canopy.*" (the dropdown the estimator picks from).
+#   PRICING BANK — internal/calceval/endcapcanopy/endcap_canopy_vars.go: the
+#                  first token of each `{"switchVar", "destVar"}` sizeChoice
+#                  literal (the set the routing bridge can actually price).
+# The rule: OFFERED must be a SUBSET of the PRICING BANK — every size an estimator can
+# select must have a bank entry that routes it, or it silently prices as
+# nothing (#4722). The reverse (a bank size never offered) is harmless dead
+# code and is NOT flagged. Both registries are decommented first, so a switch
+# var named only inside a `//` doc comment (or a commented-out bank entry) does
+# not count — exactly the .sh's strip_comments_go behavior.
+#
+# NOTE (fidelity): the .sh also exits 2 when either extracted set is EMPTY (an
+# anti-vacuity guard against the file shape drifting). set-relation cannot
+# express that guard — an empty A trivially satisfies subset — so only the
+# core coupling (A ⊆ B) is ported here; formwork lint owns empty-scope rot.
+rules:
+  - id: endcap-canopy-size-registries-coupled
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/kitimport/declared_options.go"
+        - "freightworks/services/core-api/internal/calceval/endcapcanopy/endcap_canopy_vars.go"
+    preprocess: decomment-go
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/internal/kitimport/declared_options.go"
+        pattern: '"PLT\.(?:EndCap|Canopy)\.[^"]*".*Var:\s*"(k\d+_\d+)"'
+        group: 1
+      b:
+        files:
+          - "freightworks/services/core-api/internal/calceval/endcapcanopy/endcap_canopy_vars.go"
+        pattern: '\{"(k\d+_\d+)",\s*"k\d+_\d+"\}'
+        group: 1
+      relation: subset
+    cure: "Every PLT.EndCap.*/PLT.Canopy.* switch offered in declared_options.go MUST have a matching {\"<switchVar>\", ...} sizeChoice in endcap_canopy_vars.go (endcapBank / canopyBank), or the estimator can select a size that prices as nothing (#4722)."
+    origin: scripts/check-endcap-canopy-size-registries-coupled.sh

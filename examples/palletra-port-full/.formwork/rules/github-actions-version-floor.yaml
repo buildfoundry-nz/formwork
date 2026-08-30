@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-github-actions-version-floor.sh.
+# Ratchet: a `uses: <curated-action>@vN` below its floor major (both curated
+# actions floor at v3 — v1/v2 target EOL Node 20) is banned. The .sh compares
+# major >= floor numerically; RE2 has no arithmetic, so this matches the exact
+# below-floor majors @v1 / @v2 (bounded by ([^0-9]|$) so @v10..@v29 are NOT
+# caught, matching floor 3). SHA/non-vN refs are skipped (they lack an @vN).
+# decomment-yaml is unavailable in this build, so preprocess is omitted and the
+# `^\s*-?\s*uses:` anchor excludes commented-out `# uses:` lines (they start #).
+rules:
+  - id: github-actions-version-floor
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/**/*.yml"
+        - ".github/workflows/**/*.yaml"
+        - ".github/actions/**/*.yml"
+        - ".github/actions/**/*.yaml"
+    params:
+      pattern: '^\s*-?\s*uses:\s*["'']?(actions/create-github-app-token|google-github-actions/setup-gcloud)@v[12]([^0-9]|$)'
+    cure: "Bump the action to at least @v3 (v1/v2 target the EOL Node 20 runtime). Only a deliberate SHA pin is out of scope."
+    origin: scripts/check-github-actions-version-floor.sh

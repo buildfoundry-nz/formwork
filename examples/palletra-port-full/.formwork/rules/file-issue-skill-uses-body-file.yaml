@@ -1,0 +1,15 @@
+# Ported from Palletra scripts/check-issue-filing-skill-contract.sh (#7744), invariant R3:
+# the /file-issue skill must write issue bodies via the hook-safe heredoc — it
+# MUST reference `--body-file`, never an inline `--body`. Exists-mode required
+# rule over SKILL.md.
+rules:
+  - id: file-issue-skill-uses-body-file
+    type: required-pattern
+    scope:
+      include:
+        - ".claude/skills/file-issue/SKILL.md"
+    params:
+      pattern: '--body-file'
+      mode: exists
+    cure: "Keep the /file-issue skill writing issue bodies via `--body-file` (hook-safe heredoc), not inline `--body` (R3, #7744)."
+    origin: scripts/check-issue-filing-skill-contract.sh

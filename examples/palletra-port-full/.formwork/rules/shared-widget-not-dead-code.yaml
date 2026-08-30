@@ -1,0 +1,63 @@
+# Ported from Palletra scripts/check-shared-widget-not-dead-code.sh
+# (audit Tier 3.4). Shared widgets live under packages/plt_widgets/lib/ so call
+# sites across the app can reuse them; a public widget class with ZERO callers
+# OUTSIDE plt_widgets/lib is dead-on-disk. Every public class declared under
+# packages/plt_widgets/lib/ (generated output excluded) MUST be referenced by at
+# least one caller across the Dart library scan dirs OUTSIDE plt_widgets/lib.
+#
+# Ported as a set-relation SUBSET: side A = every public widget class DECLARED
+# in plt_widgets/lib; side B = every capitalised identifier REFERENCED in the
+# caller roots. A ⊆ B means every declared widget is named by some caller.
+#
+# FP FIX: the .sh's caller roots are the SHARED Dart enumerator dart_walk_dirs =
+# frontend/lib PLUS **every** packages/*/lib, with only plt_widgets/lib excluded
+# (`grep -v "${WIDGETS_DIR}/"`). The port's side B listed only
+# packages/feature_*/lib + frontend/lib, so a widget referenced solely from a
+# base plt_* package (plt_canvas_kit, plt_pricing, …) — never from a feature
+# package or the app shell — read as a zero-caller orphan on clean develop even
+# though the gate sees the caller. Side B now enumerates all packages/*/lib
+# EXCEPT plt_widgets (the two `plt_w*` packages are plt_widgets and plt_workflow,
+# so `plt_[!w]*` + `plt_w[!i]*` includes plt_workflow and every non-w plt package
+# while still excluding plt_widgets itself — its own declaration line and
+# sibling-widget cross-references must NOT count as callers). Generated output is
+# excluded by scope, mirroring the gate's --exclude of *.g/.freezed/.pb*.dart.
+#
+# DIVERGENCE (noted): (1) side B enumerates the caller roots by explicit positive
+# globs rather than "packages/*/lib minus plt_widgets" (doublestar has no path
+# negation; the `[!…]` character-class exclusions cover the one excluded package).
+# (2) side B extracts every capitalised identifier, so a widget named only inside
+# a `//` comment in a caller would satisfy side B (line extraction does not
+# de-comment). (3) test/ trees are not caller roots; side B's globs are lib-only.
+# Scope-level finding (fire-1.want carries the `-` marker).
+rules:
+  - id: shared-widget-not-dead-code
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "packages/plt_widgets/lib/**/*.dart"
+        - "packages/feature_*/lib/**/*.dart"
+        - "packages/plt_[!w]*/lib/**/*.dart"
+        - "packages/plt_w[!i]*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+    params:
+      a:
+        files:
+          - "packages/plt_widgets/lib/**/*.dart"
+        pattern: '^class ([A-Z][A-Za-z0-9_]+)'
+        group: 1
+      b:
+        files:
+          - "packages/feature_*/lib/**/*.dart"
+          - "packages/plt_[!w]*/lib/**/*.dart"
+          - "packages/plt_w[!i]*/lib/**/*.dart"
+          - "frontend/lib/**/*.dart"
+        pattern: '[A-Z][A-Za-z0-9_]+'
+        group: 0
+      relation: subset
+    cure: "Migrate the matching open-coded sites onto the shared widget, OR delete the dead widget. A shared widget nobody uses means the open-coded duplicates it was meant to replace are still in the tree (audit Tier 3.4)."
+    origin: scripts/check-shared-widget-not-dead-code.sh

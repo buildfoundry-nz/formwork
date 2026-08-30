@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-arbitrator-worker-only.sh (#5046) — Rule A.
+# The residual candidate source for the LLM arbitrator is produced ONE way,
+# ratecardmatch.LeftoverTopK, whose sole production caller is the sidebar
+# residual helper (internal/skusidebar/match.go). A second caller is a
+# forked (possibly non-residual) candidate source feeding the arbitrator.
+#
+# Port note: the .sh also fails LOUDLY on ZERO callers (renamed/moved). A
+# forbidden-pattern can only enforce "no caller outside the sanctioned helper";
+# the zero-caller existence check is not expressible here and is dropped.
+# The offline eval CLI (cmd/extraction-eval) and *_test.go are exempt.
+rules:
+  - id: arbitrator-residual-single-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/services/core-api/internal/skusidebar/match.go"
+        - "freightworks/services/core-api/cmd/extraction-eval/**"
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'ratecardmatch\.LeftoverTopK\('
+    cure: "Build arbitrator candidates through the one residual helper (internal/skusidebar/match.go); a second LeftoverTopK caller forks the residual source (#5046)."
+    origin: scripts/check-arbitrator-worker-only.sh

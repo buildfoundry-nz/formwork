@@ -1,0 +1,1 @@
+- open-coded async error branch (no RemoteErrorView): packages/feature_dimension/lib/presentation/measure_summary.dart

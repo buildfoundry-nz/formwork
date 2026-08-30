@@ -1,0 +1,62 @@
+# Ported from Palletra scripts/check-scale-status-confidence-in-sync.sh (#7639).
+#
+# palletra.pages describes a page's scale trustworthiness with TWO columns:
+# scale_verdict (the verdict) and scale_certainty (the evidence strength). The
+# auto-approve gate reads BOTH, so a writer that moves one and leaves the other
+# stale makes them disagree. The #7639 defect: spancheck demoted a bad
+# detection with `UPDATE palletra.pages SET scale_verdict = 'requires_review' …` and
+# never touched scale_certainty, so a demoted page kept its detection confidence
+# and still cleared the 0.85 auto-approve gate (and the mirror on the confirm
+# side).
+#
+# RULE. Any UPDATE of palletra.pages whose SET clause assigns a LITERAL
+# scale_verdict must ALSO assign scale_certainty in that same statement. The
+# statement-scoped PCRE2 pattern (ported verbatim from the .sh): the trailing
+# backtick anchors the match to the end of the Go raw-string SQL; (?!scale_
+# confidence) blocks consumption the moment scale_certainty appears on EITHER
+# side of the scale_verdict anchor (a SET clause may list the two in either
+# order); (?!\bWHERE\b) on the leading side keeps the anchor inside the SET
+# clause, so an UPDATE that merely FILTERS on `WHERE scale_verdict = 'confirmed'`
+# is not a violation.
+#
+# PORT MAPPING: forbidden-pattern, syntax: regexp2, multiline: true — the pattern
+# is the .sh's exact `rg --pcre2 -U` regex; the match starts on the UPDATE line
+# (the reported line). preprocess: raw mirrors the .sh's rg over source. Scope:
+# freightworks non-test Go. The second rule below ports the .sh's anti-vacuity
+# exit-2 guard: at least one `UPDATE palletra.pages` must exist (else path rot).
+#
+# SCOPE / KNOWN LIMIT (from the .sh, faithfully carried): the rule anchors on a
+# LITERAL scale_verdict = 'x', so a parameter-bound write (NULLIF($3,'')::…) or a
+# column-ref carry (pp.scale_verdict) is out of reach — both already write
+# scale_certainty in the same statement.
+rules:
+  - id: scale-status-confidence-in-sync
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: raw
+    params:
+      pattern: "UPDATE\\s+palletra\\.pages\\b(?:(?!`)(?!scale_certainty)(?!\\bWHERE\\b)[\\s\\S])*?scale_verdict\\s*=\\s*'(?:(?!`)(?!scale_certainty)[\\s\\S])*?`"
+      syntax: regexp2
+      multiline: true
+    cure: "Set scale_certainty in the SAME statement (#7639): demote ('requires_review') → scale_certainty = 0; confirm ('confirmed') → scale_certainty = 1.0. A page's status and its confidence must not disagree about whether it can be trusted — the auto-approve gate reads both."
+    origin: scripts/check-scale-status-confidence-in-sync.sh
+
+  - id: scale-status-sync-guard-has-premise
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: "UPDATE\\s+palletra\\.pages\\b"
+      mode: exists
+    cure: "Anti-vacuity guard (#7639): the coherence rule only has a surface if some non-test Go still issues `UPDATE palletra.pages`. If none does, the write path moved — repoint this rule and its sibling instead of letting the gate pass vacuously."
+    origin: scripts/check-scale-status-confidence-in-sync.sh

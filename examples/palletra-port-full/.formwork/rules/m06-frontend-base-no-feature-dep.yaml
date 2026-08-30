@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-frontend-module-boundaries.sh — the
+# base->feature half of the melos layering gate.
+#
+# The foundation never imports upward: no base package (packages/plt_*, incl.
+# plt_test_support) may declare a feature_* package in EITHER `dependencies:` OR
+# `dev_dependencies:`. melos --include-dependents traverses dev deps too, so a
+# base package dev-depping a feature re-opens the affected-selection hub (a
+# plt_core dev-dep on a feature made a one-feature change select the whole repo).
+#
+# Because the ban covers both sections, it needs no section discrimination: any
+# indented `feature_<name>:` dependency key anywhere in a plt_* pubspec is a
+# violation. Ported as a per-line forbidden-pattern.
+rules:
+  - id: m06-frontend-base-no-feature-dep
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/plt_*/pubspec.yaml"
+    params:
+      pattern: '^[ \t]+feature_[A-Za-z0-9_]*:'
+    cure: "A base plt_* package must not depend on any feature_* package in dependencies OR dev_dependencies — the foundation must not import upward, and melos --include-dependents traverses dev deps, so a base->feature dev edge re-opens the affected-selection hub. Move the needed fake to the feature's test/support/ or the faked package's lib/testing/."
+    origin: scripts/check-frontend-module-boundaries.sh

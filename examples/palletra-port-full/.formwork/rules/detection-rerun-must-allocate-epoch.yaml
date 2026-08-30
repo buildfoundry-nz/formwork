@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-detection-rerun-must-allocate-epoch.sh (#8225) — Rule B.
+# Any routes/ file that calls EnqueueIdentificationAtEpoch( MUST also reference
+# detectionepoch.Allocate in the SAME file — the epoch map it stamps has to come
+# from a real per-page bump, not a hand-built literal. Same-file trigger/requires
+# is exactly pair-consistency. Comment-stripped (decomment-go) so a prose mention
+# of either symbol cannot satisfy the pairing.
+rules:
+  - id: detection-rerun-must-allocate-epoch
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      trigger: 'EnqueueIdentificationAtEpoch\('
+      requires: 'detectionepoch\.Allocate'
+    cure: "A routes/ file dispatching via EnqueueIdentificationAtEpoch must bump the epoch in the dispatch tx with detectionepoch.Allocate (#8225)."
+    origin: scripts/check-detection-rerun-must-allocate-epoch.sh

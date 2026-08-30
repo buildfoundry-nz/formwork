@@ -1,0 +1,41 @@
+rules:
+  # Port of scripts/check-flutter-no-hardcoded-dock-status.sh (sweep-12 #1469).
+  # The Flutter FE must NOT own the dock-status vocabulary; labels come from the
+  # server (ListTaskViewsResponse.dock_status_options /
+  # ProjectAllocationEvent.new_dock_status_label) and are rendered verbatim.
+  #
+  # Combines the .sh's two rules into one forbidden-pattern (same scope):
+  #   Rule A — the dock-status-EXCLUSIVE code literals 'unslotted' /
+  #            'ready_for_audit' (single or double quoted), which any dock-status
+  #            hand-map/switch necessarily enumerates. Generic codes
+  #            ('in_progress', 'blocked', 'done') are deliberately NOT matched.
+  #   Rule B — a `.dockStatus == '<literal>'` value comparison (only when the
+  #            RHS is a quoted literal, so `dockStatus == status` and the map
+  #            key 'dock_status': never match).
+  - id: flutter-no-hardcoded-dock-status
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        # Generated Dart, and the carve-out is load-bearing in the tree these
+        # rules came from: the dock-status vocabulary IS a server enum, so
+        # protoc-dart re-emits 'unslotted' and 'ready_for_audit' as Dart string
+        # literals on every regeneration and Rule A's literal arm would fire on
+        # files nobody edits. Dead in this slice, which carries three
+        # hand-written .dart files and no codegen output — preventative, not
+        # rot. Deleting them to quiet exemption-hygiene would break the rule
+        # downstream. See .formwork/lint.yaml.
+        - "**/*.g.dart"         # build_runner / json_serializable output
+        - "**/*.freezed.dart"   # freezed unions over the same enum
+        - "**/*.pb.dart"        # protoc-dart message classes
+        - "**/*.pbenum.dart"    # protoc-dart enums — the dock_status enum itself
+        - "**/*.pbjson.dart"    # protoc-dart JSON descriptors (literals verbatim)
+        - "**/*.pbserver.dart"  # protoc-dart service stubs
+    preprocess: raw
+    params:
+      pattern: '[''"](unslotted|ready_for_audit)[''"]|dockStatus\s*==\s*[''"]'
+    cure: "Render dock-status labels from the server (dockStatusOptionLabel / new_dock_status_label), never a hardcoded switch/map or literal comparison. Extend the vocabulary in services/core-api/internal/taskview, not the FE."
+    origin: scripts/check-flutter-no-hardcoded-dock-status.sh

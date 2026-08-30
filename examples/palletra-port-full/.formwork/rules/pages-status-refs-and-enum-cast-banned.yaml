@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-page-status-schema-drift.sh (PR #4968) Rules 2 & 3.
+# The palletra.pages table has intake_status (palletra.intake_status),
+# never a `status` column nor a palletra.page_phase enum. Bans, across every Go
+# module (generated proto excluded, tests included): `pages.status`/`pg.status`
+# read references AND `::palletra.page_phase` casts. Comment-stripped
+# (decomment-go) so prose naming the dead column is allowed.
+rules:
+  - id: pages-status-refs-and-enum-cast-banned
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+      exclude:
+        - "**/vendor/**"
+        - "shared/generated/**"
+        - "**/gen/go/**"
+        - "**/internal/proto/**"
+        - "**/*.pb.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\b(?:pages|pg)\.status\b|palletra\.page_phase\b'
+    cure: "Use palletra.pages.intake_status and the palletra.intake_status enum; the status column / page_phase enum were never on this table (SQLSTATE 42703)."
+    origin: scripts/check-page-status-schema-drift.sh

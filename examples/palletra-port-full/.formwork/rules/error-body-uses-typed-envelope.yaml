@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-error-body-uses-typed-envelope.sh (#6487).
+# Every core-api HTTP error body must be the typed apiv1.ErrorPayload emitted
+# through apierr.WritePayload, so the error surface is drift-gated like the
+# success surface. A hand-built `{"error"` JSON literal (backtick or escaped-
+# quote form) is exactly the bypass seam. Scope: non-test, non-generated Go
+# under services/core-api and internal/orgctx. Comments stripped
+# (decomment-go) so a doc-comment documenting the wire shape is exempt while a
+# real literal in code is not. RE2 pattern \{\\?"error mirrors the .sh pcre2.
+rules:
+  - id: error-body-uses-typed-envelope
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/**/*.go"
+        - "freightworks/internal/orgctx/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/*.pb.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\{\\?"error'
+    cure: "Build an apiv1.ErrorPayload and emit it via apierr.WritePayload (or a routes/shared helper that does); never hand-format the {\"error\":...} JSON."
+    origin: scripts/check-error-body-uses-typed-envelope.sh

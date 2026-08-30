@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-route-preamble-guards.sh — RULE 2 (#3189).
+# A raw URL-UUID-param bad_request preamble: `shared.DecodeUUIDParam(chi.URLParam(`
+# followed — within the next 3 lines — by a
+# `shared.WriteErrorPayload(w, http.StatusBadRequest, "bad_request")`. Use
+# shared.UUIDArgOr400. Sites that emit a MORE SPECIFIC error code (e.g.
+# "invalid_target_annotation_uuid") or parse a non-URL value do not carry the
+# generic "bad_request" literal within the window, so they never match and keep
+# DecodeUUIDParam directly — exactly the .sh's carve-out.
+#
+# The .sh window is awk j = i .. i+3 (3-line lookahead); multiline + regexp2
+# expresses it as: the DecodeUUIDParam(chi.URLParam( call, then 0-3 full lines,
+# then the bad_request 400. Match starts at the DecodeUUIDParam line — the
+# reported line.
+#
+# Scope: routes/**/*.go, excluding *_test.go and routes/shared/.
+rules:
+  - id: route-prologue-check-uuid-param
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/routes/shared/**"
+    params:
+      # Plain multiline RE2: the origin's awk 3-line lookahead window (j = i..i+3)
+      # maps to the bounded `(?:[^\n]*\n){0,3}` line span — 0..3 newlines between
+      # the DecodeUUIDParam( call and the bad_request 400. No lookaround, so RE2
+      # matches it linearly. Match starts at the DecodeUUIDParam line (want-anchor).
+      pattern: 'shared\.DecodeUUIDParam\(chi\.URLParam\((?:[^\n]*\n){0,3}[^\n]*shared\.WriteErrorPayload\(w, http\.StatusBadRequest, "bad_request"\)'
+      prefilter: 'StatusBadRequest'
+      multiline: true
+    cure: "Use `id, ok := shared.UUIDArgOr400(w, r, \"id\")` for the parse-URL-UUID-or-400 preamble; keep DecodeUUIDParam only when the 400 emits a more specific error code."
+    origin: scripts/check-route-preamble-guards.sh

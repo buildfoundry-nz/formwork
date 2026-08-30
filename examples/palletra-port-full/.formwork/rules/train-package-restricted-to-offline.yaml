@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-train-package-restricted-to-offline.sh (sweep-1 #4).
+# No runtime .go file under services/core-api may import the offline trainer
+# package parsecompose/classifier/local/train. The trailing [/"] pins the
+# package (`train"`) and any future sub-package (`train/<sub>"`) while excluding
+# the unrelated cmd/train-page-classifier (which is `train-`). Sanctioned
+# importers — the two offline CLIs, the train package itself, and _test.go —
+# are ported as scope excludes.
+rules:
+  - id: train-package-restricted-to-offline
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/cmd/train-page-classifier/**"
+        - "**/cmd/classifier-eval/**"
+        - "**/internal/parsecompose/classifier/local/train/**"
+    params:
+      pattern: 'parsecompose/classifier/local/train[/"]'
+    cure: "The request-path runtime must only local.Load the trained artifact and call Model.Classify; keep trainer logic (train.Fit / train.DivideWithFallback) in cmd/train-page-classifier."
+    origin: scripts/check-train-package-restricted-to-offline.sh

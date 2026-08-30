@@ -1,0 +1,35 @@
+# Ported from Palletra
+# scripts/check-shelving-group-color-ordinal-server-assigned.sh (#6724) — Rule B.
+# palletra.shelving_groups.color / .ordinal are server-minted (under a FOR
+# UPDATE read) and may be WRITTEN only from internal/shelvinggroups. The gate is
+# table-aware (both column names are common), so it keys on the SQL WRITE TARGET.
+# formwork's `sql/statement-predicate` reassembles SQL from Go string literals and
+# selects by the `table` regex, so keying `table` to UPDATE/INSERT/MERGE INTO
+# shelving_groups reproduces the write-target resolution; the identically-named
+# columns on other tables are out of scope by construction.
+#
+# Port note: Rule A of the .sh (no color/color/ordinal/label field transitively
+# reachable from CreateShelvingGroupRequest across the proto message graph,
+# oneof/map-aware) is a graph-reachability property with no per-line/per-file
+# expression and is NOT ported. The forbid pair covers the two write shapes an
+# UPDATE `SET color = ...` and an INSERT column list naming color/ordinal; a
+# WHERE-clause READ of ordinal on an unrelated SET is a known fidelity gap the
+# .sh closes by scoping to write regions (not expressible here).
+rules:
+  - id: shelving-group-color-ordinal-write-target
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/internal/gatetests/**"
+        - "freightworks/services/core-api/internal/shelvinggroups/**"
+    params:
+      table: '(?i)(UPDATE|INSERT INTO|MERGE INTO)\s+(palletra\.)?shelving_groups\b'
+      forbid:
+        - '(?i)(^|[^A-Za-z0-9_])(color|ordinal)\s*=[^=]'
+        - '(?i)INSERT\s+INTO\s+(palletra\.)?shelving_groups\s*\([^)]*(color|ordinal)'
+    cure: "Call shelvinggroups.Create (which mints color/ordinal under one FOR UPDATE read); never write palletra.shelving_groups.color / .ordinal from a handler (#6724)."
+    origin: scripts/check-shelving-group-color-ordinal-server-assigned.sh

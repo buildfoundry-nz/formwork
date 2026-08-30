@@ -1,0 +1,31 @@
+# Ported from Palletra scripts/check-arbitration-cache-key-versioned.sh (#5046).
+# palletra.sku_match_arbitrations is the per-pair LLM-arbitrator cache;
+# it is correct only if its UNIQUE index keys off ALL FOUR cache dimensions —
+# sku_id, match_candidate_hash, arbitrator_prompt_version, arbitrator_model
+# — so a prompt/model bump invalidates the cache by construction. This rule
+# requires the committed schema snapshot to carry a CREATE UNIQUE INDEX on the
+# table whose key lists all four columns.
+#
+# RE2/per-line port notes:
+#   - The .sh checks each column independently (order-agnostic); RE2 has no
+#     lookahead, so the single-line anchor matches the four columns in their
+#     canonical pg_dump declared order (sku_id, match_candidate_hash,
+#     arbitrator_prompt_version, arbitrator_model). pg_dump emits index columns
+#     in declared order, so this is exact in practice.
+#   - The .sh SKIPS when the table is absent from the snapshot; a required-pattern
+#     preserves the file-absent skip (an unscanned snapshot passes) but, unlike the
+#     .sh, would also fire if the snapshot exists yet the table is entirely absent.
+#     The core invariant (present-but-under-keyed = fail) is faithfully enforced.
+rules:
+  - id: arbitration-cache-key-versioned
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+    preprocess: raw
+    params:
+      pattern: 'CREATE UNIQUE INDEX .* ON palletra\.sku_match_arbitrations .*sku_id.*match_candidate_hash.*arbitrator_prompt_version.*arbitrator_model'
+      mode: exists
+    cure: "The sku_match_arbitrations UNIQUE index must key off all four cache dimensions (sku_id, match_candidate_hash, arbitrator_prompt_version, arbitrator_model) so a prompt/model bump cannot reuse a stale verdict (#5046)."
+    origin: scripts/check-arbitration-cache-key-versioned.sh

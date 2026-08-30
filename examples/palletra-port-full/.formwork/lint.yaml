@@ -1,0 +1,150 @@
+# Which lint checks this corpus does not answer for, and why.
+#
+# RE-DERIVE, DO NOT QUOTE. `make corpus-disclosure-proof` re-derives every
+# figure in this file from the tree and fails when one disagrees with what the
+# binary reports — and fails again when a correction leaves a second, stale
+# copy of the same sentence standing, which is how every correction to this
+# file was made before that target existed. The rule count read 707, then 702.
+# The board read `1/1`, then `2/2`. exemption-hygiene read 995, then 993. The
+# fixture-coverage debt read 15 problems over 8 rules against a measured 85
+# over 78. Each of those was corrected by re-measuring the line beside the
+# wrong one (#325, #263).
+#
+# The engine cannot hold this file. internal/scan/scan.go prunes any directory
+# named .formwork at any depth, unconditionally and declarable in no rule's
+# scope, so no rule in this corpus or in the repository above it can read it.
+# The proof target re-derives from outside instead, running the recipe below,
+# which is still the right thing to run by hand:
+#
+#   $ formwork list -C examples/palletra-port-full rules | wc -l
+#   $ git ls-files examples/palletra-port-full | wc -l -> 2693
+#   $ git ls-files examples/palletra-port-full | grep -vc '/\.formwork/' -> 0
+#   $ formwork lint -C examples/palletra-port-full | tail -1
+#   $ mkdir -p /tmp/c && cp -R examples/palletra-port-full/.formwork /tmp/c/
+#   $ printf 'version: 1\nskip: []\n' > /tmp/c/.formwork/lint.yaml
+#   $ formwork lint -C /tmp/c
+#
+# WHAT THIS CORPUS IS, measured, because both entries below hang on it: a
+# 704-rule corpus ported from a 13k-file tree, over NO SOURCE TREE AT ALL —
+# zero files, which is what the `grep -vc` line above reports and what
+# `formwork check -C examples/palletra-port-full` prints as
+# `scan: 0 file(s) scanned`.
+#
+# This header used to describe the rules as checked against a small part of that
+# tree, and both entries below used to explain the quiet checks as what a
+# partial port looks like (#324). Neither was true: none of that tree's source
+# was ported here, only its rules. The difference is not pedantic. Over a
+# partially ported tree a scope-reading check reports the rules that tree
+# happens to miss, and the rules it does NOT report are evidence. Over zero
+# files it reports EVERY rule it can look at: it discriminates nothing, its
+# count measures the corpus's emptiness rather than any rule's correctness, and
+# a green board from it would be unobtainable rather than earned. Both entries
+# below are that case, and each says so in its own reason with the number that
+# proves it. `make corpus-disclosure-proof` holds that wording as well as those
+# numbers: while the derived source-file count is zero it refuses any disclosure
+# — in this file, in the Makefile, or in
+# docs/specs/2026-07-09-formwork-design.md — that describes this corpus as a
+# part of a larger tree.
+#
+# `formwork test` — does each rule discriminate on its own fixtures — is the
+# question this corpus does answer, and `make selftest` asks it.
+#
+# Every skip is printed on every run, and a skip this corpus never reaches is
+# exit 2, so this list cannot rot into silence.
+#
+# THE BOARD IS FALSIFIABLE, and this is the board:
+#
+#   formwork lint: 4/4 checks passed (2 skipped: empty-scope, exemption-hygiene — see .formwork/lint.yaml)
+#
+# rules-present cannot fail on a corpus this size and is not claimed to.
+# prose-not-truncated (#59) reads the rule files' own prose and IS falsifiable
+# here — unquote a `cure:` so YAML ends it at the first ' #' and the run goes
+# red naming it, measured on vat-formula-single-source-gofloat. fixture-coverage
+# and prefilter-load-bearing are the two entries this file used to carry as
+# DEBT and no longer skips: deleting any rule's fixture tree is a red `make
+# lint` naming fixture-coverage, and a prefilter that narrows its rule is a red
+# `make lint` naming prefilter-load-bearing.
+#
+# The paragraph that stood here claimed "the only check that ran was
+# rules-present", and its predecessor claimed "1/1 ... no falsifiable check is
+# running over it" (#325). The first was written hours before #59 landed and
+# survived two re-measurements of the lines around it; the second survived the
+# two DEBT entries being paid off. What was true in both, while those two
+# entries were skips, is that nothing on the board asked whether any rule could
+# still FIRE: a rule could lose its entire firing proof — `rm -rf
+# .formwork/fixtures/<rule-id>` — and `make lint`, `make selftest`, `make
+# corpus-denylist` and `make corpus-structural` were all still exit 0, while
+# `formwork test` printed `SKIP — no fixtures (formwork lint reports coverage)`
+# and pointed the reader at the check this file had switched off. Both entries
+# are gone and fixture-coverage asks it now.
+#
+# WHAT PAYING FOR THEM COST, at the size the check actually reported. With the
+# fixture-coverage entry removed at 887acefa, the check reported 85 problems
+# across 78 rules — not the 15 across 8 rules this file used to claim, a 5.7x
+# understatement in the dangerous direction (#297, #263.4). The entry was
+# written 2h23m before #53's arm landed and never folded it in, so it named
+# only the declarative half:
+#
+#     70   heavy rule with no fixtures and no declared exemption   (#53's arm)
+#      7   no fire fixture   \  15 lines across 8 declarative rules
+#      8   no pass fixture   /
+#     ---
+#     85   across 78 rules
+#
+# Closed as:
+#   * The 8 declarative rules got real fire+pass pairs — the 15 lines.
+#   * 2 heavy rules whose command is a PURE FILESYSTEM predicate —
+#     migrations-pointer-tracks-latest-version and
+#     migrations-destructive-changes-require-data-test — got real pairs too,
+#     which is 2 of the 70, not 2 more of the 15.
+#   * The other 68 heavy rules carry `fixture_exempt:` in their own rule file,
+#     naming the detector each one needs and why a fixture tree cannot supply
+#     it: 65 shell out to the validating target's own gate script, which this
+#     corpus does not carry and cannot (it is written in that tree's
+#     vocabulary, and this repository tracks no shell scripts), so bash would
+#     exit 127 in the fire tree and the pass tree alike and the fire proof
+#     would be satisfied by the detector NOT EXISTING; 3 drive git history or a
+#     live Postgres container, and self-skip at exit 0 with neither present.
+#     Those exemptions are enumerated with their reasons by the escape-hatch
+#     census on every run, which is what stops a declaration being a quieter
+#     spelling of the same gap.
+#   * routes-db-closure-no-raw-500 was the one-fixture-pair-clears-two case: its
+#     pair closed two of the 15 coverage lines AND the single
+#     prefilter-load-bearing row, whose own message asks for exactly that ("Add
+#     a fire fixture per alternative, or drop the prefilter").
+version: 1
+skip:
+  - check: empty-scope
+    reason: >-
+      Structural, not incidental: this corpus has no source tree, so every rule
+      whose verdict comes from files has an empty scope by construction and
+      empty-scope reports 100% of what it can see. Re-run here with this skip
+      removed, empty-scope reports 570 problems — exactly this corpus's rule
+      count minus the 134 command rules RulesMatchingNoFiles exempts, so not
+      one rule is discriminated from another and the count is a fact about the
+      corpus rather than about any glob. Running it here could only ever
+      produce a red board naming every rule. The rules are proved against their
+      own fixtures instead (`formwork test`), and the check stays live in the
+      repo formwork governs itself, where an empty scope really is rot.
+      Re-derived on every run of `make corpus-disclosure-proof`, which also
+      checks that arithmetic; this entry read 572 of 707 from 2026-08-24 and
+      568 from 2026-08-26, both typed by hand and both stale within days.
+  - check: exemption-hygiene
+    reason: >-
+      The same structural condition as empty-scope, and the same 100%: with no
+      files, every scope.exclude is dead by construction. Re-run here with this
+      skip removed, exemption-hygiene reports 994 problems, and every one of
+      them is the dead-exclude arm — this entry said "overwhelmingly" that arm
+      until #324, and it is the whole of it. That is every uncommented exclude
+      in the corpus; the only excludes the check does not report are the ones
+      carrying the justification comment it deliberately accepts. The cost is
+      smaller than this entry used to state. It said the corpus "also stops
+      checking stale allowlist entries and reasonless formwork:allow markers";
+      there are none to check — no rule here declares `except.allowlist`, and
+      the one rule declaring `except.marker: true`,
+      integration-tests-forbid-mocked-wire-providers, has an empty scope like
+      every other rule whose verdict comes from files, so both of those arms
+      are already inert on this corpus whether or not this skip exists.
+      Re-derived on every run of `make corpus-disclosure-proof`; this entry
+      read 995 from 2026-08-24 and 993 from 2026-08-26, both typed by hand and
+      both stale.

@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-authored-sku-pointer-single-writer.sh (#8229).
+# palletra.bom_line_items.project_sku_id is the authored line->sku pointer,
+# written ONCE at creation by internal/skuspromote and never recomputed. This
+# bans the SQL WRITE shapes — an UPDATE `SET project_sku_id` or an INSERT
+# column-list membership `(project_sku_id` / `, project_sku_id` — outside
+# skuspromote. Every READ qualifies the column with a table alias
+# (`bli.project_sku_id`, `pm.project_sku_id`), so an UNQUALIFIED
+# project_sku_id (not preceded by an identifier char or dot) is the write shape.
+#
+# Port note: RE2 has no lookbehind, so the negated preceding-char class is written
+# inline as `(^|[^A-Za-z0-9_.])` — the matched run includes that one leading char,
+# exactly as the .sh's `grep -vE '[[:alnum:]_.]project_sku_id'` reads.
+rules:
+  - id: authored-sku-pointer-single-writer
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/services/core-api/internal/skuspromote/**"
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '(^|[^A-Za-z0-9_.])project_sku_id'
+    cure: "Route the write through skuspromote.CreateOriginated; the authored line->sku pointer is written once at creation and never re-assigned (#8229). Reads must stay alias-qualified (bli./pm.)."
+    origin: scripts/check-authored-sku-pointer-single-writer.sh

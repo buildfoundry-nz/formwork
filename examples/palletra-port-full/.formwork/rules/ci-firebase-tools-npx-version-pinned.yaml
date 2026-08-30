@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-ci-firebase-tools-npx-version-pinned.sh (FIREBASE-PIN).
+# Every workflow line that invokes `npx ... firebase-tools` MUST pin a version
+# (`firebase-tools@...`); an unpinned npx floats to latest and bricked the FE deploy.
+#
+# FP FIX (was: raw line scan). The .sh drops YAML `#` comment lines (and step `name:`
+# lines) from scope before matching. The real deploy-dev.yml carries a documentation
+# comment — `# Pin firebase-tools (#2809): unpinned `npx firebase-tools` floats to`
+# — that the raw-line port matched as a violation. Fixed by anchoring the pattern
+# `^[^#]*npx...firebase-tools`, so the invocation is only a violation when it appears
+# BEFORE any `#` on its line — i.e. in a real `run:` command, never in a YAML comment
+# that merely quotes the unpinned form. A pinned `firebase-tools@...` still fails the
+# trailing `([^@]|$)` and does not fire.
+rules:
+  - id: ci-firebase-tools-npx-version-pinned
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/*.yml"
+        - ".github/workflows/*.yaml"
+    params:
+      pattern: '^[^#]*npx\s[^#]*firebase-tools([^@]|$)'
+    cure: "Pin the version — 'npx firebase-tools@<version> deploy …' (last-known-good 15.31.4). An unpinned npx floats to latest and bricked the FE deploy."
+    origin: scripts/check-ci-firebase-tools-npx-version-pinned.sh

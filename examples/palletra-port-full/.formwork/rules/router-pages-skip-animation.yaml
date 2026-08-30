@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-router-pages-skip-animation.sh (#7580). The
+# go_router route table (frontend/lib/routing/*.dart, *.g.dart excluded) may mint
+# pages ONLY via NoTransitionPage. This port covers the two textual animated-mint
+# shapes:
+#   Rule A — an animated Page constructor: SkuPage( / CupertinoPage( /
+#            CustomTransitionPage( (with or without a <…> type argument).
+#   Rule C — a bare GoRouter `errorBuilder:` (go_router wraps the returned widget
+#            in an animated SkuPage on the error surface). The page-form
+#            `errorPageBuilder:` is a distinct identifier and is never matched.
+#
+# FALSE-POSITIVE FIX: the .sh de-comments each Dart file (string-aware `//` +
+# `/* */` lexer) BEFORE matching, so a banned token that lives only in a comment
+# is never flagged. formwork has no decomment-dart preprocessor, and the original
+# port ran on raw source — so on clean develop it fired on frontend/lib/routing/
+# router.dart, whose doc-comment says "(NOT the bare `errorBuilder:`, which
+# go_router wraps in an animated SkuPage)" while the real code correctly uses
+# errorPageBuilder: + NoTransitionPage. This is the accepted comment-fidelity gap
+# the original port header conceded — but it makes clean code fail.
+#
+# The pattern now runs under syntax: regexp2, anchored at line start with a
+# tempered token `(?:(?!//).)*?` that refuses to advance across a `//` line
+# comment: a banned token is matched only when NO `//` precedes it on the line,
+# so a token living inside a `//` comment can never match. Block comments
+# (`/* */`) remain a residual gap (same as the original port, and absent from the
+# route table). The named regression — a real `SkuPage(` / bare
+# `errorBuilder:` in the route table — still fires (it sits in code, before any
+# comment).
+rules:
+  - id: router-pages-skip-animation
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/routing/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+    preprocess: raw
+    params:
+      syntax: regexp2
+      pattern: '^(?:(?!//).)*?(?:(?:SkuPage|CupertinoPage|CustomTransitionPage)(?:<[^>]*>)?\(|(?<![A-Za-z0-9_])errorBuilder\s*:)'
+    cure: "Mint the route via pageBuilder: (context, state) => NoTransitionPage(...); use errorPageBuilder: + NoTransitionPage for the error surface. An animated page re-opens the in-flight-transition window behind the #7580 Duplicate GlobalKey crash."
+    origin: scripts/check-router-pages-skip-animation.sh

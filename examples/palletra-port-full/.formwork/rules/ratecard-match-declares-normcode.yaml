@@ -1,0 +1,183 @@
+# Ported from Palletra scripts/check-one-ratecard-match-contract.sh (#1373 PH-5 PR1).
+# Pins internal/ratecardmatch as the single ratecard-match contract. The .sh is
+# a bundle of six rules; ported here as separate formwork rules, each keeping the
+# .sh's scope. The four canonical declarations are separate exists rules (like the
+# calibration port) so ALL must remain present — an alternation would pass on one.
+#
+#   R1  canonical site declares CanonCode / DualMatch / Match / MatchWithVector
+#   R2  no norm+code-named function fork outside the canonical site
+#   R3  skusprojection imports the contract (its founding consumer)
+#   R4  the canonical site never references canonical_key/normalized_description
+#       outside comments (one text regime — #6018 trap)
+#   R5  the embedding tier ranks with pgvector.Cosine (the one cosine)
+#   R6  skusidebar runs MatchWithVector at TunedEmbedConfig() and
+#       builds no ad-hoc VectorConfig{ literal (PH-5 RS-8)
+rules:
+  # ── R1: canonical declarations (four required anchors) ──────────────────────
+  - id: ratecard-match-declares-normcode
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/ratecardmatch/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'func CanonCode\('
+      mode: exists
+    cure: "The canonical site ratecardmatch must declare func CanonCode( (#1373 M5); a rename updates this gate, never silently."
+    origin: scripts/check-one-ratecard-match-contract.sh
+
+  - id: ratecard-match-declares-pairmatch
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/ratecardmatch/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'func DualMatch\('
+      mode: exists
+    cure: "The canonical site ratecardmatch must declare func DualMatch( (#1373 M5)."
+    origin: scripts/check-one-ratecard-match-contract.sh
+
+  - id: ratecard-match-declares-match
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/ratecardmatch/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'func Match\('
+      mode: exists
+    cure: "The canonical site ratecardmatch must declare func Match( (#1373 M5)."
+    origin: scripts/check-one-ratecard-match-contract.sh
+
+  - id: ratecard-match-declares-match-with-embedding
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/ratecardmatch/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'func MatchWithVector\('
+      mode: exists
+    cure: "The canonical site ratecardmatch must declare func MatchWithVector( — the opt-in fuzzy tier (#1373 PH-5 RS-5)."
+    origin: scripts/check-one-ratecard-match-contract.sh
+
+  # ── R5: the embedding tier references the one cosine ────────────────────────
+  - id: ratecard-match-references-cosine
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/ratecardmatch/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'pgvector\.Cosine'
+      mode: exists
+    cure: "The fuzzy tier must rank with pgvector.Cosine — the repo's single cosine — never a private reimplementation (PH-5 RS-5)."
+    origin: scripts/check-one-ratecard-match-contract.sh
+
+  # ── R3: the founding consumer imports the contract ──────────────────────────
+  - id: ratecard-match-projection-imports-contract
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/skusprojection/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'services/core-api/internal/ratecardmatch"'
+      mode: exists
+    cure: "skusprojection must import the ratecardmatch contract from non-test code; it may not fork back to a private compare (#1373 M5)."
+    origin: scripts/check-one-ratecard-match-contract.sh
+
+  # ── R2: no code-normalizer fork outside the canonical site ──────────────────
+  - id: ratecard-match-no-code-normalizer-fork
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/*.pb.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'func[[:space:]]+(\([^)]*\)[[:space:]]+)?[A-Za-z0-9_]*([Cc]anon[A-Za-z0-9_]*[Cc]ode|[Cc]ode[A-Za-z0-9_]*[Cc]anon)[A-Za-z0-9_]*[[:space:]]*\('
+    except:
+      paths:
+        - "**/internal/ratecardmatch/**"
+    cure: "Use ratecardmatch.CanonCode / DualMatch — one match contract, no code-normalizer forks (#1373 M5)."
+    origin: scripts/check-one-ratecard-match-contract.sh
+
+  # ── R4: one text regime inside the canonical site ───────────────────────────
+  - id: ratecard-match-no-alt-text-regime
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/ratecardmatch/**/*.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'canonical_key|normalized_description'
+    cure: "The match compares canonical descriptors only; canonical_key/normalized_description are the banned second regime (#6018 trap)."
+    origin: scripts/check-one-ratecard-match-contract.sh
+
+  # ── R6: the sidebar read runs the fuzzy tier at the calibrated point ────────
+  - id: ratecard-match-sidebar-runs-fuzzy-tier
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/skusidebar/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'ratecardmatch\.MatchWithVector\('
+      mode: exists
+    cure: "skusidebar must run the fuzzy tier via ratecardmatch.MatchWithVector( (PH-5 RS-8)."
+    origin: scripts/check-one-ratecard-match-contract.sh
+
+  - id: ratecard-match-sidebar-single-sources-point
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/skusidebar/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'ratecardmatch\.TunedEmbedConfig\(\)'
+      mode: exists
+    cure: "skusidebar must single-source the operating point from ratecardmatch.TunedEmbedConfig() (PH-5 RS-8)."
+    origin: scripts/check-one-ratecard-match-contract.sh
+
+  - id: ratecard-match-sidebar-no-adhoc-config
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/skusidebar/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: 'ratecardmatch\.VectorConfig\{'
+    cure: "Never inline a raw ratecardmatch.VectorConfig{} literal; the operating point comes from TunedEmbedConfig() (PH-5 RS-8)."
+    origin: scripts/check-one-ratecard-match-contract.sh

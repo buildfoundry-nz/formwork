@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-assigned-role-capped-by-caller-ceiling.sh (sweep-2
+# #5 + sweep-3 #3/#13). The member-management handlers write native_role from a
+# request-derived role (req.GetBuiltinGrade()). Before the fix they never rejected
+# a caller assigning a role that out-ranks their OWN, so a USERS_MANAGE override
+# on a non-admin role could mint a role above the caller's tier (vertical
+# privesc). The fix is the role-assignment ceiling: a handler that reads
+# req.GetBuiltinGrade() MUST guard with a RoleLevel comparison — inline
+# `if RoleLevel(req.GetBuiltinGrade()) > RoleLevel(claims.GetAccessGrade())` or the hoisted
+# `if !roleWithinCap(req.GetBuiltinGrade(), claims.GetAccessGrade())` helper.
+#
+# Ported as a pair-consistency over decommented Go (scope routes/members/):
+# trigger = a `req.GetBuiltinGrade()` read (the privesc SOURCE the .sh keys on —
+# any way of reading the requested role keeps the handler in scope), requires =
+# a ceiling reference (`roleWithinCap(` or a bare `RoleLevel(`). A handler
+# that reads the requested role but names no ceiling fires. decomment-go so a
+# commented-out ceiling can never satisfy it (the .sh strips `//` first).
+#
+# DIVERGENCE (noted): the .sh further demands the guard be ACTED-ON (an `if`
+# whose block returns, not a discarded `_ = …` comparison), pins the correct
+# `<=` direction + arg order of the helper, and caps the inline comparison at one
+# copy. pair-consistency models the file-level co-presence — a handler reading
+# the requested role must also reference a ceiling — which is the primary
+# invariant; the acted-on / direction / duplication refinements are not modeled.
+rules:
+  - id: assigned-role-capped-by-caller-ceiling
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/members/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      trigger: 'req\.GetBuiltinGrade\(\)'
+      requires: 'roleWithinCap\(|RoleLevel\('
+    cure: "Guard the request-derived native_role write with an acted-on role-rank ceiling: `if !roleWithinCap(req.GetBuiltinGrade(), claims.GetAccessGrade()) { return 403 }`. Without it a USERS_MANAGE override on a non-admin role can mint a role above the caller's tier (sweep-2 #5 vertical privesc)."
+    origin: scripts/check-assigned-role-capped-by-caller-ceiling.sh

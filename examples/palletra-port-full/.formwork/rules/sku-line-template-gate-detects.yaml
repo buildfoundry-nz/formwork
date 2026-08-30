@@ -1,0 +1,16 @@
+# Ported from Palletra scripts/check-sku-line-gates-guarded.sh (PH-5 #8147),
+# RULE A (template gate / detect half). See sku-line-authored-gate-detects
+# for the split rationale. This asserts the template add-to-bom gate (#8448)
+# references DetectSkuLineConflict.
+rules:
+  - id: sku-line-template-gate-detects
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/extraction/skus_add_to_bom.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'DetectSkuLineConflict'
+      mode: exists
+    cure: "The template add-to-bom sku-line gate must call DetectSkuLineConflict — detect the cross-gate conflict before creating a line (PH-5 #8147)."
+    origin: scripts/check-sku-line-gates-guarded.sh

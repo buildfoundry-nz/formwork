@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-opspurge-owns-job-role-flip.sh (#5069).
+# The scheduled admin-sweep job services (retention-worker, extraction-worker,
+# event-log-worker) must obtain the runtime_root_admin (BYPASSRLS) role flip
+# through internal/opspurge.AsAdminTx — NEVER a hand-opened tx + raw SET [LOCAL] ROLE
+# runtime_root_admin. This bans the raw executable flip statement in non-test Go
+# under those three service internal trees.
+#
+# Port note: the .sh newline-flattens before matching to catch a flip split across
+# lines; RE2 per-line matching catches the single-line statement (the real shape),
+# not an artificially wrapped one.
+rules:
+  - id: opspurge-owns-job-role-flip
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/retention-worker/internal/**/*.go"
+        - "freightworks/services/extraction-worker/internal/**/*.go"
+        - "freightworks/services/event-log-worker/internal/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'SET\s+(LOCAL\s+)?ROLE[\s''"]+runtime_root_admin'
+    cure: "Flip role through internal/opspurge.AsAdminTx (delegates to db.AsSuperuser); never a hand-opened tx + raw SET LOCAL ROLE runtime_root_admin (#5069)."
+    origin: scripts/check-opspurge-owns-job-role-flip.sh

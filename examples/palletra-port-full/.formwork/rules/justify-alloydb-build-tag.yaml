@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-justify-alloydb-build-tag.sh (Sweep-14 §A1).
+# A *_test.go whose leading build constraint is `//go:build integration && alloydb`
+# carries a CI coverage cost (excluded from PR CI, dev-tunnel only), so it MUST name
+# a real AlloyDB dependency in its leading //-comment block. This is a same-file
+# trigger->companion shape: the build-tag line obliges a justification token
+# somewhere in the same file -> pair-consistency.
+#
+# DIVERGENCE (noted): the .sh confirms the tag on the FIRST //go:build line and reads
+# the token ONLY from the leading //-comment block (before `package`). Per-line RE2
+# pair-consistency matches the trigger on any line and the companion anywhere in the
+# file; for a real test file the two coincide (the build tag leads the file and the
+# justification sits in the header block), so the port is faithful in practice.
+rules:
+  - id: justify-alloydb-build-tag
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*_test.go"
+    params:
+      trigger: '^//go:build .*integration && alloydb'
+      requires: '(?i)(alloydb_scann|postgis|pg_trgm|alloydb\s+columnar|alloydb-only|alloydb-specific|alloydb\s+extension)'
+    cure: "Either drop the && alloydb tag, or cite the AlloyDB dependency (alloydb_scann / postgis / pg_trgm / alloydb columnar / AlloyDB-only / AlloyDB-specific / AlloyDB extension) in the file's leading //-comment block."
+    origin: scripts/check-justify-alloydb-build-tag.sh

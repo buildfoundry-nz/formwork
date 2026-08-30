@@ -1,0 +1,9 @@
+name: Deploy Hosting
+on:
+  push:
+    branches: [develop]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npx firebase-tools deploy --only hosting # want: ci-firebase-tools-npx-version-pinned

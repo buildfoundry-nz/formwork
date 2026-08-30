@@ -1,0 +1,65 @@
+# Ported from Palletra scripts/check-dart-file-line-count-caps.sh (Phase 5 audit L1).
+# Role-based Dart line caps across frontend/ + packages/, keyed off the
+# architectural-role subdir wherever it appears: providers/ and data/notifiers/
+# ≤300; presentation/ data/ domain/ ≤400; plt_theme/lib ≤500; catch-all (app
+# shell + package lib + tests) ≤400. Generated Dart is exempt regardless of size
+# (excluded from scope). No per-file allowlist — if a file is over cap, SPLIT it.
+# Direct map to file-size: default cap 400 with first-match-wins glob overrides.
+#
+# FP FIX: the .sh only applies the role-based caps INSIDE the library tree — its
+# case gate is `frontend/lib/*|packages/*/lib/*` before it ever consults
+# */providers/* or */data/notifiers/*; test files (packages/*/test/**,
+# frontend/test/**) fall straight through to the catch-all 400. The original port
+# left the override globs unanchored (`**/providers/**`, `**/data/**`), so a test
+# file under packages/*/test/providers/** wrongly picked up the 300 provider cap
+# and any such test between 301 and 400 lines was a false positive on clean
+# develop. Every override glob is now anchored to the `.../lib/...` tree (packages
+# and frontend variants) so tests only ever get the 400 catch-all — matching the
+# shell's dart_cap_for_path exactly. plt_theme/lib stays first (the shell checks
+# it before the role caps, so a plt_theme/lib/providers file is 500, not 300).
+rules:
+  - id: dart-file-line-count-caps
+    type: file-size
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+        - "packages/*/test/**/*.dart"
+        - "frontend/test/**/*.dart"
+      exclude:
+        - "**/lib/generated/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+        - "**/*.config.dart"
+    params:
+      cap: 400
+      overrides:
+        - glob: "packages/plt_theme/lib/**/*.dart"
+          cap: 500
+        - glob: "packages/*/lib/**/data/notifiers/**/*.dart"
+          cap: 300
+        - glob: "frontend/lib/**/data/notifiers/**/*.dart"
+          cap: 300
+        - glob: "packages/*/lib/**/providers/**/*.dart"
+          cap: 300
+        - glob: "frontend/lib/**/providers/**/*.dart"
+          cap: 300
+        - glob: "packages/*/lib/**/presentation/**/*.dart"
+          cap: 400
+        - glob: "frontend/lib/**/presentation/**/*.dart"
+          cap: 400
+        - glob: "packages/*/lib/**/data/**/*.dart"
+          cap: 400
+        - glob: "frontend/lib/**/data/**/*.dart"
+          cap: 400
+        - glob: "packages/*/lib/**/domain/**/*.dart"
+          cap: 400
+        - glob: "frontend/lib/**/domain/**/*.dart"
+          cap: 400
+    cure: "Split the file. Never widen the cap, never add a per-file carve-out."
+    origin: scripts/check-dart-file-line-count-caps.sh

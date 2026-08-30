@@ -1,0 +1,45 @@
+# Ported from Palletra scripts/check-dart-forbid-duplicate-repo-fakes.sh
+# (audit #7 / sweep-4 #8 / sweep-5 #9). A structural, self-discovering
+# CROSS-FILE dedup invariant: a production `*Repository|*Source|*Loader` type
+# whose fake is implements-ed OR extends-ed in test code OUTSIDE a
+# packages/<pkg>/lib/testing/ home is a violation when EITHER it appears in >= 2
+# distinct files (drift-prone duplication) OR a canonical `Fake<Type>` already
+# lives in a lib/testing/ (re-inlining past the canonical). Plus a DUAL-CANONICAL
+# rule: two classes across the lib/testing dirs implementing the SAME production
+# interface is a violation.
+#
+# COMMAND ESCAPE (spec's sanctioned heavy hatch): the rule is a type-keyed,
+# cross-file GROUPING with a per-type count-and-canonical-lookup join — it counts
+# distinct files per PRODUCTION TYPE and consults a separate canonical-home set.
+# No declarative formwork type (pattern-count tallies lines, set-relation joins
+# flat string sets) can express "grouped by captured type, >=2 files OR a
+# canonical exists elsewhere." Running the real script is the faithful check; it
+# verifies against the full frontend/test + packages tree in CI, and formwork
+# lint enumerates it as an escape hatch. No fixture (verifies in CI).
+rules:
+  - id: dart-forbid-duplicate-repo-fakes
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-dart-forbid-duplicate-repo-fakes.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "frontend/test/**/*.dart"
+        - "packages/**/test/**/*.dart"
+        - "packages/**/lib/testing/**/*.dart"
+    params:
+      cmd:
+        - bash
+        - scripts/check-dart-forbid-duplicate-repo-fakes.sh
+      expect:
+        exit: 0
+    cure: "Create (or reuse) a single configurable Fake<Type> in the faked package's lib/testing/ and import it — one canonical double per production *Repository/*Source/*Loader type. Duplicated inline doubles drift (sweep-4 #8)."
+    origin: scripts/check-dart-forbid-duplicate-repo-fakes.sh

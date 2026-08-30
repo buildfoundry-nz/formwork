@@ -1,0 +1,38 @@
+version: 2
+
+project_name: formwork
+
+builds:
+  - id: formwork
+    main: ./cmd/formwork
+    binary: formwork
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/buildfoundry-nz/formwork/internal/cli.version={{ .Version }}
+
+archives:
+  - id: formwork
+    ids:
+      - formwork
+    formats:
+      - tar.gz
+    name_template: "formwork_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# GoReleaser creates the GitHub Release on tag push (release.yml) and uploads
+# the four archives plus checksums.txt. GitHub Releases are the channel —
+# private-repo peers pull with an authenticated `gh release download`, and the
+# planned open-sourcing makes the same releases publicly consumable (spec
+# amendment 2026-08-05; supersedes the GCP Artifact Registry design).
+release:
+  prerelease: auto # a -rc/-beta tag is marked pre-release, a plain tag is not

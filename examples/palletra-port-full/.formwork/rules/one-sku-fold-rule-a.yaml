@@ -1,0 +1,62 @@
+# Ported from Palletra scripts/check-one-sku-fold.sh (#2413 PH-4).
+# Three coupled invariants for the single-source-of-truth sku fold. Split
+# into three rules (the .sh's Rule A / B / C) because forbidden and required are
+# distinct formwork types; each keeps the .sh's own scope.
+#
+#   Rule A — no non-test Go outside internal/skugroup (the one home) may
+#            declare a func named (dedupe|group|fold|collapse|merge)…Skus?.
+#            internal/skucanon/canonicalise.go is a reviewed exemption
+#            (a per-page duplicate suppression, not a sku-identity fold).
+#   Rule B — no non-test Go outside internal/pgvector may declare a …Cosine…
+#            function; pgvector.Cosine is the one similarity metric.
+#   Rule C — internal/skugroup/assign.go MUST call skuidentity.Conflict(
+#            so a wrong-size/grade/brand merge stays impossible by construction (#5046).
+rules:
+  - id: one-sku-fold-rule-a
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/skugroup/**"
+        - "**/internal/gatetests/**"
+    preprocess: decomment-go
+    params:
+      pattern: '^func +\(?[^)]*\)? *(dedupe|group|fold|collapse|merge)[A-Za-z]*Skus?\b'
+    except:
+      paths:
+        - "**/internal/skucanon/canonicalise.go"
+    cure: "Call skugroup.Assign instead of declaring a private sku fold (#2413 PH-4 Rule A)."
+    origin: scripts/check-one-sku-fold.sh
+
+  - id: one-sku-fold-rule-b
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/pgvector/**"
+        - "**/internal/skugroup/**"
+        - "**/internal/gatetests/**"
+    preprocess: decomment-go
+    params:
+      pattern: '^func +[A-Za-z]*[Cc]osine[A-Za-z]*\('
+    cure: "Call pgvector.Cosine — the repo's single cosine — never a second implementation (#2413 PH-4 Rule B)."
+    origin: scripts/check-one-sku-fold.sh
+
+  - id: one-sku-fold-rule-c
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/skugroup/assign.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'skuidentity\.Conflict\('
+      mode: exists
+    cure: "The fold's merge gate in assign.go must consult the shared identity veto skuidentity.Conflict( (#5046 / #2413 PH-4 Rule C)."
+    origin: scripts/check-one-sku-fold.sh

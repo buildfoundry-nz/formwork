@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-flutter-out-of-bounds-badge-server-owned.sh
+# (#2229 / #2074 / #5661), Rule B1. partition_height_item.dart must keep mapping the
+# server out-of-bounds copy field onto its model, or the shipped
+# RangeBoundsFlag.message goes dead on the wire. The .sh greps this exact file
+# for `message: m.outOfGauge.message`; exists-mode over that one file is the
+# faithful port.
+rules:
+  - id: oob-partition-height-maps-message
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/domain/partition_height_item.dart"
+    preprocess: code-only-dart
+    params:
+      pattern: 'message: m\.outOfGauge\.message'
+      mode: exists
+    cure: "partition_height_item.dart must keep mapping `message: m.outOfGauge.message` onto the model or the server copy field goes dead on the wire (#2074/#5661)."
+    origin: scripts/check-flutter-out-of-bounds-badge-server-owned.sh

@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-gate-synths-assert.sh (#7388).
+# A synthetic-violation test that can t.Skip( proves nothing: it skips green and
+# a gutted gate is indistinguishable from a working one. Ban t.Skip( in any
+# freightworks/internal/gatetests/*_simulated_test.go. The trailing `(` keeps
+# the pattern to t.Skip( only (t.Skipf / t.SkipNow are distinct tokens with
+# their own bans, per the .sh). The .sh greps raw (no comment strip), so a
+# t.Skip( in a comment also fires — no preprocessor here. Divergence: the .sh
+# exits 2 (loud) if the gatetests dir is missing; formwork has no dir-must-
+# exist assertion, so that vacuous-pass guard is not ported.
+rules:
+  - id: gate-synths-no-skip
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/internal/gatetests/*_simulated_test.go"
+    params:
+      pattern: 't\.Skip\('
+    cure: "A synthetic-violation test that can skip proves nothing; make the fixture trip the gate instead of quarantining it (#7388)."
+    origin: scripts/check-gate-synths-assert.sh

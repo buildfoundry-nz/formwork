@@ -1,0 +1,31 @@
+# RULE 5 — an invariant about a RELATIONSHIP, not a single pattern.
+#
+# "If X appears, then Y must also appear." Neither half is wrong on its own,
+# which is why no single forbidden-pattern or required-pattern can express it:
+# `ALTER TABLE` is fine, and a migration with no `ALTER TABLE` needs no
+# transaction. Only the combination is a defect.
+#
+# pair-consistency takes a `trigger` and a `requires`, and `where` says what
+# counts as "together":
+#
+#   same-file  (default)  both in the same file
+#   same-dir              both somewhere in the same directory
+#   same-func             both inside one Go function (Go only)
+#
+# This is the shape most home-grown gate scripts get wrong, because doing it in
+# shell means accumulating state across lines and everyone's accumulator has a
+# different bug.
+rules:
+  - id: migrations-are-transactional
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "db/migrations/**/*.sql"
+    params:
+      trigger: '(?i)\bALTER TABLE\b'
+      requires: '(?i)\bBEGIN\b'
+      where: same-file
+    cure: "Wrap the migration in BEGIN; ... COMMIT; so a failure part-way leaves the schema unchanged instead of half-migrated."
+    origin: "quickstart-example"
+    tags: [sql]

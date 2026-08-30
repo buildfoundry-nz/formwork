@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-flutter-load-more-uses-shared-keyset-pager.sh
+# (sweep-4 #13 / sweep-5 #5 inversion). A cursor-paged `fetchMore` MUST route
+# through the shared keyset module rather than open-coding the in-flight-flag /
+# cursor-fetch / append flow: every fetchMore delegates to `keysetFetchMore(`.
+# formwork's dart/method-delegates analyzer is the faithful core: a method whose
+# header matches `method` whose brace-tracked body contains no `must_call` fires,
+# anchored on the method header. `must_call` = keysetFetchMore. The shared module
+# itself and generated Dart are carved out of scope.
+#
+# FP FIX: the .sh candidate is a method DEFINITION of fetchMore — a `<name>(...)
+# {`/`=>`/`async {` block, explicitly NOT a `.fetchMore()` CALL (which is preceded
+# by `.` and followed by `,`/`;`) — and it strips `//`/`///` comment lines first.
+# The port's `method: '\bfetchMore\s*\('` also matched (a) presentation widgets
+# that CALL `ref.read(...).fetchMore()` and (b) `fetchMore()` mentions inside doc
+# comments (e.g. vendors_state.dart), neither of which is a definition. The
+# method pattern is now anchored to a RETURN-TYPE-prefixed definition
+# (`Future<...>`/`void` before the name — the same definition anchoring the
+# sibling rule uses, e.g. `void flushSessionCaches(`), which a `.`-preceded call
+# and a comment mention can never match. Every real fetchMore DEFINITION on
+# develop (all `Future<void> fetchMore(`) still gets scanned and passes because it
+# delegates to keysetFetchMore.
+rules:
+  - id: load-more-uses-shared-keyset-pager
+    type: dart/method-delegates
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "packages/plt_core/lib/pagination/keyset_page.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+    params:
+      method: '(?:Future<[^>]*>|void)\s+fetchMore\s*\('
+      must_call: '\bkeysetFetchMore\s*(<[^;{}]*>)?\s*\('
+    cure: "Route the cursor-paged fetchMore through keysetFetchMore<T, S>(...) in packages/plt_core/lib/pagination/keyset_page.dart and implement CursorPageState on the freezed state — never re-implement the in-flight-flag/cursor-fetch/append flow inline, however the rows are merged (sweep-4 #13)."
+    origin: scripts/check-flutter-load-more-uses-shared-keyset-pager.sh

@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-no-reimplemented-point-to-segment-math.sh
+# (geom-consolidation #2078). No Go under freightworks/ may re-inline the
+# point-to-segment projection-parameter idiom — a dot-product numerator
+# `)*IDENT + (...)*IDENT)` immediately followed by a division — instead of the
+# shared internal/geom primitives. internal/geom/ and *_test.go are exempt
+# (single home for the math / parity oracles copy it verbatim).
+rules:
+  - id: no-reimplemented-point-to-segment-math
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/internal/geom/**"
+        - "**/*_test.go"
+    params:
+      pattern: '\)\*[A-Za-z_.]+ +\+ +\(.*\)\*[A-Za-z_.]+\) */'
+    cure: "Call the shared primitives in internal/geom: NearestPointOnSegment / DistanceToEdge / Clamp01, instead of re-inlining the projection math (#1486/#2078)."
+    origin: scripts/check-no-reimplemented-point-to-segment-math.sh

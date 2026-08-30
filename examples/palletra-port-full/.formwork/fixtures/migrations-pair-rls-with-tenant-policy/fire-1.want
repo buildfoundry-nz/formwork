@@ -1,0 +1,1 @@
+- FAIL freightworks/services/core-api/migrations/palletra/0108_add_widgets.up.sql: table 'widgets' missing ENABLE ROW LEVEL SECURITY + CREATE POLICY ... TO runtime_api with a tenant-scoping predicate

@@ -1,0 +1,3 @@
+# Scope-level finding: internal/coreonly is reached only from services/core-api,
+# so the placement command exits non-zero.
+-

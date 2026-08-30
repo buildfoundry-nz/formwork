@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-go-compile-gates-source-disk-probe.sh (#4437).
+# A gate that runs the Go compiler (go build/test/run/vet) fails non-zero when
+# the CI runner runs OUT OF DISK — if the gate reads that as a CODE verdict it
+# FABRICATES a finding from an infra failure (the #2111 class). So every
+# check-*.go that compiles Go MUST import the shared probe package
+# freightworks/scripts/lib/godiskheadroom, which classifies an out-of-disk
+# failure as an ENVIRONMENT failure (exit 2) rather than a code verdict.
+#
+# Ported as a pair-consistency over scripts/check-*.go: trigger = a
+# Go-compiler invocation in `exec.Command("go", "<subcommand>", …)` shape;
+# requires = a reference to lib/godiskheadroom (the probe import) in the same
+# file.
+#
+# FP derivation, re-derived for the Go mechanism (the shell original's fix
+# used destring-sh to blank quoted mentions plus a `^[^#]*` comment anchor to
+# blind `#` comments; neither exists here, and the requires token was a
+# `# shellcheck source=...go-disk-headroom.sh` directive, which has no Go
+# spelling):
+#   * preprocess: decomment-go blanks // and /* */ comments, so a compiler
+#     mention inside a comment can never trigger.
+#   * the trigger pins the full call shape — `exec.Command("go",` followed by a
+#     quoted build/test/run/vet argv word — so strings that merely NAME the
+#     compiler (log text like "go build failed") do not carry the call shape
+#     and do not trigger. decomment-go preserves string literals, but the
+#     quoted-argv shape is not prose.
+#   * the requires token lives on an import line, which is code and survives
+#     decomment-go, so a probe-importing gate always satisfies requires.
+# A real exec.Command("go", "build", …) with no probe import still fails
+# (fixture fire-1), so a compiling gate that omits the probe still trips.
+rules:
+  - id: go-compile-gates-source-disk-probe
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "scripts/check-*.go"
+    preprocess: decomment-go
+    params:
+      trigger: 'exec\.Command\("go",[[:space:]]+"(build|test|run|vet)"'
+      requires: 'lib/godiskheadroom'
+    cure: "Import freightworks/scripts/lib/godiskheadroom and classify a non-zero Go compiler exit as exit 2 when the probe reports the runner under the disk floor — never a code verdict (#4437)."
+    origin: scripts/check-go-compile-gates-source-disk-probe.sh

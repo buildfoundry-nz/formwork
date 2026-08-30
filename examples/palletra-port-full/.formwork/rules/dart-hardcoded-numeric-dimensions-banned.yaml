@@ -1,0 +1,47 @@
+# Ported from Palletra scripts/check-dart-hardcoded-numeric-dimensions-banned.sh (audit L2).
+# Every padding / gap / radius / fontSize / icon-size in widget code must come
+# from the theme package (packages/plt_theme/lib); a raw numeric literal in a
+# dimension-bearing constructor arg is a CI failure.
+#
+# FP FIX (was: a line regex matching `<arg>: <digit>` for width/height/size/
+# letterSpacing ANYWHERE, regardless of the enclosing constructor). The .sh's
+# Dart scanner (find-dart-hardcoded-numeric-dimensions-banned.py) is CONSTRUCTOR-SCOPED: it flags a
+# numeric literal ONLY when the banned key sits in a specific constructor's
+# top-level args — width/height only in Container/SizedBox, size in Icon/IconPill,
+# letterSpacing/height in TextStyle, horizontal/vertical in EdgeInsets.symmetric,
+# etc. The old port fired on legit develop code the .sh permits: `Divider(height:1)`
+# (Divider is not a banned ctor), `textTheme.labelSmall.copyWith(letterSpacing:0.5)`
+# (copyWith is not TextStyle), `Positioned(width:120)`, `Border.all(width:1.5)`.
+# This port anchors each banned key to its constructor via a multiline RE2
+# pattern (no lookaround, no backreference — linear): the ctor, then a
+# depth-1-tolerant tempered span `(?:[^()]|\([^()]*\))*?` (a char-class /
+# bounded-group alternation, which RE2 evaluates in linear time), then the
+# banned key + digit — so a nested widget's own arg (e.g. a Divider inside a
+# Container) stays at nested depth and is not attributed to the outer ctor.
+# Silent on develop, still fires on TextStyle(fontSize: 14) etc.
+rules:
+  - id: dart-hardcoded-numeric-dimensions-banned
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "packages/plt_theme/lib/**"
+        - "frontend/lib/theme/**"
+        - "**/generated/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.gr.dart"
+        - "**/*.config.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbserver.dart"
+        - "**/*.pbgrpc.dart"
+    params:
+      multiline: true
+      pattern: '(?s)(?:\bTextStyle\s*\((?:[^()]|\([^()]*\))*?\b(?:fontSize|letterSpacing|wordSpacing|height|decorationThickness):\s*-?[0-9]|\b(?:Container|SizedBox)\s*\((?:[^()]|\([^()]*\))*?\b(?:width|height):\s*-?[0-9]|\b(?:Icon|IconPill)\s*\((?:[^()]|\([^()]*\))*?\bsize:\s*-?[0-9]|\b(?:IconButton|IconPill)\s*\((?:[^()]|\([^()]*\))*?\biconSize:\s*-?[0-9]|\bEdgeInsets(?:Directional)?\.(?:symmetric|only)\s*\((?:[^()]|\([^()]*\))*?\b(?:horizontal|vertical|top|bottom|left|right|start|end):\s*-?[0-9]|(?:\bBorderRadius\.circular|\bEdgeInsets(?:Directional)?\.(?:all|fromLTRB|fromSTEB))\(\s*-?[0-9])'
+    cure: "Use a theme token, never a literal: EdgeInsets/SizedBox/Container -> ShellSpacing.gapMd etc.; BorderRadius.circular -> ShellShape.cornerMd; TextStyle(fontSize:) -> Theme.of(context).textTheme.*; Icon size -> ShellSpacing.glyphMd. Literals live only in packages/plt_theme/lib."
+    origin: scripts/check-dart-hardcoded-numeric-dimensions-banned.sh

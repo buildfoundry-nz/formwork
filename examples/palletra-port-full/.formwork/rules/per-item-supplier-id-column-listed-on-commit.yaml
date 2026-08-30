@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-per-item-vendor-id-wired.sh (sweep-3 #2),
+# writer half. The commit package's ratedItemColumnsValues const must list
+# vendor_id so the commit pipeline stamps pi.vendor_id on every fresh row.
+# The .sh matches the const body across newlines
+# (ratedItemColumnsValues=`...vendor_id`); formwork is line-oriented and cannot
+# span the const declaration line to the column line, so this is approximated as
+# exists-mode `vendor_id` over the commit package (the column list is the only
+# place it appears). NOTE: the multiline tie to the ratedItemColumnsValues const
+# is not expressible line-by-line and is folded to package-scope presence.
+rules:
+  - id: per-item-supplier-id-column-listed-on-commit
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/stockroom/commit/**/*.go'
+      exclude:
+        - '**/*_test.go'
+    params:
+      pattern: '\bvendor_id\b'
+      mode: exists
+    cure: 'The commit package''s ratedItemColumnsValues const must keep listing vendor_id or the commit pipeline can no longer stamp pi.vendor_id (sweep-3 #2 writer half).'
+    origin: scripts/check-per-item-vendor-id-wired.sh

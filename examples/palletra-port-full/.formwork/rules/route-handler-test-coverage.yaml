@@ -1,0 +1,54 @@
+# Ported from Palletra scripts/check-route-handler-test-coverage.sh (audit B18). Every HTTP
+# handler method in freightworks/services/core-api/routes/ —
+#   func (h *<Recv>Handler) <Method>(w http.ResponseWriter, r *http.Request)
+# — must be exercised by at least one *_test.go in the routes tree that INVOKES
+# that method (`.<Method>(`).
+#   A = every handler method NAME declared with the chi handler signature.
+#   B = every method NAME invoked as `.M(` in a routes *_test.go.
+# A ⊆ B: a declared handler method whose name is invoked by no test is the
+# violation.
+#
+# FALSE-POSITIVE FIX: the .sh carries a self-cleaning GRANDFATHERED set of ten
+# (file, receiver, method) tuples — the bare-`Handler` methods that pre-dated the
+# fix widening bare-`Handler` receivers into scope (#7074). On clean develop six
+# of those method NAMES (GetQuoteInputs, GetQuoteState, ListQueue,
+# SubmitItemDecision, SubmitReviewDecision, UpdateTerms) are declared but invoked
+# by no test, so the gate is silent only because they are grandfathered; the
+# original port had no grandfather and fired on exactly those six (a false
+# positive on the documented pre-existing debt). set-relation cannot exempt a
+# symbol, so the three source files that HOLD the grandfathered methods
+# (shelving_types/groups/shelving_groups.go, margin_model/margin_model.go,
+# qa_sample_checks/qa_sample_checks.go) are excluded from scope. That drops those
+# files' handler methods from side A — reproducing the gate's develop-silent
+# behavior — while STILL catching the recurrence: a NEW handler method in any
+# other routes file with no test invocation stays in A and A ⊄ B fires.
+# Divergence (noted): a new method added to one of the three excluded files is
+# not checked, slightly broader than the .sh's per-tuple grandfather; the
+# widened bare-`Handler` coverage of the other ~18 packages is preserved.
+rules:
+  - id: route-handler-test-coverage
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/testsupport/**"
+        # GRANDFATHERED bare-`Handler` debt (#7074) — the .sh is silent on these.
+        - "freightworks/services/core-api/routes/shelving_types/groups/shelving_groups.go"
+        - "freightworks/services/core-api/routes/margin_model/margin_model.go"
+        - "freightworks/services/core-api/routes/qa_sample_checks/qa_sample_checks.go"
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/routes/**/*.go"
+        pattern: 'func \([a-zA-Z_][A-Za-z0-9_]* \*(?:[A-Z][A-Za-z0-9_]*)?Handler\) ([A-Z][A-Za-z0-9_]*)\(w http\.ResponseWriter, r \*http\.Request\)'
+        group: 1
+      b:
+        files:
+          - "freightworks/services/core-api/routes/**/*_test.go"
+        pattern: '\.([A-Z][A-Za-z0-9_]*)\('
+        group: 1
+      relation: subset
+    cure: "Every chi-registered handler method must be exercised by at least one test in routes/ that invokes .<Method>( on the constructed handler. Add a test that builds the handler with httptest.NewRecorder() and calls the method (audit B18)."
+    origin: scripts/check-route-handler-test-coverage.sh

@@ -1,0 +1,27 @@
+# RULE 4 — not every guardrail is a regex.
+#
+# Some invariants are structural. file-size is the simplest of those: it counts
+# lines and has no pattern at all. `formwork list types` enumerates the rest —
+# ordering, file-naming, pair-consistency, set-relation, language-aware
+# analyzers for Go/Dart/SQL, and the external-command escape hatch.
+#
+# Reach for a typed rule before reaching for a clever regex. A regex that
+# approximates "this Go file declares two functions with the same name" will be
+# wrong in ways you find out later; a typed rule that parses the file will not.
+rules:
+  - id: handlers-stay-small
+    type: file-size
+    severity: warn
+    scope:
+      include:
+        - "internal/handler/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      # `cap` warns. `hard_cap` fails. Using cap with severity: warn gives a
+      # nudge that does not block the commit — the right setting for a rule
+      # about taste rather than correctness.
+      cap: 40
+    cure: "Split the handler: move request decoding and response shaping into their own functions, or the business logic into internal/store."
+    origin: "quickstart-example"
+    tags: [go]

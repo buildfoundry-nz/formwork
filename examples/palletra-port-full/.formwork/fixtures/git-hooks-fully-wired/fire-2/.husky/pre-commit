@@ -1,0 +1,5 @@
+#!/usr/bin/fish
+# VIOLATION: fish is not a POSIX sh. Its name ends in "sh", so the shebang limb
+# accepted it while the hook body below is fish syntax no /bin/sh can run.
+set -l changed (git diff --cached --name-only)
+flutter analyze; and gofmt -l .

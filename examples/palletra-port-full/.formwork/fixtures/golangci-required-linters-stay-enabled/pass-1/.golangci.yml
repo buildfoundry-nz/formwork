@@ -1,0 +1,15 @@
+linters:
+  disable-all: true
+  enable:
+    - staticcheck
+    - govet
+    - errcheck
+    - ineffassign
+    - unused
+    - gosec
+    - gocritic
+    - revive
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - noctx

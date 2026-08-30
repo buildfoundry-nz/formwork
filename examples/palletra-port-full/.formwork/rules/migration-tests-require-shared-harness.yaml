@@ -1,0 +1,36 @@
+# Ported from Palletra scripts/check-migration-tests-require-shared-harness.sh
+# (PR #3740). 58 migration applied-state tests each carried a verbatim
+# connect-to-migrated-DB preamble that had already drifted into four shapes; it
+# now lives once in migrations/integration_rig_test.go (connectPreparedTestDB
+# / migratedIntegrationDBURL). Any re-pasted preamble must read TEST_DATABASE_URL, so
+# banning that env read outside the harness catches every fork.
+#
+# Rule A (forbidden, decomment-go so a commented mention does not fire):
+#   os.Getenv("TEST_DATABASE_URL") on any migrations/*_test.go EXCEPT the harness.
+# Rule B (required exists) — anti-vacuity: the harness file must still declare
+#   func connectPreparedTestDB(; deleting it does not silence the gate.
+rules:
+  - id: migration-tests-require-shared-harness
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/*_test.go"
+      exclude:
+        - "freightworks/services/core-api/migrations/integration_rig_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'os\.Getenv\("TEST_DATABASE_URL"\)'
+    cure: "Call connectPreparedTestDB(t) for a live migrated connection (or migratedIntegrationDBURL(t) for the raw DSN); both live in migrations/integration_rig_test.go — extend the harness, never re-paste the preamble."
+    origin: scripts/check-migration-tests-require-shared-harness.sh
+  - id: migration-tests-preamble-harness-declared
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/integration_rig_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'func connectPreparedTestDB\('
+      mode: exists
+    cure: "integration_rig_test.go must exist and declare func connectPreparedTestDB( — the only sanctioned migrated-DB preamble (PR #3740)."
+    origin: scripts/check-migration-tests-require-shared-harness.sh

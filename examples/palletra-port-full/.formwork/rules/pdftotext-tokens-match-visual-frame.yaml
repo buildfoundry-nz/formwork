@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-pdftotext-tokens-match-visual-frame.sh (#4582).
+# pdftotext -bbox reports the UNROTATED page box in its <page width height> tag
+# but emits token coordinates in the rotation-applied VISUAL frame the raster +
+# detection boxes live in. On a /Rotate 90|270 page the two axes are transposed,
+# so a parser that normalizes tokens by the raw <page> dims mis-projects EVERY
+# token — none lands in a callout_box / partition polygon, and the whole page silently
+# drops to the slow, costly Gemini OCR fallback. displayPageDims picks the
+# orientation matching the render dims, reconciling the frames for any rotation.
+# The invariant: ANY non-test Go file under pageintake that reads the pdftotext
+# -bbox <page> dims (references boundsPageRe) MUST also call displayPageDims.
+#
+# Ported as a same-file pair-consistency: the trigger `boundsPageRe` (reading the
+# raw page box) obliges the companion `displayPageDims` (the rotation projection)
+# in the same file. A fresh parser that re-reads the page box without projecting
+# through the visual frame fires, regardless of how it spells the normalisation.
+rules:
+  - id: pdftotext-tokens-match-visual-frame
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/pageintake/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      trigger: 'boundsPageRe'
+      requires: 'displayPageDims'
+    cure: "A pdftotext -bbox reader that reads the raw <page> dims (boundsPageRe) must project its word tokens through displayPageDims, not against the raw dims — on a /Rotate 90|270 page the raw box has its axes transposed, so every token mis-projects and the page drops to OCR (#4582)."
+    origin: scripts/check-pdftotext-tokens-match-visual-frame.sh

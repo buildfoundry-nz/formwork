@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-commit-range-builds.sh (#7662 / #4124 / #5997).
+# `.husky/pre-commit` builds the WORKING TREE, not the commit it creates, so an
+# edit left unstaged after a merge-conflict resolution sails through every hook
+# while HEAD does not compile — and a RED test committed in that window could
+# never have run. This gate compiles EVERY non-merge commit in the PR rev range,
+# oldest→newest: it checks each out into one reused detached worktree and, per
+# go.mod module, `go test -c`-links that commit's OWN changed packages under the
+# full build-tag set each changed file requires (production code AND *_test.go,
+# executing nothing). Forward-looking from the commit that introduced the gate;
+# fail-closed on a bad range; disk-headroom classified so ENOSPC never fakes a
+# compile verdict.
+#
+# Why the ESCAPE HATCH (type: command): the gate walks GIT HISTORY (a rev range,
+# per-commit diffs, merge-base ancestry) and drives the GO TOOLCHAIN (worktree
+# checkout + `go test -c` link per commit). Both the history walk and the
+# compile are external to any file-content scan; no declarative rule type can
+# check out and build past commits. It runs the real check; with no range it
+# self-skips (exit 0).
+rules:
+  - id: commits-build
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-commit-range-builds.sh — the validating
+      target's own gate script, which this corpus does not carry and cannot:
+      it is written in that tree's vocabulary, and this repository tracks no
+      shell scripts at all. In a fixture tree bash would exit 127 in the fire
+      tree and the pass tree alike, so the fire proof would be satisfied by
+      the detector NOT EXISTING and the pass proof would report that same
+      missing-detector exit as a finding. What the port asserts here is the
+      SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-commit-range-builds.sh
+      expect:
+        exit: 0
+    cure: "Make every non-merge commit compile on its own (production code AND tests, under each changed file's build tags). Stage the whole merge resolution (`git add -A` after verifying it), or split the commit so each stands alone — pre-commit builds the working tree, not the commit it creates (#7662)."
+    origin: scripts/check-commit-range-builds.sh

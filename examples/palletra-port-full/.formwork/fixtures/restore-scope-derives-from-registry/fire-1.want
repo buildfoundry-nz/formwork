@@ -1,0 +1,2 @@
+# Scope-level: the restore contract is violated (handler reads a type list; proto carries a repeated annotation-type field).
+- handler does not resolve scope via approveall.GetConfig(

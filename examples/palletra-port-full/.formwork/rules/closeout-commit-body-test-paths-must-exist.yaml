@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-closeout-commit-body-test-paths-must-exist.sh (sweep-18 #18).
+# An sweep-17 closeout commit cited synthetic-test paths under a directory that
+# did not exist; the fix landed but the audit-trail PROSE drifted, costing the
+# next audit a grep cycle. This gate scans the BODY of one commit whose subject
+# looks like a closeout (`fix(audit-NN...): ...close...finding`), extracts every
+# `*_test.go` path token, and asserts each resolves to a real file (repo-root-
+# relative or under freightworks/). Non-closeout commits and empty bodies skip.
+#
+# Why the ESCAPE HATCH (type: command): the gate's input is GIT HISTORY — the
+# subject and full body of a specific commit read via `git log -1 --pretty=%B`.
+# A commit message is not a tree file, so no self-contained fixture can carry it
+# and no content-scanning rule type can reach it. It runs the real check against
+# the actual commit under review; with no commit context it self-skips (exit 0).
+rules:
+  - id: closeout-commit-body-test-paths-must-exist
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-closeout-commit-body-test-paths-must-exist.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/internal/gatetests/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-closeout-commit-body-test-paths-must-exist.sh
+      expect:
+        exit: 0
+    cure: "Fix the closeout commit body so every cited *_test.go path names the actual file on disk (repo-root-relative or under freightworks/). The structural fix already landed — only the audit-trail prose drifted (sweep-18 #18)."
+    origin: scripts/check-closeout-commit-body-test-paths-must-exist.sh

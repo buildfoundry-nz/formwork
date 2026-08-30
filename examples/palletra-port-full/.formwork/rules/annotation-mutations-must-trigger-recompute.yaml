@@ -1,0 +1,35 @@
+rules:
+  # SV-ARC-5 / audit Tier 5.1: every Go file under services/core-api/routes
+  # that issues an INSERT/UPDATE/DELETE against palletra.{annotations,
+  # annotation_gauges,page_gauges} MUST also reference a canonical recompute
+  # helper, or page_gauges goes stale until the next worker pass (which the FE
+  # never waits for). The real gate also folds delegation + a completeness
+  # anti-rot walk across both internal trees — cross-file logic that is not
+  # expressible declaratively — so the core per-file invariant is reproduced
+  # here with the command escape hatch, running the grep over the fixture tree.
+  - id: annotation-mutations-must-trigger-recompute
+    type: command
+    severity: error
+    scope:
+      include: ["freightworks/services/core-api/routes/**/*.go"]
+    params:
+      cmd:
+        - bash
+        - -c
+        - |
+          set -u
+          dir=freightworks/services/core-api/routes
+          [ -d "$dir" ] || exit 0
+          fail=0
+          while IFS= read -r f; do
+            case "$f" in
+              *_test.go|*/page_retally.go|*/worker_hook*) continue ;;
+            esac
+            if grep -Eq '(UPDATE|INSERT INTO|DELETE FROM) +palletra\.(annotations|annotation_gauges|page_gauges)' "$f"; then
+              grep -Eq 'recomputePageRollupsInTx\(|pagerefresh\.Recompute\(|RecomputePageAnnotationsAndRollupsInTx\(|completeCalibration\(' "$f" \
+                || { echo "missing recompute helper: $f" >&2; fail=1; }
+            fi
+          done < <(find "$dir" -name '*.go' 2>/dev/null)
+          exit $fail
+    cure: "After a routes/ mutation to annotations/annotation_gauges/page_gauges, call recomputePageRollupsInTx (or pagerefresh.Recompute) inside the tx (SV-ARC-5)."
+    origin: scripts/check-annotation-mutations-must-trigger-recompute.sh

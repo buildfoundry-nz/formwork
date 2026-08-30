@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-primary-vector-extraction.sh (Plan 3
+# Phase 9). Within `func (r *Runner) classify(...)` in
+# parsecompose/runner/runner.go, vector text must stay the PRIMARY
+# classification path: extractVectorText must be called BEFORE both
+# classifyText (the text-first classifier) and invokeVisionFallback (the Gemini
+# vision fallback). A refactor that shoves vision first silently reverts the
+# pipeline to spending Vision tokens on every PDF.
+#
+# Ported as go/call-order-in-func over the real func: within classify(),
+# extractVectorText must precede the EARLIEST of {classifyText,
+# invokeVisionFallback} — expressed as a single downstream stage
+# 'classifyText|invokeVisionFallback'. This mirrors the .sh exactly: the shell
+# awk pins only vector-first (vec_first < text_first AND vec_first <
+# vision_first) and leaves the text-vs-vision order UNCONSTRAINED. The
+# analyzer reasons over the parsed AST call list in source order, so helper
+# DEFINITIONS elsewhere in the file are not matched (the same isolation the
+# .sh achieves by carving the classify() body).
+#
+# WHY NOT a 3-stage sequence: a literal
+# [extractVectorText, classifyText, invokeVisionFallback] chain also imposes
+# classifyText-before-invokeVisionFallback, which the .sh does NOT — and which
+# the real classify() legitimately violates in its scanned-PDF early-return
+# branch (pagesWithContent == 0 calls invokeVisionFallback before classifyText is
+# ever reached). That extra constraint was a false positive on clean develop.
+# The two-stage alternation drops it and stays faithful to "vector primary,
+# vision fallback".
+#
+# DIVERGENCE (noted): the .sh's exit-2 "helper uncalled" case is not modelled;
+# call-order imposes no constraint on an absent stage (formwork lint owns
+# empty-scope rot).
+rules:
+  - id: primary-vector-extraction
+    type: go/call-order-in-func
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/parsecompose/runner/runner.go"
+    params:
+      funcs: '^classify$'
+      sequence:
+        - 'extractVectorText'
+        - 'classifyText|invokeVisionFallback'
+    cure: "classify() must call extractVectorText (vector text) BEFORE classifyText (text classifier) and invokeVisionFallback (vision). Vision is the fallback, never primary (Plan 3 Phase 9)."
+    origin: scripts/check-primary-vector-extraction.sh

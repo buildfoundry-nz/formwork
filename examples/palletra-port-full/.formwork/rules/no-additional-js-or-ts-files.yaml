@@ -1,0 +1,48 @@
+# Ported from Palletra scripts/check-no-additional-js-or-ts-files.sh — the capstone
+# JavaScript/TypeScript ban. The app is Flutter (Dart, frontend/) + Go
+# (freightworks/); the dead React reference (client/ + shared/ TS) was deleted
+# and the repo is now ZERO JS/TS forever. A .js/.jsx/.ts/.tsx/.mjs/.cjs/.cts/.mts
+# file ANYWHERE is a HARD FAIL, with no path exemption. (The Dart/Go protobuf
+# output uses .dart/.go only, so it never trips this.)
+#
+# Ported as file-naming forbid_ext — a pure path-extension ban, exactly the
+# gate's shape. The finding is file-level (the file's NAME is the violation, no
+# line to anchor), so the fire fixture declares it via a fire-1.want manifest
+# naming the offending path rather than an inline marker.
+#
+# FP FIX (was: fired 59375× on the real tree). The .sh enumerates git-TRACKED
+# files (`git ls-files`) so gitignored vendored/build/cache dirs are
+# structurally excluded; the port scanned the working tree with include `**`,
+# so every .js under coverage/, node_modules/, build/, dist/, .dart_tool/,
+# .cache/, vendor/ (all gitignored, untracked) matched. Those dirs are now
+# scope.excluded — the faithful working-tree analogue of the .sh's tracked-only
+# enumeration. Any COMMITTED (in-scope) JS/TS anywhere else still hard-fails.
+rules:
+  - id: no-additional-js-or-ts-files
+    type: file-naming
+    severity: error
+    scope:
+      include:
+        - "**"
+      exclude:
+        - "**/node_modules/**"
+        - "**/.dart_tool/**"
+        - "**/build/**"
+        - "**/dist/**"
+        - "**/coverage/**"
+        - "**/.cache/**"
+        - "**/vendor/**"
+        - "**/.git/**"
+        - "**/.claude/worktrees/**"
+    params:
+      forbid_ext:
+        - ".js"
+        - ".jsx"
+        - ".ts"
+        - ".tsx"
+        - ".mjs"
+        - ".cjs"
+        - ".cts"
+        - ".mts"
+    cure: "The app is Flutter (Dart, frontend/) + Go (freightworks/). Write Dart or Go — remove the JS/TS file; there is no permitted JavaScript/TypeScript anywhere in this repo."
+    origin: scripts/check-no-additional-js-or-ts-files.sh

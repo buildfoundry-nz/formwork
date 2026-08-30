@@ -1,0 +1,71 @@
+# Port of scripts/check-flutter-footer-settle-precedes-idle.sh.
+#
+# Three coupled Dart invariants over the measure surface, located by CONTENT
+# ANCHOR (class/symbol), not path:
+#   A — PlotFooterPending.run must call awaitFooterActionResolved() AFTER
+#       `await action()` and BEFORE `state = null` (a within-method ORDERING
+#       assertion, not mere presence);
+#   B — plotPrimaryActionProvider(...).future may appear only in the file
+#       that DEFINES awaitFooterActionResolved;
+#   C — invalidate/refresh(plotPrimaryActionProvider) may appear only in
+#       workflow_rail_sync.dart (the single owner).
+# Content-anchored file discovery plus a three-token ordering check inside one
+# method body is not expressible with the declarative analyzers (method-delegates
+# only checks presence; there is no ordering primitive), so this maps to the
+# `command` escape hatch, faithfully reproducing all three rules over the fixture
+# tree. Scope-level finding (no want marker); fire-1 settles AFTER the clear
+# (out of order), pass-1 orders write -> settle -> clear correctly.
+rules:
+  - id: flutter-footer-settle-precedes-idle
+    type: command
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/**/*.dart"
+        - "packages/plt_canvas_kit/lib/measure/**/*.dart"
+        - "packages/plt_canvas_kit/lib/annotation/**/*.dart"
+    params:
+      cmd:
+        - bash
+        - -c
+        - |
+          set -uo pipefail
+          dirs="packages/feature_dimension/lib packages/plt_canvas_kit/lib/measure packages/plt_canvas_kit/lib/annotation"
+          present=""
+          for d in $dirs; do [ -d "$d" ] && present="$present $d"; done
+          [ -n "$present" ] || exit 0
+          seam="$(grep -rlE 'class PlotFooterPending[[:space:]]+extends' $present --include='*.dart' 2>/dev/null | head -1)"
+          settle="$(grep -rlE '^Future<void> awaitFooterActionResolved\(' $present --include='*.dart' 2>/dev/null | head -1)"
+          owner="$(grep -rlE 'class WorkflowRailSync[[:space:]]+extends' $present --include='*.dart' 2>/dev/null | head -1)"
+          if [ -z "$seam" ] || [ -z "$settle" ] || [ -z "$owner" ]; then
+            echo "content anchor missing (seam=$seam settle=$settle owner=$owner)"; exit 1
+          fi
+          fail=0
+          # Rule A — ordering inside the seam file: write < settle < clear.
+          w="$(grep -nE 'await[[:space:]]+action\(\)' "$seam" | head -1 | cut -d: -f1)"
+          s="$(grep -nE 'awaitFooterActionResolved[[:space:]]*\(' "$seam" | head -1 | cut -d: -f1)"
+          c="$(grep -nE 'state[[:space:]]*=[[:space:]]*null' "$seam" | head -1 | cut -d: -f1)"
+          if [ -z "$w" ] || [ -z "$c" ]; then
+            echo "seam no longer awaits action() and clears state"; fail=1
+          elif [ -z "$s" ]; then
+            echo "seam clears its busy key without awaiting awaitFooterActionResolved() (#7004)"; fail=1
+          elif [ "$s" -lt "$w" ] || [ "$s" -gt "$c" ]; then
+            echo "awaitFooterActionResolved out of order (write=$w settle=$s clear=$c) — must be AFTER await action() and BEFORE state = null"; fail=1
+          fi
+          # Rule B — only the settle-defining file awaits the footer action.
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            [ "$f" = "$settle" ] && continue
+            echo "rogue plotPrimaryActionProvider(...).future in $f (only awaitFooterActionResolved's file may)"; fail=1
+          done < <(grep -rlE 'plotPrimaryActionProvider[[:space:]]*\([^)]*\)[[:space:]]*\.[[:space:]]*future' $present --include='*.dart' 2>/dev/null)
+          # Rule C — only WorkflowRailSync's file invalidates the action.
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            [ "$f" = "$owner" ] && continue
+            echo "rogue invalidate/refresh(plotPrimaryActionProvider) in $f (only WorkflowRailSync may)"; fail=1
+          done < <(grep -rlE '(invalidate|refresh)[[:space:]]*\([[:space:]]*plotPrimaryActionProvider' $present --include='*.dart' 2>/dev/null)
+          exit $fail
+      expect:
+        exit: 0
+    cure: "PlotFooterPending.run must await awaitFooterActionResolved() after `await action()` and before clearing state; only awaitFooterActionResolved's file may await plotPrimaryActionProvider.future, and only WorkflowRailSync may invalidate it."
+    origin: scripts/check-flutter-footer-settle-precedes-idle.sh

@@ -1,0 +1,143 @@
+# Ported from Palletra scripts/check-wire-fixture-single-source.sh
+# (#5575). The Measure FE<->BE ImpactedPage wire contract turns on ONE committed
+# golden that BOTH sides load; re-forking it into hand-synced copies let them
+# drift silently. This gate keeps the single source un-regressable:
+#   Rule 1 — the golden carries every FE-consumed top-level slice
+#            (pageId + annotations + markerTallies + pageGauges + metrics);
+#   Rule 2 — the Dart mirror NAMES the golden basename AND reads a file;
+#   Rule 3 — the Go wire test NAMES the golden basename AND reads a file.
+#
+# Faithful port: exists-mode required-pattern per anchor. Rule 1 is five key
+# anchors (each key independently load-bearing, as the .sh requires ALL five).
+# Rule 2/3 each split into NAMES-basename + READS-file (a single OR would pass on
+# just one, weaker than the .sh's AND).
+#
+# APPROX: the .sh additionally json.load()s the golden and asserts it is an
+# object (well-formedness) — not expressible as a pattern; and it checks
+# TOP-LEVEL keys, whereas a content anchor matches the key substring anywhere.
+# See notes.
+rules:
+  - id: measure-wire-golden-carries-page-id
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/annotation_gauges/testdata/plot_wire_affected_page.golden.json"
+    preprocess: raw
+    params:
+      pattern: '"pageId"'
+      mode: exists
+    cure: "The measure-wire golden must carry the pageId slice; dropping it silently strands that surface on both sides (#5575)."
+    origin: scripts/check-wire-fixture-single-source.sh
+  - id: measure-wire-golden-carries-annotations
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/annotation_gauges/testdata/plot_wire_affected_page.golden.json"
+    preprocess: raw
+    params:
+      pattern: '"annotations"'
+      mode: exists
+    cure: "The measure-wire golden must carry the annotations slice (#5575)."
+    origin: scripts/check-wire-fixture-single-source.sh
+  - id: measure-wire-golden-has-marker-tallies
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/annotation_gauges/testdata/plot_wire_affected_page.golden.json"
+    preprocess: raw
+    params:
+      pattern: '"markerTallies"'
+      mode: exists
+    cure: "The measure-wire golden must carry the markerTallies slice (#5575)."
+    origin: scripts/check-wire-fixture-single-source.sh
+  - id: measure-wire-golden-has-page-gauges
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/annotation_gauges/testdata/plot_wire_affected_page.golden.json"
+    preprocess: raw
+    params:
+      pattern: '"pageGauges"'
+      mode: exists
+    cure: "The measure-wire golden must carry the pageGauges slice (#5575)."
+    origin: scripts/check-wire-fixture-single-source.sh
+  - id: measure-wire-golden-has-metrics-slice
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/annotation_gauges/testdata/plot_wire_affected_page.golden.json"
+    preprocess: raw
+    params:
+      pattern: '"metrics"'
+      mode: exists
+    cure: "The measure-wire golden must carry the metrics slice (#5575)."
+    origin: scripts/check-wire-fixture-single-source.sh
+  - id: measure-wire-dart-fixture-names-golden
+    type: required-pattern
+    scope:
+      include:
+        - "packages/feature_dimension/test/support/plot_wire_fixtures.dart"
+    # RAW, ANCHORED — and it is the one rule in this file that can use neither
+    # projection. The anchor it requires is a FILENAME, which in Dart can only
+    # live inside a string literal, and code-only-dart blanks string contents:
+    # under it this rule keeps both fixtures green while matching nothing a real
+    # file could contain. Raw alone fails the other way — a required-pattern
+    # read from raw bytes is satisfied by a comment, so `// names
+    # plot_wire_affected_page.golden.json` would let the Dart mirror stop
+    # naming the golden with this rule still green (#263.3's class).
+    #
+    # So the comment-immunity is written into the pattern instead. RE2 has no
+    # negative lookahead, so `(?:[^/\n]|/[^/\n])*` is the long way to say "no
+    # `//` between the start of the line and the match": a slash is only
+    # consumable when the next byte is not a slash. The trailing `/?` is what
+    # lets the path's own separators through — `'testdata/plot_wire...'` ends
+    # the run on a slash, which the alternation alone cannot do.
+    #
+    # RESIDUAL, disclosed rather than absorbed: this closes `//`, `///` and
+    # trailing `//` comments — every idiomatic Dart comment form and the shape
+    # the probe plants — but NOT a `/* ... */` block comment, which RE2 cannot
+    # exclude without lookbehind. Closing that needs a `decomment-dart`
+    # preprocessor (blank comments, PRESERVE string contents — the Dart analogue
+    # of decomment-go, which is what makes this shape sound in Go). formwork
+    # has code-only-dart and comments-only-dart and no such pairing; that gap is
+    # in internal/preprocess, not in this corpus. Move this rule onto it when it
+    # lands and delete the anchor.
+    preprocess: raw
+    params:
+      pattern: '(?m)^(?:[^/\n]|/[^/\n])*/?plot_wire_affected_page\.golden\.json'
+      mode: exists
+    cure: "The Dart mirror (plot_wire_fixtures.dart) must name plot_wire_affected_page.golden.json, not carry an inline copy (#5575)."
+    origin: scripts/check-wire-fixture-single-source.sh
+  - id: measure-wire-dart-fixture-reads-golden
+    type: required-pattern
+    scope:
+      include:
+        - "packages/feature_dimension/test/support/plot_wire_fixtures.dart"
+    preprocess: code-only-dart
+    params:
+      pattern: 'readAsString'
+      mode: exists
+    cure: "impactedPageJson() must read the golden from disk (readAsString), not carry an inline copy (#5575)."
+    origin: scripts/check-wire-fixture-single-source.sh
+  - id: measure-wire-go-test-names-golden
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/annotation_gauges/annotation_gauges_fe_contract_wire_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'plot_wire_affected_page\.golden\.json'
+      mode: exists
+    cure: "The Go wire test must name plot_wire_affected_page.golden.json, not hand-build the ImpactedPage proto (#5575)."
+    origin: scripts/check-wire-fixture-single-source.sh
+  - id: measure-wire-go-test-reads-golden
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/annotation_gauges/annotation_gauges_fe_contract_wire_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'ReadFile'
+      mode: exists
+    cure: "uiWireAffectedPage must read the golden from disk (ReadFile), not hand-build the ImpactedPage proto (#5575)."
+    origin: scripts/check-wire-fixture-single-source.sh

@@ -1,0 +1,33 @@
+# Ported from Palletra scripts/check-no-hand-rolled-toggle-switch-widget.sh (#3022).
+# Sku's Switch(...), Switch.adaptive(...) and SwitchListTile(...) may be
+# constructed in exactly one place: packages/plt_widgets/lib/base_switch.dart
+# (which exports AppSwitch / ShellSwitchTile). Every boolean toggle must route
+# through those. Scope is the post-package-split layout: frontend/lib PLUS every
+# packages/*/lib; generated Dart excluded; the owner file carved out.
+#
+# Regex note: the .sh uses a PCRE lookbehind `(?<![A-Za-z0-9_$])` so identifiers
+# merely ending in "Switch" (AppSwitch(, _primaryToggle(, setToggle(,
+# ApprovalPolicyTallyPerSwitch() and lowercase `switch (` statements never trip.
+# RE2 has no lookbehind, so this is ported faithfully with a consuming
+# start-or-non-word-char boundary `(^|[^A-Za-z0-9_$])` — an exact equivalent, not
+# a lossy approximation.
+rules:
+  - id: no-hand-rolled-toggle-switch-widget
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "packages/plt_widgets/lib/base_switch.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+    params:
+      pattern: '(^|[^A-Za-z0-9_$])(SwitchListTile|Switch)\s*(\(|\.adaptive\s*\()'
+    cure: "Use AppSwitch (or ShellSwitchTile) from packages/plt_widgets/lib/base_switch.dart. One owner per control — raising this carve-out is never the fix (#3022)."
+    origin: scripts/check-no-hand-rolled-toggle-switch-widget.sh

@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-feedback-priority-selector-visibility-gated.sh
+# (#1898). Presence backstop: tailored_feedback_form.dart MUST reference
+# feedbackPriorityVisibilityProvider — i.e. the priority selector's render
+# is conditioned on the staff visibility gate rather than shown
+# unconditionally. exists-mode required-pattern: the single in-scope file must
+# match. Both the .sh and required-pattern skip when the file is absent (the
+# .sh exits 0; a zero-file scope passes here) — so the vacuous-on-absent
+# behavior is faithful.
+#
+# preprocess: the .sh strips Dart comments (strip_comments_dart) so a commented-out
+# reference cannot satisfy the presence check. decomment-go blanks the same
+# C-style `//` and `/* */` comments Dart uses (string contents preserved), so
+# a reference surviving inside a `//` comment is stripped before matching —
+# faithful for the non-triple-quoted Dart this file contains.
+rules:
+  - id: feedback-priority-selector-visibility-gated
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_critique/lib/presentation/tailored_feedback_form.dart"
+    preprocess: decomment-go
+    params:
+      pattern: 'feedbackPriorityVisibilityProvider'
+      mode: exists
+    cure: "Watch/read feedbackPriorityVisibilityProvider and render the priority SegmentedButton only when true — never show it unconditionally."
+    origin: scripts/check-feedback-priority-selector-visibility-gated.sh

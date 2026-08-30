@@ -1,0 +1,84 @@
+# Ported from Palletra scripts/check-no-unreachable-generated-dart-code.sh (#5545 / #6657).
+# A proto contract consumed ONLY by Go (no Dart consumer) must NOT ship committed
+# Dart bindings under shared/generated/dart: buf's "generate every language"
+# default otherwise emits dead .pb.dart that nothing imports. The gate reasons
+# PER PROTO FILE over the import graph. LIVENESS: a proto's generated Dart is
+# reachable iff some hand-written Dart imports its .pb.dart/.pbenum.dart, directly
+# OR transitively (protoc-gen-dart emits `import 'dep.pb.dart'` for every proto a
+# message imports). SEED live from hand-Dart imports; PROPAGATE across in-scope
+# proto imports to a fixpoint. An in-scope proto (ships committed .pb.dart) that
+# never becomes live is Dart-dead -> FAIL. Additionally any committed *.pbjson.dart
+# is banned (nothing imports a JSON descriptor; schema.sh generate prunes them).
+#
+# Why the ESCAPE HATCH (type: command): the rule is a fixpoint reachability join
+# over a proto import GRAPH seeded from a separate Dart-import scan — a
+# transitive-closure computation no declarative formwork type expresses. It is
+# self-contained (grep/sed over .proto + .pb.dart text, no external tool), so this
+# is a fixture-PROVABLE command escape reproducing the .sh seed+fixpoint: fire-1
+# ships a Go-only proto's committed .pb.dart that no hand-Dart (directly or
+# transitively) reaches; pass-1 has every in-scope proto reachable from hand-Dart.
+rules:
+  - id: no-unreachable-generated-dart-code
+    type: command
+    severity: error
+    scope:
+      include:
+        - "schema/proto/palletra/**/*.proto"
+        - "shared/generated/dart/lib/**/*.dart"
+        - "packages/**/*.dart"
+    params:
+      cmd:
+        - bash
+        - "-c"
+        - |
+          set -uo pipefail
+          PROTO_ROOT="schema/proto/palletra"
+          PROTO_BASE="schema/proto"
+          DART_LIB="shared/generated/dart/lib"
+          [ -d "$PROTO_ROOT" ] || exit 0
+          TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+          INSCOPE="$TMP/inscope"; LIVE="$TMP/live"; HANDIMP="$TMP/handimp"
+          : > "$INSCOPE"; : > "$LIVE"; : > "$HANDIMP"
+          for hd in packages frontend; do
+            [ -d "$hd" ] || continue
+            grep -rhoE "package:palletra_schema/palletra/[A-Za-z0-9_./-]+\.(pb|pbenum)\.dart" "$hd" 2>/dev/null
+          done | sed -E 's#package:palletra_schema/##; s#\.(pb|pbenum)\.dart$##' | sort -u > "$HANDIMP"
+          while IFS= read -r proto; do
+            rel="${proto#"$PROTO_BASE"/}"
+            rel_noext="${rel%.proto}"
+            [ -f "$DART_LIB/$rel_noext.pb.dart" ] || continue
+            printf '%s\n' "$rel" >> "$INSCOPE"
+            grep -qxF "$rel_noext" "$HANDIMP" && printf '%s\n' "$rel" >> "$LIVE"
+          done < <(find "$PROTO_ROOT" -type f -name '*.proto' | sort)
+          changed=1
+          while [ "$changed" -eq 1 ]; do
+            changed=0
+            sort -u "$LIVE" -o "$LIVE"; cp "$LIVE" "$TMP/snap"
+            while IFS= read -r liverel; do
+              lp="$PROTO_BASE/$liverel"; [ -f "$lp" ] || continue
+              while IFS= read -r imp; do
+                [ -n "$imp" ] || continue
+                grep -qxF "$imp" "$INSCOPE" || continue
+                grep -qxF "$imp" "$LIVE" && continue
+                printf '%s\n' "$imp" >> "$LIVE"; changed=1
+              done < <(grep -E '^[[:space:]]*import[[:space:]]' "$lp" | grep -oE 'palletra/[A-Za-z0-9_./-]+\.proto' | sort -u)
+            done < "$TMP/snap"
+          done
+          rc=0
+          while IFS= read -r rel; do
+            grep -qxF "$rel" "$LIVE" && continue
+            echo "$rel is Go-only (no live proto or hand-Dart reaches it) yet ships committed Dart at $DART_LIB/${rel%.proto}.pb.dart" >&2
+            rc=1
+          done < "$INSCOPE"
+          if [ -d "$DART_LIB/palletra" ]; then
+            pbjson="$(find "$DART_LIB/palletra" -type f -name '*.pbjson.dart')"
+            if [ -n "$pbjson" ]; then
+              echo "committed *.pbjson.dart descriptors found (nothing imports them):" >&2
+              printf '%s\n' "$pbjson" >&2; rc=1
+            fi
+          fi
+          exit $rc
+      expect:
+        exit: 0
+    cure: "A Go-only proto ships dead committed Dart. Add its 'proto/<path>' to schema/buf.gen.dart.yaml exclude_paths, delete shared/generated/dart/lib/<path>.{pb,pbenum,pbjson}.dart, then run scripts/schema.sh generate (which also prunes every *.pbjson.dart)."
+    origin: scripts/check-no-unreachable-generated-dart-code.sh

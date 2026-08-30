@@ -1,0 +1,16 @@
+# Ported from Palletra scripts/check-slot-fold-metric-batching.sh (PF-9,
+# sweep-2 #3). The slot-completion fold must BATCH metric loads, never call the
+# per-page stepcompletion.DeriveMasks( inside the fold (N(slots)xM(pages)x2
+# round trips). The `\b` boundary matches `stepcompletion.DeriveMasks(` but not
+# the batched `DeriveMasksFromRows(`. Raw grep in the .sh (no decomment).
+rules:
+  - id: slot-completion-fold-skip-computemasks
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workflow/state/state_progress.go"
+    params:
+      pattern: '\bDeriveMasks\('
+    cure: "Batch metric loads via approveall.Load{Annotation,Page}TalliesForSectionsAndPages then fold in-memory with DeriveMasksFromRows; never the per-page DeriveMasks in the fold (PF-9)."
+    origin: scripts/check-slot-fold-metric-batching.sh

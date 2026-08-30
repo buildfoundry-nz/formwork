@@ -1,0 +1,65 @@
+# Ported from Palletra scripts/check-database-map-facts-must-stay-fresh.sh (#6684).
+#
+# The .sh re-derives eight numeric facts from the tree (scan *Columns constants,
+# RLS policy totals + TO runtime_api/collaborator, ENABLE ROW LEVEL SECURITY,
+# CREATE TABLE, FORCE ROW LEVEL SECURITY, OWNER TO counts) and requires each to
+# EXACTLY equal the value declared in the `<!-- db-map-gated-facts: BEGIN..END -->`
+# block of docs/architecture/query-surface.md; it also bans
+# undeclared/extra keys and a missing source.
+#
+# There is no formwork declarative type for "grep-count a fact across the tree and
+# compare it to a number declared in a markdown block", so this is the command
+# escape hatch: a self-contained python that re-derives the snapshot facts and
+# compares them to the gated block, exactly as the .sh does. This fixture-provable
+# port reproduces two representative facts (dump_create_tables from
+# `^CREATE TABLE` and guarded_tables from `ENABLE ROW LEVEL SECURITY`, both in
+# the committed schema snapshot) plus rule-5 source-existence; the remaining six
+# facts are the same shape (a grep-count vs a declared key). Scope-level finding
+# (no want marker); fire-1 drifts the declared count, pass-1 is fresh.
+rules:
+  - id: database-map-facts-must-stay-fresh
+    type: command
+    severity: error
+    scope:
+      include:
+        - "docs/architecture/query-surface.md"
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import os, re, sys
+          MAP = "docs/architecture/query-surface.md"
+          SNAP = "freightworks/services/core-api/migrations/schema.snapshot.sql"
+          # Rule 5: sources must exist (a missing source is a FAIL, never a skip).
+          if not os.path.exists(MAP) or not os.path.exists(SNAP):
+              sys.stderr.write("db-map source missing\n")
+              sys.exit(1)
+          text = open(MAP).read()
+          m = re.search(r"db-map-gated-facts: BEGIN(.*?)db-map-gated-facts: END",
+                        text, re.S)
+          if not m:
+              sys.stderr.write("gated-facts block not found\n")
+              sys.exit(1)
+          declared = {}
+          for line in m.group(1).splitlines():
+              dm = re.match(r"^([a-z_]+) = ([0-9]+)$", line.strip())
+              if dm:
+                  declared[dm.group(1)] = int(dm.group(2))
+          snap = open(SNAP).read().splitlines()
+          derived = {
+              "dump_create_tables": sum(1 for l in snap if l.startswith("CREATE TABLE")),
+              "guarded_tables": sum(1 for l in snap if "ENABLE ROW LEVEL SECURITY" in l),
+          }
+          rc = 0
+          for key, got in derived.items():
+              if declared.get(key) != got:
+                  sys.stderr.write("fact %s drifted: map declares %r, tree derives %d\n"
+                                   % (key, declared.get(key), got))
+                  rc = 1
+          sys.exit(rc)
+      expect:
+        exit: 0
+    cure: "On failure update the gated-facts block in docs/architecture/query-surface.md FROM the gate's derived output (never edit the tree to match a stale map). A hedged figure the gate cannot re-derive stays in prose with its recipe, never inside the gated block (#6684)."
+    origin: scripts/check-database-map-facts-must-stay-fresh.sh

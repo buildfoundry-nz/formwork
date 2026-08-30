@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-gemini-generate-content-single-chokepoint.sh
+# (#6466 I6), Rule A. Every Vertex `Models.GenerateContent` call in the monorepo
+# must route through the single `generateContent` chokepoint under
+# freightworks/services/core-api/internal/gemini. Before I6, plain seams
+# (detection OCR, generate/produceVision, GenerationJSONSchema, …) called
+# `resp.Text()` on any successful SDK reply — including MAX_TOKENS / RECITATION /
+# SAFETY — so a truncated page could book as a completed empty extraction (two
+# MAX_TOKENS detection calls in one afternoon). Confining the call to a single
+# chokepoint is what lets the fail-loud cutoffErr classification (Rule B)
+# sit on one terminal hop.
+#
+# Mapped onto go/call-confined-to-func-name: a call whose selector matches
+# `symbol` may appear ONLY inside a func whose name matches `allowed_func`. The
+# analyzer sees CallExprs, so `m.GenerateContent(...)` and the aliased
+# `c.sdk.Models.GenerateContent(...)` both render a `.GenerateContent` selector
+# and are caught wherever they appear; `func … generateContent(` is a FuncDecl,
+# never a call, so the chokepoint's own definition is not a site.
+#
+# DIVERGENCE (noted, faithful to the .sh's intent):
+#  - Rule A's shell scans the WHOLE freightworks and additionally requires the
+#    enclosing func be under internal/gemini. The AST analyzer keys on the func
+#    NAME only, so a (hypothetical) second func also named `generateContent`
+#    outside gemini would be treated as allowed. In practice the name is unique
+#    to the chokepoint; the scope below is the same whole-freightworks sweep.
+#  - A bare method VALUE `f := m.GenerateContent` (no call) is not a CallExpr and
+#    is not seen; the .sh's CODE-ONLY grep would catch that too. Rule B (terminal
+#    live hop must invoke cutoffErr( and return (resp, terr)) is a multi-hop
+#    body-text contract the single-call-site analyzer cannot express — captured
+#    only as far as Rule A confines every call to the one chokepoint.
+rules:
+  - id: gemini-generate-content-single-chokepoint
+    type: go/call-confined-to-func-name
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      symbol: '\.GenerateContent\b'
+      allowed_func: '^generateContent$'
+    cure: "Route every Vertex call through gemini.(*providerClient).generateContent; a direct or aliased .GenerateContent bypasses the non-STOP fail-loud (cutoffErr) classification, so MAX_TOKENS / RECITATION / SAFETY finishes silently return truncated text as success (#6466 I6)."
+    origin: scripts/check-gemini-generate-content-single-chokepoint.sh

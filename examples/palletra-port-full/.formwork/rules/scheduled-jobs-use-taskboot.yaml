@@ -1,0 +1,18 @@
+# Ported from Palletra scripts/check-scheduled-jobs-use-taskboot.sh (#1920),
+# Rule A (positive). Every services/*/cmd/job/main.go MUST open its DB pool
+# through the shared internal/taskboot.OpenDBPool bootstrap. every-file mode is the
+# faithful shape: the .sh asserts the anchor in EACH job main individually, so
+# every in-scope main.go must carry it or that file is flagged.
+rules:
+  - id: scheduled-jobs-use-taskboot
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/*/cmd/job/main.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'taskboot\.OpenDBPool\('
+      mode: every-file
+    cure: "Open the pool with pool, err := taskboot.OpenDBPool(ctx, dsn, logger, serviceRole) — the one shared scheduled-job bootstrap (lazy-dial + auth-proxy ping backoff + role assertion, 90s budget) (#1920)."
+    origin: scripts/check-scheduled-jobs-use-taskboot.sh

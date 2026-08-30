@@ -1,0 +1,46 @@
+# Ported from Palletra scripts/check-no-drop-of-recently-retired-write-column.sh
+# (sweep-1, PR #3740).
+#
+# Expand/contract for column drops: for every up.sql migration THIS BRANCH
+# AUTHORS (added vs the merge-base AND absent from the base ref) that contains
+# `DROP COLUMN [IF EXISTS] <col>`, the BASE tree must have ZERO non-test Go
+# references to <col> (table-qualified via alias resolution). A change-set that
+# both removes the last Go reference AND ships the DROP performs a one-step
+# contract — the draining old revision names a column the migrate job already
+# dropped.
+#
+# PORT MAPPING: COMMAND ESCAPE. The gate fundamentally reads GIT HISTORY — it
+# `git merge-base`s against the base ref, takes the `--diff-filter=A` added-
+# migration set, distinguishes AUTHORED from merely-INHERITED migrations by
+# presence at the base ref (`git cat-file`), and scans the BASE TREE (`git grep`
+# / `git show`) for references. None of that is a self-contained fixture, and no
+# formwork declarative type expresses a per-commit merge-base tree scan. This is
+# the spec's sanctioned escape: params.cmd runs the real check, which verifies
+# in CI. No fixture (formwork lint enumerates it).
+rules:
+  - id: no-drop-of-recently-retired-write-column
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-no-drop-of-recently-retired-write-column.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.up.sql"
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-no-drop-of-recently-retired-write-column.sh
+      expect:
+        exit: 0
+    cure: "Split into two releases: release N removes every Go reference to the column (writer AND reader) with the column left in place; release N+1 ships the DROP COLUMN migration alone, after N fully rolls out. The draining old revision must never name a column the migrate job has already dropped (sweep-1 / PR #3740)."
+    origin: scripts/check-no-drop-of-recently-retired-write-column.sh

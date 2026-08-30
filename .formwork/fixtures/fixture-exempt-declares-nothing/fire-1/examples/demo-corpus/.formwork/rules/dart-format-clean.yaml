@@ -1,0 +1,25 @@
+# The quoted half of #336, at the shape a ported corpus rule really has:
+# examples/<corpus>/.formwork/rules/*.yaml. Nothing in a run rooted here loads
+# this file as configuration, so the loader refusal in
+# internal/config/fixtureexempt.go never sees it — this fixture exists to prove
+# the content surface is covered too.
+#
+# It is reachable because the walk prunes `.formwork` only as a DIRECT CHILD of
+# the walk root (internal/scan, builtinSkipDir, #268). Restore the
+# basename-at-any-depth prune and this file is never enumerated, which takes
+# the fixture red by name.
+#
+# The expectation is declared in the sibling fire-1.want manifest rather than
+# an inline `want:` marker: a marker sits on the line above the finding, and
+# the line above is the one that has to stay a rule field so the block below
+# reads as the real thing.
+rules:
+  - id: dart-format-clean
+    type: command
+    severity: error
+    fixture_exempt: "   "
+    scope:
+      include: ["packages/**/*.dart"]
+    params:
+      cmd: ["dart", "format", "--output=none", "--set-exit-if-changed", "."]
+    cure: "Run the formatter on the pinned SDK until the tree is clean."

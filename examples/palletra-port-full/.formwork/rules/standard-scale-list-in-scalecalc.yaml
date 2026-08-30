@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-standard-scale-list-in-scalecalc.sh
+# (#4503, presence limb). The canonical CommonScales []float64 list
+# (fingerprinted by the ascending run `250, 500, 1000`) MUST exist as executable
+# Go in internal/scalecalc/ — a rename, comment-out, or emptying would silently
+# disable the single-source guard. Comments stripped via decomment-go so a
+# commented-out declaration does not satisfy the presence check.
+rules:
+  - id: standard-scale-list-in-scalecalc
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/scalecalc/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\[\]float64\{[^}]*250,[[:space:]]*500,[[:space:]]*1000'
+      mode: exists
+    cure: "Keep the canonical CommonScales []float64 list as executable Go in internal/scalecalc/ (do not rename, comment out, or empty it) (#4503)."
+    origin: scripts/check-standard-scale-list-in-scalecalc.sh

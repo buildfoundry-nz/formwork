@@ -1,0 +1,42 @@
+# The undeclared state, written out three ways. Every one of these decodes to
+# the empty string, which is what an ABSENT key decodes to, so
+# internal/config/fixtureexempt.go cannot tell them apart and deliberately
+# accepts all of them: fixture-coverage REPORTS the gap rather than the loader
+# refusing it. A gate that called these violations would put the two halves of
+# one field into exactly the disagreement #336 is.
+rules:
+  - id: empty-double-quoted
+    type: command
+    severity: error
+    fixture_exempt: ""
+    scope:
+      include: ["**/*.go"]
+    params:
+      cmd: ["true"]
+    cure: "Declare the reason or carry fixtures."
+  - id: empty-single-quoted
+    type: command
+    severity: error
+    fixture_exempt: ''
+    scope:
+      include: ["**/*.go"]
+    params:
+      cmd: ["true"]
+    cure: "Declare the reason or carry fixtures."
+  - id: key-with-no-value
+    type: command
+    severity: error
+    fixture_exempt:
+    scope:
+      include: ["**/*.go"]
+    params:
+      cmd: ["true"]
+    cure: "Declare the reason or carry fixtures."
+  - id: no-such-field
+    type: command
+    severity: error
+    scope:
+      include: ["**/*.go"]
+    params:
+      cmd: ["true"]
+    cure: "Declare the reason or carry fixtures."

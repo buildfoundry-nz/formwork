@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-go-comment-lexer-single-definition.sh
+# (#2333). The string-aware char-walking Go comment lexer (the state machine
+# whose tell is the `two == "/*"` block-open branch) has a SINGLE canonical
+# home under scripts/lib/. Every private re-implementation is a place the NEXT
+# hardening pass must be repeated. Rule: in any scripts/**/*.go OUTSIDE
+# scripts/lib/, an occurrence of the lexer signature must carry a co-located
+# `inline-comment-lexer-ok:` justification marker (migrate it onto the lib, or
+# mark it if it genuinely diverges — a fused brace-tracker, a SQL de-commenter).
+#
+# Ported as a pair-consistency over scripts/**/*.go (lib excluded): trigger =
+# the lexer signature `two == "/*"`; requires = the `inline-comment-lexer-ok:`
+# marker in the same file. An unmarked inline lexer fires. The original awk
+# lexer body transliterated to valid Go — `two := string(line[i : i+2])` then
+# `if two == "/*"` — and the same trigger regex matches the Go code.
+#
+# DIVERGENCE (noted): the original .sh compared COUNTS per file — markers had
+# to be >= signatures — so two lexers with one marker still failed.
+# pair-consistency is presence-based (>=1 signature obliges >=1 marker), so it
+# under-checks that multi-copy case; it catches the primary defect (an inline
+# lexer with NO marker) identically.
+rules:
+  - id: go-comment-lexer-single-definition
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "scripts/**/*.go"
+      exclude:
+        - "scripts/lib/**"
+    preprocess: raw
+    params:
+      trigger: 'two == "/\*"'
+      requires: 'inline-comment-lexer-ok:'
+    cure: "Replace the inline Go comment lexer with the shared scripts/lib decomment wrapper, or add a co-located `inline-comment-lexer-ok: <reason>` marker if it genuinely diverges (#2333)."
+    origin: scripts/check-go-comment-lexer-single-definition.sh

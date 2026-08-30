@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+message UpdateProjectRequest { // want: update-proto-requires-optional-fields
+  string project_id = 1;
+  string notes = 2;
+  optional double tier_area = 3;
+}

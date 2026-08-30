@@ -1,0 +1,30 @@
+# Ported from Palletra scripts/check-no-int32-typed-id-fields.sh.
+# A 14-rule Go suite enforcing proto-as-source-of-truth. This port carries the
+# one rule that is a self-contained, path-exemption-free, line-oriented ban:
+#   Rule 5 — no int32 (or *int32) ID fields anywhere in any Go module (tests
+#   included). UUIDs are strings end-to-end, so an `XxxID int32` struct field is
+#   a hand-rolled deviation from the proto's string IDs.
+# The .sh pattern is `^[[:space:]]*[A-Z][a-zA-Z]*ID[[:space:]]+\*?int32\b`,
+# ported verbatim (RE2 `\s`/`\b`).
+#
+# DIVERGENCE (noted): the other 13 rules are NOT ported here — they need either
+# a boundary-package (internal/supplierjson/) path carve-out (Rules 3, 7-14), a
+# brace-depth struct/interface walker (Rules 1, 2), or a single-target file
+# assertion (Rule 4). A single forbidden-pattern cannot express those; only the
+# int32-ID field ban (Rule 5) is a clean whole-tree line ban with no exemption.
+rules:
+  - id: no-int32-typed-id-fields
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+      exclude:
+        - "**/vendor/**"
+        - "**/*.pb.go"
+        - "**/shared/generated/**"
+    preprocess: raw
+    params:
+      pattern: '^\s*[A-Z][A-Za-z]*ID\s+\*?int32\b'
+    cure: "IDs are UUIDs — strings end-to-end per the proto schema. Replace the int32 ID field with string (or *string)."
+    origin: scripts/check-no-int32-typed-id-fields.sh

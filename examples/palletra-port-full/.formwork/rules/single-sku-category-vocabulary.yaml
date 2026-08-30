@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-single-sku-category-vocabulary.sh
+# (#1375, PH-1). platform.sku_category is a closed 22-value enum whose sole
+# Go home is internal/skucategory. This gate reads the enum from its own DDL
+# in schema.snapshot.sql, then fails any Go file OUTSIDE that package that
+# enumerates the vocabulary — Arm A: >=5 distinct category string-literals
+# clustered within a 3-line gap (one collection literal / prompt paragraph);
+# Arm B: >=11 distinct values anywhere in the file (gap-blind, defeats padding).
+#
+# ESCAPE (type: command). The forbidden vocabulary is NOT hardcoded — it is read
+# at runtime from the enum DDL (a hardcoded copy would be the very sixth mirror
+# the gate exists to prevent), then matched over comment-stripped Go with a
+# gap-tracking cluster scanner (Arm A) AND a whole-file distinct-count (Arm B).
+# A dynamic pattern set derived from another file, plus stateful line-gap
+# clustering, is beyond any declarative type. The real script is the faithful
+# check; it verifies in CI. No fixture; SKIPs locally (enumerated by lint).
+rules:
+  - id: single-sku-category-vocabulary
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-single-sku-category-vocabulary.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-single-sku-category-vocabulary.sh
+      expect:
+        exit: 0
+    cure: "Delete the second enumeration. The vocabulary has one Go home: internal/skucategory — call skucategory.IsValid(id) / All() / Read(ctx, tx) / Label(id) instead of re-typing the value list (#1375)."
+    origin: scripts/check-single-sku-category-vocabulary.sh

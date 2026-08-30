@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-pagerefresh-project-constant-reads.sh
+# (#8481 gate).
+#
+# In every non-test .go file under internal/pagerefresh/, any function body
+# that issues tx.Query / tx.QueryRow with SQL binding `project_id = $1` and NO
+# page-identifier binding (page_id = $2 / page_id = ANY($2 / id = $2) MUST be a
+# `func (s *JobScope)` method — a free-function project-wide read turns an
+# N-page recompute into N identical project scans while the write tx holds locks.
+#
+# PORT MAPPING: COMMAND ESCAPE. The check segments each file into functions,
+# reads the receiver TYPE of the enclosing declaration (*JobScope or not),
+# AND inspects the CONTENT of the SQL string literal an inner tx.Query call is
+# handed (project_id vs page_id binding across joined multi-line SQL). formwork's
+# go/* analyzers reason over call selectors and func names only — they do not
+# inspect string-literal arguments or receiver types — and no other declarative
+# type expresses the per-function receiver-gated SQL-content predicate. This is
+# the sanctioned escape: params.cmd runs the real check, which verifies in CI.
+# No fixture (formwork lint enumerates it).
+rules:
+  - id: pagerefresh-project-constant-reads
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-pagerefresh-project-constant-reads.sh —
+      the validating target's own gate script, which this corpus does not
+      carry and cannot: it is written in that tree's vocabulary, and this
+      repository tracks no shell scripts at all. In a fixture tree bash would
+      exit 127 in the fire tree and the pass tree alike, so the fire proof
+      would be satisfied by the detector NOT EXISTING and the pass proof would
+      report that same missing-detector exit as a finding. What the port
+      asserts here is the SCOPE and the CURE, both readable against the origin
+      script; the detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/pagerefresh/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-pagerefresh-project-constant-reads.sh
+      expect:
+        exit: 0
+    cure: "Move the project-wide read onto a lazy accessor of pagerefresh.JobScope so multi-page recompute loops share it. A free-function project-constant tx.Query/QueryRow (project_id = $1, no page identifier) must be unrepresentable, not a thing reviewers have to notice (#8481)."
+    origin: scripts/check-pagerefresh-project-constant-reads.sh

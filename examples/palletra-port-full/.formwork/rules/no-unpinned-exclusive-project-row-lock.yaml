@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-no-unpinned-exclusive-project-row-lock.sh (#6803).
+#
+# No SQL statement may hold a palletra.projects row exclusively: a bare
+# `FOR UPDATE` / `FOR NO KEY UPDATE` on a statement whose FROM/JOIN set names
+# palletra.projects, and `FOR UPDATE OF <alias>` where the alias BINDS to
+# palletra.projects, are banned (FOR SHARE / FOR KEY SHARE are allowed — they
+# are compatible with the FK writers' FOR KEY SHARE, which dissolves the #1303
+# {project,page} deadlock cycle).
+#
+# PORT MAPPING: COMMAND ESCAPE. The gate cannot be a naive grep — its own header
+# proves it: `FOR UPDATE OF a` may NAME palletra.projects yet lock only another
+# alias's rows, so the OF list must be RESOLVED against the statement's
+# `palletra.<table> <alias>` bindings, and nine call sites splice the table name
+# in via imported Go constants (ProjectColumnSet/ProjectTableSource) that no regex
+# resolves. The .sh therefore COMPILES AND RUNS a Go statement-folder
+# (scripts/lib/project-lock-statements.go via `go build`) to fold multi-literal
+# SQL and resolve aliases with Go's own parser. That needs the Go toolchain (an
+# EXTERNAL TOOL), so this is the spec's sanctioned escape: params.cmd runs the
+# real check, which verifies in CI. No fixture (formwork lint enumerates it).
+rules:
+  - id: no-unpinned-exclusive-project-row-lock
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-no-unpinned-exclusive-project-row-lock.sh
+      — the validating target's own gate script, which this corpus does not
+      carry and cannot: it is written in that tree's vocabulary, and this
+      repository tracks no shell scripts at all. In a fixture tree bash would
+      exit 127 in the fire tree and the pass tree alike, so the fire proof
+      would be satisfied by the detector NOT EXISTING and the pass proof would
+      report that same missing-detector exit as a finding. What the port
+      asserts here is the SCOPE and the CURE, both readable against the origin
+      script; the detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-no-unpinned-exclusive-project-row-lock.sh
+      expect:
+        exit: 0
+    cure: "If you need the row's VALUES, read them without an exclusive lock — projectguard.Read(..., projectguard.LockConcurrent) is compatible with the FK writers. If you need MUTUAL EXCLUSION, the project row is a PROXY for it and cannot fix a lock-order inversion. If you genuinely MUTATE the row, add the file to PINS in the script so the choice is reviewed (#1303 / #6803)."
+    origin: scripts/check-no-unpinned-exclusive-project-row-lock.sh

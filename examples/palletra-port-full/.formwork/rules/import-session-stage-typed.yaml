@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-import-session-stage-typed.sh (Sweep-14 §C1).
+# No non-test .go file under routes/ may compare the `stage` variable against a
+# bare string literal naming an intake_session_stage enum value. Handlers must
+# route through string(stockroom.StageXxx) constants (stockroom is the source of truth).
+rules:
+  - id: import-session-stage-typed
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: 'stage\s*==\s*"(complete|failed|cancelled|committing|reviewing|validating|parsing|uploading|mapping_fields)"'
+    cure: "Compare against string(stockroom.StageDone) etc. (constants in internal/stockroom/stage.go), never a bare stage string literal."
+    origin: scripts/check-import-session-stage-typed.sh

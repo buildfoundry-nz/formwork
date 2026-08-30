@@ -1,0 +1,33 @@
+# Ported from Palletra scripts/check-idempotency-execute-excluded-from-middleware.sh
+# (SV-ARC-4, SUPERSEDED-via-architecture). idempotency.Execute MUST stay on the
+# per-handler call site, inside the handler's own db.WithOrgIso closure. The
+# post-WI-101 contract is a TWO-TX pattern (a pool-owned ReadCommitted
+# placeholder commits BEFORE the inner business tx opens); a chi middleware
+# wrapping the handler forces the two tx into one and reintroduces the WI-101
+# same-key SERIALIZABLE deadlock.
+#
+# The .sh fires on three patterns; its Pattern 1 — idempotency.Execute( called
+# from any directory named `middleware` — is the direct, faithful core and maps
+# onto a forbidden-pattern scoped to the middleware trees.
+#
+# DIVERGENCE (noted): the .sh's Pattern 2 (a file that both declares a
+# func(http.Handler) http.Handler middleware shape AND calls Execute — an inline
+# middleware registered outside middleware/) and Pattern 3 (importing the
+# idempotency package from outside the routes/** + internal/idempotency* + cmd/**
+# allowed scopes) are co-occurrence / scoped-import checks not expressible as a
+# single line-oriented forbidden-pattern; they are omitted. Pattern 1 (Execute
+# in a middleware/ dir — the shape someone reaches for when promoting the call
+# site) is ported faithfully.
+rules:
+  - id: idempotency-execute-excluded-from-middleware
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/middleware/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: 'idempotency\.Execute\('
+    cure: "Keep idempotency.Execute on the per-handler call site, inside the handler's own db.WithOrgIso closure — never in chi middleware. The two-tx shape (pool-owned ReadCommitted placeholder + inner business tx) is the post-WI-101 contract (SV-ARC-4)."
+    origin: scripts/check-idempotency-execute-excluded-from-middleware.sh

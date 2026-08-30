@@ -1,0 +1,48 @@
+# Ported from Palletra scripts/check-revisionbridge-has-integration-test.sh
+# (sweep-13 finding C2).
+#
+# internal/revisionbridge.Run is the transactional carry write path (an INSERT
+# into palletra.page_revision_mapping plus a two-table pages↔pages
+# UPDATE that copies a prior revision's calibration). A wrong join or column typo
+# would SILENTLY carry the wrong scale forward — only a real-DB integration test
+# catches that class. RULE: if the carry write path is present (some non-test .go
+# under internal/revisionbridge references `page_revision_mapping`), THEN
+# some *integration_test.go in that dir MUST carry a `//go:build integration`
+# line AND drive Run (`revisionbridge.Run(` or `Run(ctx`) AND assert
+# `rolled_over`. A package with no carry write path passes (not a rubber stamp).
+#
+# PORT MAPPING: COMMAND ESCAPE. The property is a CROSS-FILE CONDITIONAL with a
+# per-file three-token co-occurrence in the companion: a write-path token in one
+# non-test file OBLIGES three distinct tokens to co-occur inside a SINGLE
+# *integration_test.go. pair-consistency is same-file only (it cannot key the
+# obligation on a token in a different file); set-relation matches tokens per
+# line and cannot require three tokens co-occur in one file; required-pattern is
+# single-line and unconditional. None of the declarative types expresses
+# "trigger in file X ⟹ three tokens together in some file Y", so this is the
+# spec's sanctioned escape: params.cmd runs the real check, which verifies in CI.
+# No fixture (formwork lint enumerates it).
+rules:
+  - id: revisionbridge-has-integration-test
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-revisionbridge-has-integration-test.sh —
+      the validating target's own gate script, which this corpus does not
+      carry and cannot: it is written in that tree's vocabulary, and this
+      repository tracks no shell scripts at all. In a fixture tree bash would
+      exit 127 in the fire tree and the pass tree alike, so the fire proof
+      would be satisfied by the detector NOT EXISTING and the pass proof would
+      report that same missing-detector exit as a finding. What the port
+      asserts here is the SCOPE and the CURE, both readable against the origin
+      script; the detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/revisionbridge/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-revisionbridge-has-integration-test.sh
+      expect:
+        exit: 0
+    cure: "If internal/revisionbridge ships the carry write path (INSERT into page_revision_mapping), add a *_integration_test.go with `//go:build integration` that calls revisionbridge.Run against a real DB (testharness.Pool) and asserts the carried page's scale_basis = 'rolled_over' plus the copied scale. A pure unit test over Summarize/classify does not satisfy this gate (sweep-13 C2)."
+    origin: scripts/check-revisionbridge-has-integration-test.sh

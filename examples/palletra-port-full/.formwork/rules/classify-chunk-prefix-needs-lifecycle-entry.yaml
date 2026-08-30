@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-classify-chunk-prefix-needs-lifecycle-entry.sh
+# (sweep-1 #8, in-repo half). The segmentObjectPrefix Go constant (the only place
+# classify-chunks object keys are minted, under parsecompose/chunking/) is one
+# side of a cross-repo GCS-lifecycle contract; docs/gcs-lifecycle.md is
+# the committed manifest that pairs it with the palletra-infra Age-1-day
+# Delete rule. Rename the Go prefix and the infra rule reaps a prefix nobody
+# writes to while real chunk objects accumulate.
+#
+# Set-relation subset (A ⊆ B): the Go prefix value MUST appear as a QUALIFIED
+# manifest entry — a backticked prefix on a line that also names both `Delete`
+# and `prefix_expiry_rules`. Side B's pattern captures the backticked token only
+# when the same line carries Delete and prefix_expiry_rules (the manifest writes
+# them in that order: `- `<prefix>` — Age 1 day Delete — ... prefix_expiry_rules`).
+# A missing entry, or an entry that has dropped the Delete / prefix_expiry_rules
+# pairing, leaves the Go prefix out of set B and fires.
+rules:
+  - id: classify-chunk-prefix-needs-lifecycle-entry
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/parsecompose/chunking/**/*.go"
+        - "docs/gcs-lifecycle.md"
+      exclude:
+        - "**/*_test.go"
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/internal/parsecompose/chunking/**/*.go"
+        pattern: 'segmentObjectPrefix\s*=\s*"([^"]+)"'
+        group: 1
+      b:
+        files:
+          - "docs/gcs-lifecycle.md"
+        pattern: '`([^`]+)`.*Delete.*prefix_expiry_rules'
+        group: 1
+      relation: subset
+    cure: "Keep segmentObjectPrefix, its docs/gcs-lifecycle.md entry (backticked prefix + `Delete` + `prefix_expiry_rules`), and the palletra-infra prefix_expiry_rules rule in lockstep. The manifest diff is the review signal that the infra rule must move too."
+    origin: scripts/check-classify-chunk-prefix-needs-lifecycle-entry.sh

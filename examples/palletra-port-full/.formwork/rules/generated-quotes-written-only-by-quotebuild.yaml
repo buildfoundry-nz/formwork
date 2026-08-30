@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-generated-quotes-written-only-by-quotebuild.sh
+# (handoff §B / NQ-15). palletra.built_quotes has exactly ONE producer:
+# services/core-api/internal/quotebuild, which owns the recomputed-totals +
+# quote-number + audit + outbox guarantees in one tx. No other non-test Go file
+# may issue the snapshot-producing `INSERT INTO palletra.built_quotes`
+# (lifecycle UPDATE/DELETE are not gated). The .sh uses rg pcre2; the pattern is
+# RE2-clean. strings-only-go confines the match to SQL string literals (stricter
+# than the .sh's raw grep — a comment mentioning the table cannot fire).
+#
+# Port fidelity (noted): the .sh uses rg -U (multiline) for an INSERT whose
+# column list wraps; this binary matches line-by-line, so the `INSERT INTO
+# palletra.built_quotes` head must sit on one line (it normally does).
+rules:
+  - id: generated-quotes-written-only-by-quotebuild
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/quotebuild/**"
+    preprocess: strings-only-go
+    params:
+      pattern: 'INSERT[[:space:]]+INTO[[:space:]]+palletra\.built_quotes\b'
+    cure: "Route all built_quotes production writes through internal/quotebuild (quotebuild.Generate); a hand-rolled INSERT drops the recomputed-totals + quote-number + audit + outbox guarantees (handoff §B / NQ-15)."
+    origin: scripts/check-generated-quotes-written-only-by-quotebuild.sh

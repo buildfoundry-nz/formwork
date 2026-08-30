@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-single-writer-effective-sku-match.sh
+# (#1125), RULE A. The sku -> priced-item EFFECTIVE MATCH has ONE production
+# caller: skusidebar.ResolvedMatch / ComputeEffectiveMatch. The two
+# full-sku resolvers ratecardmatch.Match( and ratecardmatch.MatchWithVector(
+# may be called from production Go ONLY inside the allowlist; a caller anywhere
+# else is a forked effective match (the #1125 READ/WRITE divergence).
+# ratecardmatch.DualMatch is deliberately NOT locked (a per-PAIR primitive) — the
+# `.Match` anchor after the package selector leaves `.DualMatch` untouched.
+# Comments are stripped with decomment-go.awk, so preprocess: decomment-go.
+#
+# Allowed callers (except.paths): ratecardmatch/** (contract home),
+# skusidebar/match.go (the ONE resolver), cmd/extraction-eval/** (offline
+# calibrator), *_test.go (tests exercise freely).
+#
+# DIVERGENCE (noted): RULE B — ratecardmatch.TunedEmbedConfig() must have
+# EXACTLY ONE production caller and it must be the helper file — is an
+# exactly-one-caller COUNT/set-relation assertion, expressible as neither
+# forbidden-pattern nor required-pattern(exists); it is not ported here.
+rules:
+  - id: single-writer-effective-sku-match
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    except:
+      paths:
+        - "**/services/core-api/internal/ratecardmatch/**"
+        - "freightworks/services/core-api/internal/skusidebar/match.go"
+        - "**/services/core-api/cmd/extraction-eval/**"
+    preprocess: decomment-go
+    params:
+      pattern: 'ratecardmatch\.Match(WithVector)?\('
+    cure: "Route the sku->priced-item match through skusidebar.ResolvedMatch / ComputeEffectiveMatch so READ and WRITE bind the same product (#1125); never call ratecardmatch.Match / MatchWithVector directly outside the one resolver."
+    origin: scripts/check-single-writer-effective-sku-match.sh

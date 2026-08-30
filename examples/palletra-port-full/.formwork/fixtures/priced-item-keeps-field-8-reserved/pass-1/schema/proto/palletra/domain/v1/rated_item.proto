@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+message RatedItem {
+  reserved 8;
+  reserved "active_rate";
+  int32 id = 1;
+}

@@ -1,0 +1,41 @@
+# Ported from Palletra
+# scripts/check-quote-generation-enforces-priceready-gate.sh (sweep-4 #1,
+# Phase-1 advisory). The advisory contract on func (h *Handler) Generate in
+# routes/quote/quote.go: the handler MUST compute the pricing-readiness verdict
+# (priceready.Check) and MUST attach it to the response
+# (shared.QuoteReadinessProto) with Check BEFORE Proto — the verdict is
+# computed before it is attached, so a generated quote never loses its
+# draft/warnings signal. The .sh binds the anchors to the Generate func body
+# (anchors in a dead helper do not count — sweep-5 #9).
+#
+# Ported as go/guard-precedes-call, which is STRICTLY the Check→Proto contract:
+# every shared.QuoteReadinessProto sink call in Generate must be preceded, in
+# source order, by a priceready.Check guard. This captures BOTH halves the
+# .sh checks with one analyzer:
+#   - ordering — a Proto call before its Check fires (out of order); and
+#   - presence — a Proto call with NO preceding Check anywhere in the func fires
+#     (the "signal dropped" regression: attaches without computing).
+# funcs is anchored to ^Generate$ so the method body is the only scope, mirroring
+# the .sh's func-body extraction.
+#
+# DIVERGENCE (noted): the .sh ALSO (a) requires h.generator.Generate to be
+# invoked and (b) forbids reintroducing the HARD block (errNotPreparedForPricing /
+# `if !readiness.Ready`). (a) is a presence check on an unordered call and (b) is
+# a func-scoped forbidden token — neither is a guard→sink ordering, so they are
+# omitted from this analyzer port. The central compute-before-attach invariant is
+# ported faithfully.
+rules:
+  - id: quote-generate-readiness-computed-before-attach
+    type: go/guard-precedes-call
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/quote/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      funcs: '^Generate$'
+      guard: 'priceready\.Check'
+      sink: 'shared\.QuoteReadinessProto'
+    cure: "In func (h *Handler) Generate, compute the verdict with priceready.Check(...) BEFORE attaching it via shared.QuoteReadinessProto(...) — the advisory contract materializes the draft/warnings signal, and attaching without first computing (or after computing) drops it (Phase 1 / sweep-4 #1)."
+    origin: scripts/check-quote-generation-enforces-priceready-gate.sh

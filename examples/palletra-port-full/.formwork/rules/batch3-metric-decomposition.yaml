@@ -1,0 +1,51 @@
+# Ported from Palletra scripts/check-batch3-metric-decomposition.sh
+# (W3-D11/D12/D15). The .sh has THREE checks; the substantive CROSS-FILE one
+# (Check 1) is ported here as a set-relation SUBSET.
+#
+# Check 1: migration 0023 (metric decomposition) must DROP COLUMN every live
+# column declared with the palletra.metric_kind / palletra.annotation_type
+# ENUM in earlier migrations. Otherwise PostgreSQL refuses the trailing
+# DROP TYPE and the migration chain is not deployable.
+#
+#   A = every column NAME declared with an enum type — a line whose FIRST token
+#       is the column and whose SECOND token is palletra.metric_kind /
+#       .annotation_type (the .sh's awk $1/$2 field pin), harvested across the
+#       migrations tree.
+#   B = every column NAME dropped by 0023's `DROP COLUMN [IF EXISTS] <col>`.
+# A ⊆ B: an enum-typed column that 0023 fails to drop is the violation.
+#
+# DIVERGENCE (noted for fidelity):
+#  (1) The .sh excludes 0002 (the CREATE TYPE definer) and 0023 itself from the
+#      A harvest by filename. A per-side glob cannot express that, so a.files is
+#      the whole `*.up.sql` tree — but the A pattern is a COLUMN-DECLARATION
+#      shape (`<col> palletra.<enum>` as the first two line tokens), which
+#      0002's `CREATE TYPE … AS ENUM` and 0023's `DROP COLUMN`/`DROP TYPE`
+#      lines never match, so both files contribute nothing to A by construction.
+#  (2) The .sh's second half of Check 1 (`DROP TYPE IF EXISTS` for both enums)
+#      and Checks 2/3 (marker_tally.proto carries the type tuple;
+#      page_gauge.proto uses the registry identity and drops the retired tuple)
+#      are presence/absence pin checks on other files, not the cross-file
+#      cascade; they are out of scope for this one set-relation rule.
+#  (3) The .sh's exit-2 anti-vacuity guards (missing 0023, empty column set) are
+#      not expressible; formwork lint owns empty-scope rot.
+rules:
+  - id: batch3-metric-decomposition
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/palletra/**/*.up.sql"
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/migrations/palletra/**/*.up.sql"
+        pattern: '^\s*([A-Za-z_][A-Za-z0-9_]*)\s+palletra\.(?:metric_kind|annotation_type)\b'
+        group: 1
+      b:
+        files:
+          - "freightworks/services/core-api/migrations/palletra/0023_palletra_metric_decomposition.up.sql"
+        pattern: 'DROP COLUMN (?:IF EXISTS )?([A-Za-z_][A-Za-z0-9_]*)'
+        group: 1
+      relation: subset
+    cure: "Migration 0023 must DROP COLUMN every column declared with the palletra.metric_kind / palletra.annotation_type enum in earlier migrations, before its DROP TYPE statements — otherwise PostgreSQL refuses the DROP TYPE and the chain will not deploy (W3-D11)."
+    origin: scripts/check-batch3-metric-decomposition.sh

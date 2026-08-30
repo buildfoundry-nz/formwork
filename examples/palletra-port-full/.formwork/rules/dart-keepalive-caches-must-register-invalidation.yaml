@@ -1,0 +1,49 @@
+# Ported from Palletra scripts/check-dart-keepalive-caches-must-register-invalidation.sh
+# (sweep-2 #4, re-keyed by sweep-3 #5/#6). A @Riverpod(keepAlive: true) notifier
+# whose build returns a COLLECTION literal (Map/List/Set) AND that reads a
+# *Repository/*Source/*Loader/dio/apiClient provider is a LAZY server cache; it
+# never auto-disposes, so a cache it holds can never be flushed/evicted ->
+# cross-user leak + OOM. Such a lazy keep-alive cache MUST register in the
+# session-cache registry (pinInProjectCache / pinInSessionCache).
+#
+# FP FIX (was: pair-consistency keyed on the keepAlive annotation ALONE — fired
+# on all 199 keepAlive-without-retain providers/data files, incl. plain
+# repository providers like profile_repository.dart with no collection build,
+# and the local-UI-state notifier PlotSectionVisibility which has a Set build
+# but no repo read). The .sh's trigger is a 3-way CO-OCCURRENCE — keepAlive AND
+# a `(Map|List|Set)<...> build(` AND an on-demand `ref.watch/read(...Provider)` —
+# then requires the retain companion. That conjunction is now expressed exactly
+# via a multiline regexp2: match the keepAlive annotation only when a collection
+# build and a repo read both follow (positive lookaheads) and no retain follows
+# (negative lookahead). keepAlive always precedes the class body, so the
+# forward look matches whole-file semantics for real Dart. Silent on develop,
+# still fires on the PagePaintStore lazy-cache shape.
+rules:
+  - id: dart-keepalive-caches-must-register-invalidation
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/providers/**/*.dart"
+        - "frontend/lib/**/data/**/*.dart"
+        - "packages/*/lib/**/providers/**/*.dart"
+        - "packages/*/lib/**/data/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+    params:
+      # Origin: grep keepAlive(true) && grep Map/List/Set build() && grep repo-provider
+      # read, unless grep retain*. The @Riverpod(keepAlive: true) is the line-anchored
+      # trigger; the build-signature and provider-read are require_present guards; the
+      # retain* escape is require_absent. Replaces a regexp2 pattern with two unbounded
+      # (?=[\s\S]*?…) lookaheads plus a (?![\s\S]*…) — all now single linear RE2 scans.
+      # Anchors on the @Riverpod line (fixture want-marker).
+      prefilter: 'keepAlive'
+      pattern: '@Riverpod\(keepAlive: ?true\)'
+      require_present:
+        - '(?:Map|List|Set)<[^>]*>\s+build\('
+        - 'ref\.(?:watch|read)\((?:[A-Za-z]+(?:Repository|Source|Loader)Provider|httpClientProvider|wireClientProvider)'
+      require_absent:
+        - '(?:pinInProjectCache|pinInSessionCache)'
+    cure: "Register the keep-alive server cache in the session-cache registry — pinInProjectCache(projectId) / pinInSessionCache() in the build — so it can be flushed. A bare keepAlive cache can never be evicted (cross-user leak + OOM). See packages/plt_page_raster/lib/providers/page_raster_providers.dart."
+    origin: scripts/check-dart-keepalive-caches-must-register-invalidation.sh

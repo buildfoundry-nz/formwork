@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-no-unrouted-annotation-update.sh. Every
+# mutation of palletra.annotations must go through the markupwrite seam
+# (which writes a palletra.annotation_timeline row in the same pgx.Tx), so a raw
+# `UPDATE palletra.annotations` is banned everywhere under freightworks except
+# the seam package, the migrations dir and _test.go files.
+rules:
+  - id: no-unrouted-annotation-update
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/services/core-api/internal/markupwrite/**"
+        - "freightworks/services/core-api/migrations/**"
+        - "**/*_test.go"
+    params:
+      pattern: 'UPDATE\s+palletra\.annotations\b'
+    cure: "Route the mutation through markupwrite.LogAndUpdate<Field>(ctx, tx, ...) so the same pgx.Tx also writes a palletra.annotation_timeline row."
+    origin: scripts/check-no-unrouted-annotation-update.sh

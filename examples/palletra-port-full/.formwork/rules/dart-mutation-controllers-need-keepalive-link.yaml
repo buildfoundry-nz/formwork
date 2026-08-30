@@ -1,0 +1,99 @@
+# Ported from Palletra scripts/check-dart-mutation-controllers-need-keepalive-link.sh (#8259).
+#
+# A MUTATION CONTROLLER is an autoDispose @riverpod Notifier whose build(...)
+# returns bool (state IS the in-flight flag). It is fired with a bare
+# ref.read(...notifier), which takes no subscription, so Riverpod disposes the
+# element before the server answers and every line after the `await` runs on an
+# unmounted notifier. THE RULE: in a `bool build(...)` controller, every method
+# other than build that contains an `await` must hold a keep-alive link across it
+# — BOTH `ref.keepAlive()` AND a matching `.close()`. `@Riverpod(keepAlive: true)`
+# is exempt. This needs class-scoped detection (find the `bool build` marker),
+# balanced-brace member walking, and a two-token co-occurrence per awaiting
+# member — no declarative formwork type expresses that, so it is the `command`
+# ESCAPE HATCH as a SELF-CONTAINED python reproduction (the same logic as the
+# .sh) over the fixture tree. Scope-level finding; fire-1 has an unpinned
+# awaiting method, pass-1 pins it.
+rules:
+  - id: dart-mutation-controllers-need-keepalive-link
+    type: command
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import glob, os, re, sys
+          root = "."
+          CLASS = re.compile(r'(@Riverpod\([^)]*\)|@riverpod)\s*\nclass\s+(\w+)\s+extends\s+_\$\2\b')
+
+          def block_at(src, brace):
+              depth = 0
+              for i in range(brace, len(src)):
+                  if src[i] == '{':
+                      depth += 1
+                  elif src[i] == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return src[brace:i + 1], i + 1
+              raise ValueError('unbalanced braces')
+
+          def members(body):
+              depth = 0
+              i = 1
+              sig_start = 1
+              while i < len(body) - 1:
+                  ch = body[i]
+                  if ch == '{':
+                      if depth == 0:
+                          sub, end = block_at(body, i)
+                          yield body[sig_start:i], sub
+                          i = end
+                          sig_start = i
+                          continue
+                      depth += 1
+                  elif ch == '}':
+                      depth -= 1
+                  elif ch == ';' and depth == 0:
+                      decl = body[sig_start:i]
+                      arrow = decl.find('=>')
+                      if arrow != -1:
+                          yield decl[:arrow], decl[arrow:]
+                      sig_start = i + 1
+                  i += 1
+
+          violations = []
+          for pattern in ['packages/*/lib/**/*.dart', 'frontend/lib/**/*.dart']:
+              for path in sorted(glob.glob(os.path.join(root, pattern), recursive=True)):
+                  if path.endswith(('.g.dart', '.freezed.dart')) or '.pb' in os.path.basename(path):
+                      continue
+                  with open(path, errors='replace') as fh:
+                      src = fh.read()
+                  for m in CLASS.finditer(src):
+                      annotation, cls = m.group(1), m.group(2)
+                      if 'keepAlive: true' in annotation:
+                          continue
+                      body, _ = block_at(src, src.index('{', m.end() - 1))
+                      if not re.search(r'(?:^|\s)bool\s+build\s*\(', body):
+                          continue
+                      for sig, member in members(body):
+                          name = re.search(r'(\w+)\s*\([^)]*\)\s*(?:async\s*)?$', sig.strip())
+                          name = name.group(1) if name else '<member>'
+                          if name == 'build' or 'await ' not in member:
+                              continue
+                          if 'ref.keepAlive()' in member and '.close()' in member:
+                              continue
+                          rel = os.path.relpath(path, root)
+                          missing = ('ref.keepAlive()' if 'ref.keepAlive()' not in member else 'a matching .close()')
+                          violations.append((rel, cls, name, missing))
+
+          for rel, cls, name, missing in violations:
+              sys.stderr.write('%s: %s.%s() is missing %s\n' % (rel, cls, name, missing))
+          sys.exit(1 if violations else 0)
+      expect:
+        exit: 0
+    cure: "Pin the awaiting method for the round-trip: final link = ref.keepAlive(); try { ... await repo.mutate(); ... } finally { link.close(); }. The link is bounded so the notifier still auto-disposes once the request ends (#8259)."
+    origin: scripts/check-dart-mutation-controllers-need-keepalive-link.sh

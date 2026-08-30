@@ -1,0 +1,11 @@
+name: schema
+on: [push]
+jobs:
+  buf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Do NOT reintroduce uses: bufbuild/buf-setup-action here (it flakes on
+      # GitHub API degradation). This comment mention must stay legal.
+      - uses: ./.github/actions/install-buf
+      - run: buf lint

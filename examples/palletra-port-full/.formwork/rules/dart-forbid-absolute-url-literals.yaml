@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-dart-forbid-absolute-url-literals.sh. Every media byte
+# the Flutter app consumes must ride core-api's same-origin ${apiOrigin}; the FE
+# has no other external network surface. This bans `'http://...'` / `'https://...'`
+# STRING LITERALS in any .dart across the library tree (frontend/lib +
+# packages/*/lib). Generated proto code may emit absolute URLs as DATA (signed
+# URLs off the wire) but is out of scope — the check is on source literals, never
+# runtime values.
+#
+# The one allowlisted file is packages/plt_core/lib/config/app_config.dart, the
+# apiOrigin dev default (a configuration value, not a call target) — excluded
+# from scope. The .sh matches only quote-prefixed URLs (`['\"]https?://`) and
+# additionally skips full-line // and /// comments; the quote-prefix requirement
+# already means a bare `// see https://...` reference (no quote) never fires, so
+# the line-based forbidden-pattern is a faithful port without decomment-dart.
+rules:
+  - id: dart-forbid-absolute-url-literals
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "packages/plt_core/lib/config/app_config.dart"
+        - "**/generated/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.gr.dart"
+        - "**/*.config.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbserver.dart"
+        - "**/*.pbgrpc.dart"
+    params:
+      pattern: '[''"]https?://'
+    cure: "Use a relative path (e.g. '/api/page-renders/{p}/{n}/bytes') and let Dio prepend the configured apiOrigin. If the bytes are not reachable through core-api yet, add a same-origin streaming proxy in freightworks/services/core-api/routes/ — never call GCS / an external host directly."
+    origin: scripts/check-dart-forbid-absolute-url-literals.sh

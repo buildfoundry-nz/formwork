@@ -1,0 +1,48 @@
+# Ported from Palletra scripts/check-routes-db-closure-no-raw-500.sh (#5798).
+#
+# shared/pgerr.go's WriteCommandError / WriteQueryError classify the Postgres
+# contention SQLSTATEs (55P03 lock-wait, 40001/40P01 serialization, 57014
+# statement_timeout) to a retryable 409 resource_locked instead of a user-visible
+# 500. This gate stops a handler from regressing: once a top-level handler func
+# opens a db.WithOrg* / db.AsSuperuser closure, it must NOT concede that
+# closure's error as a raw
+#   shared.WriteErrorPayload(w, http.StatusInternalServerError, "internal_error")
+# — it has to route through the classifiers. A genuinely non-DB failure is fine
+# but must carry a DISTINCT error code, never the generic internal_error.
+#
+# The .sh is a pure-awk column-0-func walker: reset a found_db flag at each `func `,
+# set it on a db.WithOrg/db.AsSuperuser line, and flag a line carrying
+# WriteErrorPayload( AND StatusInternalServerError AND "internal_error" while found_db
+# == 1. Ported as a multiline regexp2 forbidden-pattern: from a db.With(Org|
+# Admin) token, without crossing the next top-level `func ` boundary (tempered
+# `(?!\nfunc )`), to a single line carrying WriteErrorPayload( … StatusInternal-
+# ServerError … "internal_error". The match starts on the db.With* line — the
+# line reported. Scope mirrors the .sh: routes/**/*.go, excluding *_test.go and
+# the two out-of-plane trees (routes/shared/ holds the classifiers themselves;
+# routes/mail_intake/ 200-ACKs its DB errors by design). preprocess: raw
+# mirrors the .sh's raw awk.
+#
+# DIVERGENCE (noted): the .sh's three same-line tokens are order-independent;
+# the ported pattern fixes the canonical WriteErrorPayload→Status→"internal_error"
+# order (how every converted site is written). The load-bearing defect — a raw
+# internal_error 500 conceded after a db.With* open in the same handler — is
+# caught identically.
+rules:
+  - id: routes-db-closure-no-raw-500
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/routes/shared/**"
+        - "freightworks/services/core-api/routes/mail_intake/**"
+    preprocess: raw
+    params:
+      pattern: '\bdb\.With(?:Org|Admin)(?:(?!\nfunc )[\s\S])*?WriteErrorPayload\([^\n]*StatusInternalServerError[^\n]*"internal_error"'
+      prefilter: 'StatusInternalServerError'
+      syntax: regexp2
+      multiline: true
+    cure: "Route the closure's error through shared.WriteCommandError (mutations) or shared.WriteQueryError (reads) so 55P03/40001/40P01/57014 contention maps to 409 resource_locked instead of a user-visible 500. If the error is genuinely non-DB (marshal, GCS, enqueue, compute), give it a DISTINCT error code — never the generic internal_error (#5798)."
+    origin: scripts/check-routes-db-closure-no-raw-500.sh

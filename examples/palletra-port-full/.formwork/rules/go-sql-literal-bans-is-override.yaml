@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-go-sql-retired-column-tokens.sh + retired-column-tokens.tsv
+# row `is_manual_flag` (mode literal-token). The is_manual_flag column is retired
+# (SV-3 / #6722); production never reads or writes it. The .sh matches the token
+# only inside SQL string literals of non-test freightworks Go, via the canonical
+# strings-only-go lexer — ported faithfully with preprocess: strings-only-go, so
+# the token in code/comments is invisible and only a real SQL-literal use fires.
+rules:
+  - id: go-sql-literal-bans-is-override
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: strings-only-go
+    params:
+      pattern: 'is_manual_flag'
+    cure: "is_manual_flag is retired (SV-3 / #6722): use COALESCE(adjusted_value, value) and reference no is_manual_flag in SQL."
+    origin: scripts/check-go-sql-retired-column-tokens.sh

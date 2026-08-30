@@ -1,0 +1,58 @@
+# Ported from Palletra scripts/check-pipeline-stage-enum-covers-detectors.sh
+# (sweep-18 #6).
+#
+# Every detector code listed in a `Models: []string{...}` facet of
+# freightworks/internal/pagekinds/specs.go must have a matching `<code>_detection`
+# value in the palletra.workflow_stage enum, assembled from ALTER TYPE ...
+# ADD VALUE and CREATE TYPE ... AS ENUM across the migration tree. A few plural
+# registry codes map to a singular enum stage via an irregular map
+# (boundaries->boundary, ribs->rib, zones->zone). This is the compile-time gate
+# that prevents the migration-0049 class of silent SQLSTATE-22P02 failures.
+#
+# This is a cross-file set relation WITH a per-code transform (code ->
+# <code>_detection, irregulars), joining a Go table to a set of SQL enum values —
+# not expressible via the per-func goast analyzers or the per-statement
+# sql/statement-predicate. So it is the command escape hatch: a self-contained
+# python reproducing the specs.go Models parse + the migration enum-value parse +
+# the irregular-mapped membership test. Scope-level finding (no want marker);
+# fire-1 has a detector code missing its enum value, pass-1 is fully covered.
+rules:
+  - id: pipeline-stage-enum-covers-detectors
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/internal/pagekinds/specs.go"
+        - "freightworks/services/core-api/migrations/palletra/*.up.sql"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import os, re, glob, sys
+          SPECS = "freightworks/internal/pagekinds/specs.go"
+          MIG = "freightworks/services/core-api/migrations/palletra"
+          if not os.path.exists(SPECS) or not os.path.isdir(MIG):
+              # Absent sources are an OK no-op in the .sh; mirror that.
+              sys.exit(0)
+          codes = set()
+          for block in re.findall(r'Models: \[\]string\{([^}]+)\}', open(SPECS).read()):
+              codes |= set(re.findall(r'"([a-z_]+)"', block))
+          enum = set()
+          for f in glob.glob(os.path.join(MIG, "*.up.sql")):
+              enum |= set(re.findall(r"'([a-z_]+)'", open(f).read()))
+          irregular = {"boundaries": "contour_detection",
+                       "ribs": "crossbeam_detection",
+                       "zones": "zone_detection"}
+          rc = 0
+          for code in sorted(codes):
+              want = irregular.get(code, code + "_detection")
+              if want not in enum:
+                  sys.stderr.write("detector %r has no matching %r in palletra.workflow_stage\n"
+                                   % (code, want))
+                  rc = 1
+          sys.exit(rc)
+      expect:
+        exit: 0
+    cure: "Add a migration: ALTER TYPE palletra.workflow_stage ADD VALUE IF NOT EXISTS '<code>_detection'; for each detector code missing its stage. Never drop the detector from specs.go to silence the gate."
+    origin: scripts/check-pipeline-stage-enum-covers-detectors.sh

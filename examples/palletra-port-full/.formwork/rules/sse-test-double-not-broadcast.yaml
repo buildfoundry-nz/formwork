@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-flutter-sse-test-double-not-broadcast.sh
+# (sweep-2 #5). The shared SSE test double must mirror production: each
+# subscribe REPLAYS catch-up events then delivers live ones. A bare
+# `StreamController.broadcast()` DROPS every event emitted before a subscriber
+# attaches, so a reconcile-before-listen consumer and the storm-replay tests
+# pass VACUOUSLY via the drop. Invariant: no `*ActivitySource` support fake uses
+# `.broadcast(`. The role is declared via implements|extends|with (EH-4 #7807:
+# an extends/with base ActivitySource once carried a bare .broadcast() past an
+# implements-only filter).
+#
+# Mapping: a same-file trigger (a file that declares an ActivitySource role) ⇒ a
+# forbidden token (`.broadcast(`) is a cross-line co-occurrence, so this is a
+# multiline forbidden-pattern with regexp2 lookbehind: `.broadcast(` where the
+# ActivitySource role declaration appears earlier in the file (the class header
+# always precedes its controller field). Scoped to the test trees only. The
+# finding anchors on the .broadcast( line.
+rules:
+  - id: sse-test-double-not-broadcast
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/testing/**/*.dart"
+        - "packages/*/test/**/*.dart"
+        - "frontend/test/**/*.dart"
+        - "frontend/integration_test/**/*.dart"
+    params:
+      # Origin: grep role-decl && grep '.broadcast(' — a whole-file co-occurrence.
+      # .broadcast( is the line-anchored trigger; the ActivitySource role declaration
+      # is a require_present guard. Replaces a regexp2 whose variable-length
+      # lookbehind (?<=role[\s\S]*) scanned backward unboundedly at every position.
+      # Anchors on the .broadcast( line (fixture want-marker).
+      pattern: '\.broadcast\('
+      require_present:
+        - '(?:implements|extends|with)\s+[A-Za-z]*ActivitySource'
+      prefilter: 'ActivitySource'
+    cure: "Model the SSE fake as a single-subscription replay stream (buffer + replay on subscribe) so pre-subscribe events are not silently dropped — see packages/plt_core/lib/testing/fake_project_activity_source.dart (sweep-2 #5)."
+    origin: scripts/check-flutter-sse-test-double-not-broadcast.sh

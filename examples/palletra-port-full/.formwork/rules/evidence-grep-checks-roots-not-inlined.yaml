@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-evidence-grep-roots-single-definition.sh
+# (#1975 meta-gate), check 2. No evidence-grep-checks-*.go line may re-open-
+# code a repo path root as a scan-root element (it must consume
+# evidenceRoots). The pattern matches an indented line whose first token is a
+# repo root, with one optional leading quote so a Go string-slice element
+# (`"packages/",`) matches; a roots mention written off column 0 (a
+# package-level var) and `//` comment lines do not match. RE2 line-by-line is
+# an exact port.
+rules:
+  - id: evidence-grep-checks-roots-not-inlined
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "scripts/ci/evidence-grep-checks-*.go"
+    params:
+      pattern: '^[[:space:]]+"?(?:freightworks|shared|schema|packages|frontend|scripts|\.github)/'
+    cure: "Hoist scan roots into the evidenceRoots slice in scripts/ci/evidence-grep.go and consume it; per-check narrowing stays as --glob (#1975)."
+    origin: scripts/check-evidence-grep-roots-single-definition.sh

@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-go-job-marshal-confined-to-dispatch-body.sh (sweep-1 #10).
+# The job-dispatch families (RemoteQueueEnqueuer.Enqueue*, InProcessEnqueuer, fakes)
+# must be thin per-kind trampolines into the generic dispatch bodies
+# (enqueueViaTaskQueue / enqueueDev / enqueueStub); an Enqueue* arm that
+# open-codes the marshal+dispatch primitives by hand is the sweep-1 #10 fork
+# shape the gate exists to red-build ("a body that open-codes marshal/
+# buildRequest/append dispatch fails by shape").
+#
+# PORT MAPPING: the .sh is an 8-clause composite (spec-table presence, per-file
+# arm<=row counts, Validate*Job/Handle*/run* delegation, and grep-based
+# CustomEnqueuer forks). The single structural invariant the Go-AST analyzer
+# captures faithfully is clause 2's SHAPE test: the open-coded dispatch
+# primitive `json.Marshal` may live ONLY inside the generic dispatch bodies,
+# never in a per-kind Enqueue* arm. go/call-confined-to-func-name encodes
+# exactly that — a call matching `symbol` outside an `allowed_func` is a fork.
+# (The cross-file count clauses and the bespoke-seam greps are not expressible
+# as one analyzer rule.)
+rules:
+  - id: go-job-marshal-confined-to-dispatch-body
+    type: go/call-confined-to-func-name
+    severity: error
+    scope:
+      include:
+        - "freightworks/internal/detectqueue/cloudtasks.go"
+    params:
+      symbol: 'json\.Marshal'
+      allowed_func: '^(enqueueViaTaskQueue|enqueueDev|enqueueStub)$'
+    cure: "Make every Enqueue* arm a thin trampoline into the generic dispatch body (enqueueViaTaskQueue / enqueueDev / enqueueStub); the marshal+dispatch primitives live once, in the generic body, driven by the JobSpec table row — never open-coded in a per-kind arm (sweep-1 #10)."
+    origin: scripts/check-go-job-marshal-confined-to-dispatch-body.sh

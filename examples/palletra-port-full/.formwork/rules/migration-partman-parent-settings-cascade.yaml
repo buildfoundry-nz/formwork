@@ -1,0 +1,56 @@
+# Ported from Palletra scripts/check-migration-partman-parent-settings-cascade.sh (#2832).
+# create_parent() materializes a standalone pg_partman TEMPLATE table snapshotting
+# a partitioned parent's columns. A migration that recasts the parent's column
+# TYPE (ALTER TABLE <parent> ... ALTER COLUMN ... TYPE ...) recasts the parent and
+# its children but NOT the template, whose orphan column then still references the
+# OLD type — so a later DROP TYPE fails at deploy against AlloyDB, invisible on
+# CI's partman-less replay. The recast MUST carry a `parent_table = '<parent>'`
+# template cascade. The partman-parent set is derived from every create_parent()
+# call; the check is order-aware (a recast that predates the create_parent owes
+# no cascade).
+#
+# Why the ESCAPE HATCH (type: command): the coupling is CROSS-STATEMENT and file-
+# level — the ALTER TABLE recast and the `parent_table='...'` cascade live in
+# different statements — and the protected-parent set is derived dynamically from
+# create_parent() calls elsewhere in the tree; sql/statement-predicate is per-
+# statement and cannot join them. This command reproduces the gate on the fixture
+# tree: derive parents from create_parent, and for every *.up.sql that recasts a
+# parent's column type without a matching `parent_table='<parent>'` cascade, fail.
+# fire-1 recasts without the cascade; pass-1 adds the guarded template cascade.
+# Scope-level finding (no want marker).
+rules:
+  - id: migration-partman-parent-settings-cascade
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.up.sql"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          MIG="freightworks/services/core-api/migrations"
+          [ -d "$MIG" ] || exit 0
+          parents="$(grep -rhoE "p_parent_table[[:space:]]*:=[[:space:]]*'[a-z_]+\.[a-z_]+'" "$MIG" 2>/dev/null \
+                      | grep -oE "'[a-z_]+\.[a-z_]+'" | tr -d "'" | sort -u)"
+          [ -n "$parents" ] || exit 0          # no partman parents -> nothing to guard
+          rc=0
+          while IFS= read -r up; do
+            [ -f "$up" ] || continue
+            s="$(sed 's/--.*$//' "$up")"
+            grep -qiE 'ALTER[[:space:]]+TABLE'  <<<"$s" || continue
+            grep -qiE 'ALTER[[:space:]]+COLUMN' <<<"$s" || continue
+            grep -qiE '[[:space:]]TYPE[[:space:]]' <<<"$s" || continue
+            flat="$(tr '\n' ' ' <<<"$s" | tr -s ' ')"
+            for p in $parents; do
+              grep -qF "ALTER TABLE $p " <<<"$flat" || continue     # recasts THIS parent
+              grep -qF "parent_table = '$p'" <<<"$s" && continue      # cascade present
+              rc=1
+            done
+          done < <(find "$MIG" -type f -name '*.up.sql')
+          exit $rc
+      expect:
+        exit: 0
+    cure: "Before the DROP TYPE, recast the pg_partman template column via a public.part_config lookup scoped `parent_table = '<schema.parent>'`, guarded on pg_partman (the 0023 pattern), so the partman-less CI replay stays a no-op while AlloyDB deploy succeeds (#2832)."
+    origin: scripts/check-migration-partman-parent-settings-cascade.sh

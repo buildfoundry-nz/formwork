@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-plt-package-consumers.sh (#3433 base-
+# namespace gate). Every packages/plt_* shared-foundation package must earn
+# its prefix at >=2 CONSUMERS — other workspace pubspecs (packages/*,
+# frontend/) declaring it under dependencies:/dev_dependencies: — or carry a
+# shrink-only BASELINE reason. A baselined package that GRADUATES to >=2
+# consumers fails fatally (forces the reviewed delist); a baselined package that
+# has left the tree WARNs.
+#
+# ESCAPE (type: command). This is a PER-KEY count-with-threshold across the
+# whole pubspec graph (for each plt_* package, count the OTHER pubspecs that
+# declare it) joined to a stateful shrink-only baseline whose graduation case is
+# fatal and whose stale case is a warn. No declarative formwork type expresses a
+# per-package consumer tally, and set-relation only does subset/equal/disjoint,
+# not counting. The real script is the faithful check and verifies in CI; it
+# SKIPs in the local fixture harness (enumerated by lint). No fixture.
+rules:
+  - id: plt-package-consumers
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-plt-package-consumers.sh — the validating
+      target's own gate script, which this corpus does not carry and cannot:
+      it is written in that tree's vocabulary, and this repository tracks no
+      shell scripts at all. In a fixture tree bash would exit 127 in the fire
+      tree and the pass tree alike, so the fire proof would be satisfied by
+      the detector NOT EXISTING and the pass proof would report that same
+      missing-detector exit as a finding. What the port asserts here is the
+      SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "packages/*/pubspec.yaml"
+        - "frontend/pubspec.yaml"
+    params:
+      cmd:
+        - bash
+        - scripts/check-plt-package-consumers.sh
+      expect:
+        exit: 0
+    cure: "A packages/plt_* package earns its foundation-namespace prefix at >=2 consumers or a canvas-engine boundary (#3433). Give it a second consumer, fold it into its sole consumer (pattern 9a93d0f69f), or record a shrink-only reason in BASELINE + docs/flutter-standards.md §6.2. A baselined package that reaches >=2 consumers must be delisted (#8257)."
+    origin: scripts/check-plt-package-consumers.sh

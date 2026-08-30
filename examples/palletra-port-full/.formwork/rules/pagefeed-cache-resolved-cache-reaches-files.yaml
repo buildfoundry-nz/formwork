@@ -1,0 +1,16 @@
+# Ported from Palletra scripts/check-pagefeed-cache-shared.sh (PR #2765 #8).
+# Dev-local must run ONE pagefeed.Cache: a composition-root wiring chain no
+# unit test can pin. This is link 4a (files.RegisterFiles receives the resolved cache). Comment-stripped (decomment-go) so
+# prose can never satisfy the link. exists-mode over the exact file.
+rules:
+  - id: pagefeed-cache-resolved-cache-reaches-files
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/mount_app.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'files\.RegisterFiles\(.*wave11PageFeedCache\)'
+      mode: exists
+    cure: "files.RegisterFiles must receive the resolved shared cache."
+    origin: scripts/check-pagefeed-cache-shared.sh

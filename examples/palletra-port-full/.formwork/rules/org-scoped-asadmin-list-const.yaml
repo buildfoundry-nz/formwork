@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-asadmin-list-org-scoped.sh (sweep-5 #7),
+# fact (a) — the org_id=$1 scope INSIDE the listClaimsQuery const body.
+#
+# Under db.AsSuperuser (BYPASSRLS) the members / invitations list queries must
+# carry an EXPLICIT leading `org_id = $1` predicate, and it must live INSIDE the
+# `listClaimsQuery` const's backtick raw-string body — not merely somewhere in the
+# file. A decoy const carrying `org_id = $1` while the real query filters by
+# `registered_by_org = $1` would satisfy a file-wide grep yet still list every org
+# under BYPASSRLS (sweep-6 #2). RLS does not apply under AsSuperuser, so this
+# WHERE is the whole tenant-isolation premise.
+#
+# PORT MAPPING: a multiline forbidden-pattern (regexp2) that is decoy-resistant
+# by construction. It matches a `const listClaimsQuery = ... ` + "`" + `<body>` + "`" + `` raw string
+# whose BODY never contains `org_id = $1` (a negative-lookahead sweep bounded to
+# non-backtick chars, i.e. inside the raw string). Such a const FIRES. A const
+# whose body carries `org_id = $1` cannot be consumed to its closing backtick,
+# so it does not match — pass. A `prefix + ` + "`" + `…` + "`" + `` concat is handled: the
+# `[^` + "`" + `]*` run reaches the first backtick regardless of the concat prefix.
+# preprocess: decomment-go strips `//` comments (mirrors the .sh drop_comments).
+rules:
+  - id: org-scoped-asadmin-list-const
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/members/members.go"
+        - "freightworks/services/core-api/routes/invitations/invitations_workflow.go"
+    preprocess: decomment-go
+    params:
+      multiline: true
+      syntax: regexp2
+      pattern: 'const\s+listClaimsQuery\s*=[^`]*`(?:(?!org_id\s*=\s*\$1)[^`])*`'
+      prefilter: 'listClaimsQuery'
+    cure: "Scope the AsSuperuser list query with a leading `org_id = $1` predicate INSIDE the listClaimsQuery const body. A token elsewhere in the file (a decoy const) does NOT count — the query itself must carry the scope (sweep-4 #3 / sweep-2 #10 / sweep-6 #2)."
+    origin: scripts/check-asadmin-list-org-scoped.sh

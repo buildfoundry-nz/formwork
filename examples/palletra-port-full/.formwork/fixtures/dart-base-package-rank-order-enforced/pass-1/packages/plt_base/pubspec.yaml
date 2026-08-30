@@ -1,0 +1,9 @@
+name: plt_base
+description: Lowest-layer base package (rank 0).
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  meta: ^1.15.0

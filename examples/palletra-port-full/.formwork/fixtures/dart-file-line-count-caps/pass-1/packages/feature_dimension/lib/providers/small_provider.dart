@@ -1,0 +1,23 @@
+// A small providers/ file, comfortably within the 300-line cap.
+final compactProvider = <String>[
+  'row_001',
+  'row_002',
+  'row_003',
+  'row_004',
+  'row_005',
+  'row_006',
+  'row_007',
+  'row_008',
+  'row_009',
+  'row_010',
+  'row_011',
+  'row_012',
+  'row_013',
+  'row_014',
+  'row_015',
+  'row_016',
+  'row_017',
+  'row_018',
+  'row_019',
+  'row_020',
+];

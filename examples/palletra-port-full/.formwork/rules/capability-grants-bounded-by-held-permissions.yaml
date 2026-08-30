@@ -1,0 +1,30 @@
+# Ported from Palletra scripts/check-capability-grants-bounded-by-held-permissions.sh (sweep-3 #2).
+# routes/capabilities/ STOREs into membership_permission_overrides hand the
+# target a capability. A grant must be bounded by what the caller already holds:
+# without that ceiling, a grant can confer more than the granter has. The .sh
+# header states the core requirement:
+# a file that STOREs the override MUST reference the caller's held permission
+# set (claims.GetResolvedPermissions()) in the same file. That is exactly a
+# pair-consistency: trigger = the INSERT, requires = the held-set consult.
+# Comments are stripped so a commented-out guard cannot satisfy it.
+#
+# Port note: the .sh additionally verifies the guard is ACTED ON — an if-block
+# opened on `GetGrantType() == "GRANT"` whose body binds the held-set check to
+# req.GetEntitlement() and returns. Those brace-depth / operator / bound-arg
+# refinements are AST-level and are not expressible in a declarative pair check;
+# the same-file held-set reference is the faithful core that is ported.
+rules:
+  - id: capability-grants-bounded-by-held-permissions
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/capabilities/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      trigger: '(?i)INSERT INTO\s+(palletra\.)?membership_permission_overrides'
+      requires: 'GetResolvedPermissions\('
+    cure: "Guard the GRANT INSERT with the grant-only-what-you-hold ceiling: consult claims.GetResolvedPermissions() before writing a membership_permission_overrides row (sweep-3 #2 privesc)."
+    origin: scripts/check-capability-grants-bounded-by-held-permissions.sh

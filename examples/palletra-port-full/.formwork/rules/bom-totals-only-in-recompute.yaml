@@ -1,0 +1,30 @@
+# Ported from Palletra scripts/check-bom-totals-only-in-recompute.sh (§A).
+# The BOM money aggregates palletra.boms.total_ex_vat / total_inc_vat and
+# palletra.bom_sections.subtotal are rolled up in ONE place (internal/bomtotals)
+# and may be ASSIGNED only from there. The gate is table-aware: total_ex_vat also
+# lives on supplier_replies, so a name-only scan false-positives. The formwork
+# `sql/statement-predicate` type reassembles SQL from Go string literals, selects
+# statements by the `table` regex, and applies `forbid` per statement — so keying
+# `table` to the WRITE TARGET (UPDATE/INSERT/MERGE INTO boms|bom_sections)
+# reproduces the .sh's write-target resolution: a supplier_replies write is
+# never selected. Only assignments of the three aggregates are forbidden.
+#
+# Port note: internal/bomtotals (the canonical writer) and *_test.go are exempt,
+# exactly as the .sh's allowlist. Column-list seed STOREs of a literal-0 baseline
+# are not `col = value` assignments and do not match the forbid regex.
+rules:
+  - id: bom-totals-only-in-recompute
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/internal/bomtotals/**"
+    params:
+      table: '(?i)(UPDATE|INSERT INTO|MERGE INTO)\s+(palletra\.)?(boms|bom_sections)\b'
+      forbid:
+        - '(?i)(^|[^A-Za-z0-9_])(total_ex_vat|total_inc_vat|subtotal)\s*=[^=]'
+    cure: "Call bomtotals.Recompute(ctx, tx, bomID) inside your mutation's tx; never hand-assign palletra.boms.total_ex_vat / total_inc_vat or palletra.bom_sections.subtotal (handoff §A)."
+    origin: scripts/check-bom-totals-only-in-recompute.sh

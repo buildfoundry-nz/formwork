@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-detectdispatch-recovery-route-exists.sh
+# (sweep-21-closeout #4) — Rule A. The per-page derived-detection recovery route
+# POST .../pages/{sheetID}/redetect MUST be registered in the assembled route
+# registry; if it is deleted the way the /detect-* family was (#3482), a stranded
+# dispatch claim (internal/detectdispatch) has no recovery path. The .sh cats
+# the registry files and greps -F for the route substring — exactly exists-mode
+# required-pattern over the registry files (mount_app.go + routes/register_*.go).
+# Raw match (the gate does not de-comment the registry text).
+#
+# Rule B (recovery-path comment paragraphs must name only registered detection
+# routes) needs a //-comment paragraph extractor + a registered-route set join
+# with no formwork equivalent; it is NOT ported here (see the batch skip list).
+rules:
+  - id: detectdispatch-redetect-route-registered
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/mount_app.go"
+        - "freightworks/services/core-api/routes/register_*.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'pages/\{sheetID\}/redetect'
+      mode: exists
+    cure: "Keep the per-page recovery route POST .../pages/{sheetID}/redetect registered so a stranded derived-detection dispatch claim has a recovery path (sweep-21 #4)."
+    origin: scripts/check-detectdispatch-recovery-route-exists.sh

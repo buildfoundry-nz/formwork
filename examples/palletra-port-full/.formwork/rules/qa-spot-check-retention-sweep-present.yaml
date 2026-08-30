@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-qa-spot-check-retention-sweep-present.sh
+# (#5976 / sweep-12 #3 PF-1). qa_sample_check_reviews / qa_sample_check_items are
+# append-only in the request path; #5976 wired a retention sweep so the QA trail
+# cannot grow unbounded. The .sh fails unless all three hold: (A) a
+# PurgeConfirmedQASpotChecks handler exists under routes/admin/, (B) it DELETEs
+# 'verified' reviews, (C) the route is registered on the SUPER_ADMIN role. This
+# ports the strongest single required anchor — Rule A, the handler definition —
+# as required-pattern exists mode over the admin routes tree.
+#
+# Not ported: Rule B (a multiline DELETE FROM ... status ... 'verified', which
+# formwork's line-oriented pattern rules cannot span) and Rule C (the
+# SUPER_ADMIN route registration in a different file).
+rules:
+  - id: qa-spot-check-retention-sweep-present
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/admin/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'func \([^)]*\) PurgeConfirmedQASpotChecks\('
+      mode: exists
+    cure: "Keep the PurgeConfirmedQASpotChecks handler under routes/admin/ (with its verified-review DELETE and SUPER_ADMIN route) or the QA spot-check trail grows unbounded (#5976)."
+    origin: scripts/check-qa-spot-check-retention-sweep-present.sh

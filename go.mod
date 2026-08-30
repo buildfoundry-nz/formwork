@@ -1,0 +1,24 @@
+module github.com/buildfoundry-nz/formwork
+
+go 1.25.0
+
+toolchain go1.26.4
+
+require gopkg.in/yaml.v3 v3.0.1
+
+require github.com/bmatcuk/doublestar/v4 v4.10.0
+
+require github.com/dlclark/regexp2 v1.12.0
+
+require (
+	github.com/Masterminds/semver/v3 v3.5.0
+	github.com/pganalyze/pg_query_go/v6 v6.2.2
+	github.com/wasilibs/go-pgquery v0.0.0-20260728010200-155ebad2880e
+)
+
+require (
+	github.com/tetratelabs/wazero v1.12.0 // indirect
+	github.com/wasilibs/wazero-helpers v0.0.0-20250123031827-cd30c44769bb // indirect
+	golang.org/x/sys v0.44.0 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
+)

@@ -1,0 +1,47 @@
+# Ported from Palletra scripts/check-no-hand-rolled-optimistic-update-logic.sh (Tier 6.4 /
+# FR-ARC-7). Every per-callsite optimistic write-flow in the FE must ride
+# `SpeculativeWrite<T>` from package:plt_core/optimistic.dart (the eight-step
+# contract). A file that hand-rolls the flow (`applySpeculative(...)`) without the
+# contract raced concurrent edit+approve pre-T4.3.
+#
+# This is a same-file "trigger implies companion" invariant -> pair-consistency:
+#   trigger  — an `applySpeculative*` call (the optimistic write).
+#   requires — the contract's presence: an import of optimistic.dart (the
+#              SpeculativeWrite<T> base) or optimistic_annotation_update.dart (the
+#              OptimisticAnnotationWrite base that extends it), or the
+#              per-callsite `// runs through SpeculativeWrite<T>` sentinel.
+# A file that applies an optimistic write but neither imports the contract nor
+# carries the sentinel fires at its first applySpeculative line — the .sh's
+# violation. The two canonical owners are carved out via except.paths.
+#
+# DIVERGENCE (noted): the .sh additionally requires an `applyImpactedPage /
+# consumeResponse / applySpeculativeRestore` cache-patch call to be present before
+# flagging (its "second half of the contract" gate); pair-consistency's trigger
+# is a single pattern, so this port obligates ANY applySpeculative user to ride
+# SpeculativeWrite — a safe superset (a file that applies an optimistic write with
+# no follow-up patch still belongs on the contract). The import/sentinel
+# allowlist is preserved exactly.
+rules:
+  - id: no-hand-rolled-optimistic-update-logic
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/presentation/painters/**"
+    except:
+      paths:
+        - "**/lib/optimistic.dart"
+        - "**/providers/project_callouts_notifier.dart"
+    params:
+      trigger: 'applySpeculative'
+      requires: 'optimistic\.dart|optimistic_annotation_update\.dart|runs through SpeculativeWrite<T>'
+    cure: "Subclass SpeculativeWrite<T> from package:plt_core/optimistic.dart and route the eight-step contract through .run(); place the invocation behind a '// runs through SpeculativeWrite<T>' sentinel, or import the contract."
+    origin: scripts/check-no-hand-rolled-optimistic-update-logic.sh

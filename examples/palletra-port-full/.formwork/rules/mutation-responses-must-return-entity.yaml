@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-mutation-responses-must-return-entity.sh (FE-perf Step N+5).
+# FP FIX: the .sh categorically EXCLUDES auth-flow acks matched by
+# ^Create[A-Za-z]*Invitation[A-Za-z]*Response$ (one-shot credential grants, not
+# cacheable entities — they legitimately carry no *v1.Entity getter). The ported
+# file-scoped pair-consistency could not express that exclusion, so it fired on
+# shared/generated/go/palletra/api/v1/core_api_gateway.pb.go, whose SOLE
+# Create/Update response is CreateEnrollmentResponse (returns RosterId +
+# InviteCode strings). The fix ports the exclusion by treating the presence of
+# an Invitation ack as satisfying `requires`: a file whose only mutation response
+# is a Create*Invitation*Response now passes, exactly as the .sh skips it, while
+# a real entity response with no *v1. getter (fire-1) still fires.
+rules:
+  - id: mutation-responses-must-return-entity
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "shared/generated/go/palletra/api/v1/*.pb.go"
+    params:
+      trigger: 'type (Create|Update)[A-Za-z0-9_]*Response struct'
+      requires: 'func \(x \*(Create|Update)[A-Za-z0-9_]*Response\) Get[A-Za-z0-9_]+\(\) \*v1\.|type Create[A-Za-z0-9_]*Invitation[A-Za-z0-9_]*Response struct'
+    cure: "Add the canonical entity field to the proto message so the generated response carries a Get<Entity>() *v1.<Entity> accessor. Do NOT add a per-name exception — the only sanctioned narrowing is a categorical regex class (Create*Invitation* auth acks)."
+    origin: scripts/check-mutation-responses-must-return-entity.sh

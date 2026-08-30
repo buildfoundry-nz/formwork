@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-classifier-catalog-forbids-regexp-import.sh.
+# The page-classification catalog package is the single declarative source of
+# truth for page-type semantics (SimilarTo discriminators), never a regex
+# post-process layer. No non-test .go in internal/parsecompose/classifier may
+# import "regexp". The .sh greps raw for the quoted import literal, so preprocess
+# is omitted. (Absent package = skip in the .sh; a forbidden-pattern likewise
+# fires nothing when scope is empty.)
+rules:
+  - id: classifier-catalog-forbids-regexp-import
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/parsecompose/classifier/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: '"regexp"'
+    cure: "Page-type semantics are declarative catalog data (SimilarTo), never a regex post-process layer. Put text heuristics in the parent parsecompose package, not classifier."
+    origin: scripts/check-classifier-catalog-forbids-regexp-import.sh

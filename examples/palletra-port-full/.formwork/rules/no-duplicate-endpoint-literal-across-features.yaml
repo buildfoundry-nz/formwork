@@ -1,0 +1,68 @@
+# Ported from Palletra scripts/check-no-duplicate-endpoint-literal-across-features.sh — the
+# ZERO-TOLERANCE gate against the SAME core-api endpoint literal being hard-coded
+# in two different FE packages (audit #7; broadened cross-PACKAGE by #4244 /
+# #6417). The frontend is a pub workspace of sibling packages; when two data
+# repos each hard-code the same `/api/...` endpoint literal, the URL and its param
+# names can silently drift between them. Rule: a normalized `/api/...` literal
+# that appears in `data/` dirs (recursive under lib/) of >=2 DIFFERENT packages
+# is a FAIL. Literals are quote-anchored to start with /api/, path-param
+# interpolation ($id / ${id}) is normalized to {}, and the query string is
+# stripped, so the same path with a drifted param (?q= vs ?search=) still
+# collides. Generated code (*.g.dart, /generated/) is excluded.
+#
+# Why the ESCAPE HATCH (type: command): the rule groups a NORMALIZED literal
+# across an ARBITRARY number of packages ("appears in >=2 distinct packages") —
+# not a clean 2-sided A/B split (its sibling check-base-endpoint-repo-must-not-be-duplicated
+# IS 2-sided and ported as set-relation disjoint; this one is not). N-way grouping
+# with per-literal normalization is expressible by no declarative type. It is
+# self-contained (grep/sed over dart text, no external tool), so this is a
+# fixture-PROVABLE command escape reproducing the .sh: fire-1 hard-codes one
+# endpoint literal in two packages' data dirs; pass-1 single-sources it.
+rules:
+  - id: no-duplicate-endpoint-literal-across-features
+    type: command
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/data/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/generated/**"
+    params:
+      cmd:
+        - bash
+        - "-c"
+        - |
+          set -uo pipefail
+          [ -d packages ] || exit 0
+          pairs=""
+          for pkg in packages/*; do
+            [ -d "$pkg/lib" ] || continue
+            name="$(basename "$pkg")"
+            while IFS= read -r data_dir; do
+              [ -n "$data_dir" ] || continue
+              while IFS= read -r f; do
+                [ -n "$f" ] || continue
+                while IFS= read -r ep; do
+                  [ -n "$ep" ] && pairs="${pairs}${ep}	${name}
+          "
+                done < <(
+                  grep -oE "[\"']/api/[^\"']*[\"']" "$f" 2>/dev/null \
+                    | sed -E "s/^[\"']//; s/[\"']\$//" \
+                    | sed -E 's/\$\{[^}]*\}/{}/g; s/\$[A-Za-z_][A-Za-z0-9_]*/{}/g; s/\?.*$//' || true
+                )
+              done < <(find "$data_dir" -type f -name '*.dart' -not -name '*.g.dart' -not -path '*/generated/*')
+            done < <(find "$pkg/lib" -type d -name data)
+          done
+          report="$(printf '%s' "$pairs" | sort -u | awk -F'\t' '
+            NF==2 { count[$1]++; where[$1]=where[$1]" "$2 }
+            END { for (e in count) if (count[e] >= 2) printf "%s\t%d\t%s\n", e, count[e], where[e] }')"
+          [ -z "$report" ] && exit 0
+          printf '%s\n' "$report" | while IFS=$'\t' read -r ep n where; do
+            [ -n "$ep" ] && echo "endpoint '$ep' is hard-coded in $n packages:$where" >&2
+          done
+          exit 1
+      expect:
+        exit: 0
+    cure: "Single-source the endpoint: put the literal in ONE owning package (a shared const and/or typed wrapper) and have the others reference it. A duplicated /api literal across packages lets the URL and its param names drift silently (audit #7 / FR-4/5/6 / #6417)."
+    origin: scripts/check-no-duplicate-endpoint-literal-across-features.sh

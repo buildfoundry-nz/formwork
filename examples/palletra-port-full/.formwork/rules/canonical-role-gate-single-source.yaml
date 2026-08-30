@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-canonical-role-gate-single-source.sh (sweep-1 #1/#2).
+# The canonical-role validity/availability GATE is the call addrole.LocateRole( —
+# the seam that picks the chosen role out of the projected options and gates on
+# Available. It MUST live ONLY under internal/workflow/rolegate/, so the "+ Add
+# Page" assign and the per-page reclassify backstop cannot drift by re-opening the
+# decision. internal/gatetests/ is exempt (synth fixtures embed the
+# fingerprint as a string). addrole.ComposeRoleOptions (the projection) stays
+# allowed. The .sh greps raw *.go (grep -rl, no decomment, no test exclusion), so
+# preprocess is omitted and tests are NOT excluded.
+rules:
+  - id: canonical-role-gate-single-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    except:
+      paths:
+        - "**/internal/workflow/rolegate/**"
+        - "**/internal/gatetests/**"
+    params:
+      pattern: 'addrole\.LocateRole\('
+    cure: "The role validity/availability + stamp decision lives only in internal/workflow/rolegate. Call the rolegate seam; keep addrole.ComposeRoleOptions (the projection) but never re-use addrole.LocateRole outside rolegate (sweep-1 #1/#2)."
+    origin: scripts/check-canonical-role-gate-single-source.sh

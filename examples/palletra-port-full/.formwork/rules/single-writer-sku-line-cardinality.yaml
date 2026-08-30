@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-single-writer-sku-line-cardinality.sh
+# (#4623), RULE A. "Authored BOM lines of sku M" is N-per-sku on the
+# WRITE side (a KEEP_BOTH resolution mints a SECOND bom_line_items row with the
+# same project_sku_id, and bomtotals charges every one). The sidebar READ
+# must model the SAME cardinality — one visible/editable row per authored line.
+# The #4623 defect keyed authored lines in a SINGLE-valued
+# map[string]ManualLine, so two terminal rows for M both returned and the Go
+# loop OVERWROTE (last-write-wins over undefined Postgres order): a billed line
+# went invisible/uneditable.
+#
+# RULE A bans a sku-keyed single-valued line map in the sidebar read: a
+# `map[string]ManualLine` / `map[string]Link` must be `map[string][]T`. Ported
+# as a forbidden-pattern over freightworks skusidebar Go, comment-stripped
+# with decomment-go so a `//`-comment mention of the type never fires. The
+# `([^s]|$)` tail is carried verbatim from the .sh's rule_a_re: it keeps the
+# compliant slice form `map[string][]ManualLine` (a `[` follows `map[string]`,
+# not the type name) and a hypothetical `map[string]ManualLines` plural out of
+# the match.
+#
+# DIVERGENCE (noted for fidelity): RULE B of the .sh — every multi-row
+# (tx.Query) `WITH RECURSIVE` in skusidebar/** + skuspromote/** must
+# carry ORDER BY or DISTINCT ON, while single-row tx.QueryRow reads are exempt —
+# needs backtick-raw-string SQL tracking with a per-literal query/queryrow verb
+# resolve; that is not a plain forbidden/required pattern and is not ported here.
+# Line-level finding (fire line carries an inline `// want:` marker).
+rules:
+  - id: single-writer-sku-line-cardinality
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/skusidebar/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'map\[string\](ManualLine|Link)([^s]|$)'
+    cure: "A sku can carry MORE THAN ONE authored/template line (KEEP_BOTH); map[string]T keys it to one and silently overwrites the rest. Use map[string][]T and fan out one entry per line (see attachManual, #4623)."
+    origin: scripts/check-single-writer-sku-line-cardinality.sh

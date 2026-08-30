@@ -1,0 +1,53 @@
+# Ported from Palletra
+# scripts/check-email-submission-count-columns-roundtrip.sh (#8860).
+# palletra.incoming_mail_submissions carries per-submission TALLY columns
+# (file_count, handled_count) whose whole reason to exist is to be
+# surfaced to the estimator in the emailed-plans inbox ("2 of 3 plans
+# processed"). A `*_count` column WRITTEN but never FETCHed back is a write-only
+# shadow column: the signal is computed and thrown away. handled_count shipped
+# exactly that way in #8121.
+#
+# RULE — every `*_count` column written to incoming_mail_submissions (in the
+# INSERT column list / UPDATE SET, under routes/mail_intake/) must also be READ
+# back in a SELECT ... FROM incoming_mail_submissions projection. That is a
+# set-relation SUBSET: A = the written `*_count` tokens, B = the read `*_count`
+# tokens; every written tally must appear in the read set.
+#
+# Comments are stripped first (decomment-go, which keeps string contents), so a
+# column named only in a `//` comment does not count toward either set — matching
+# the .sh, which harvests tokens only from INSERT/SET and SELECT SQL, never prose.
+#
+# DIVERGENCE (noted): the per-line engine cannot restrict a bare `*_count`
+# capture to "inside an INSERT/SET write" vs "inside a SELECT projection of this
+# table". To keep the two sides from self-satisfying, side A is scoped to the
+# mail_intake WRITER files and side B to the emailed_drawings READER (the
+# GetUnread SELECT the .sh cure names) rather than all of routes/. The core
+# invariant — a written tally column that the reader never projects fails — is
+# enforced faithfully. The .sh's anti-vacuity exit-2 on an empty write set is not
+# expressible in set-relation (an empty A trivially satisfies subset); formwork
+# lint owns empty-scope rot.
+rules:
+  - id: email-submission-count-columns-roundtrip
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/mail_intake/**/*.go"
+        - "freightworks/services/core-api/routes/emailed_drawings/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/routes/mail_intake/*.go"
+        pattern: '([a-z_]+_count)'
+        group: 1
+      b:
+        files:
+          - "freightworks/services/core-api/routes/emailed_drawings/*.go"
+        pattern: '([a-z_]+_count)'
+        group: 1
+      relation: subset
+    cure: "Add the written *_count column to the emailed-plans GetUnread SELECT (and scan it onto EmailedPlanDelivery) so the tally round-trips — a written-but-never-selected *_count is the #8860 write-only shadow column."
+    origin: scripts/check-email-submission-count-columns-roundtrip.sh

@@ -1,0 +1,33 @@
+# Ported from Palletra scripts/check-structured-log-fields.sh (#1362) — Rule A.
+# GCP Cloud Logging only ingests severity/message-shaped payloads; a handler
+# built straight from slog.NewJSONHandler emits level/msg and is invisible to
+# severity>=ERROR filters, Error Reporting, and alert policies. The cure is a
+# single shared package (freightworks/internal/logging) whose Init() installs the
+# Cloud-Logging-shaped handler. Rule A makes that the ONLY place a raw slog
+# handler may be constructed: any non-test .go OUTSIDE freightworks/internal/
+# logging/ that calls slog.NewJSONHandler( / slog.NewTextHandler( re-forks the
+# handler. Matched on de-commented source so a mention in a comment/doc cannot
+# trip or satisfy the rule (the .sh's strip_comments_go).
+#
+# DIVERGENCE (noted): the .sh's Rule B — a deployed `func main()` wired for
+# logging (imports log/slog OR internal/logging) MUST call logging.Init( — is a
+# COMPOUND-trigger rule (main AND logging-wired => requires Init) that no single
+# formwork type expresses faithfully (pair-consistency has one trigger pattern; a
+# bare `func main()` or a bare logging import would false-fire). Only the raw-
+# handler carve-out (Rule A) is ported here; the load-bearing "handlers are
+# constructed in exactly one package" invariant is captured.
+rules:
+  - id: canonical-structured-logging-handler
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/internal/logging/**"
+    preprocess: decomment-go
+    params:
+      pattern: 'slog\.New(?:JSON|Text)Handler\('
+    cure: "Construct slog handlers only in freightworks/internal/logging (call logging.Init(\"<service>\")); a raw slog.NewJSONHandler/NewTextHandler anywhere else emits level/msg-shaped logs that GCP Cloud Logging ingests at DEFAULT severity, invisible to ERROR filters (#1362)."
+    origin: scripts/check-structured-log-fields.sh

@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-member-writes-require-outrank-check.sh (sweep-4 #1).
+# The member-management writes — members.UpdateGrade / members.Remove and
+# capabilities.AddOverrideEntry / RevokeOverride — guarded only own-self, the
+# SITE_ADMIN site-scope, and the REQUESTED-role ceiling; NONE loaded the TARGET
+# membership's CURRENT role. So a delegated-USERS_MANAGE non-admin could
+# demote/remove a higher-tier member or strip the founder's capabilities. The fix
+# is the target-tier guard: every member-management write is preceded, in the
+# same tx, by an acted-on `shared.AssertCallerSeniorToTarget(ctx, tx, targetID,
+# claims.GetAccessGrade())` that returns on error.
+#
+# Ported as a pair-consistency over decommented Go (scope routes/members/ +
+# routes/capabilities/): trigger = a member-management write keyword+table
+# (UPDATE memberships, DELETE FROM memberships, INSERT/DELETE
+# membership_permission_overrides), requires = an AssertCallerSeniorToTarget(
+# call. A file that performs the write but never names the guard fires.
+# decomment-go so a commented-out guard can never satisfy it (the .sh strips
+# `//` first).
+#
+# DIVERGENCE (noted): the .sh binds the guard PER transaction closure, requires
+# it to PRECEDE the first write, checks its block returns, and binds its target
+# arg to the id the write binds. pair-consistency models the file-level
+# co-presence — a member-management write must be accompanied by the guard —
+# which is the primary invariant (the sweep-4 #1 hole was NO target-tier guard
+# at all); the closure-scoping, ordering, and arg-binding refinements are not
+# modeled.
+rules:
+  - id: member-writes-require-outrank-check
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/members/**/*.go"
+        - "freightworks/services/core-api/routes/capabilities/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      trigger: 'UPDATE\s+memberships\b|DELETE\s+FROM\s+memberships\b|(INSERT\s+INTO|DELETE\s+FROM)\s+membership_permission_overrides\b'
+      requires: 'AssertCallerSeniorToTarget\('
+    cure: "Precede the member-management write, in the same tx, with an acted-on target-tier guard: `if err := shared.AssertCallerSeniorToTarget(ctx, tx, crewID, claims.GetAccessGrade()); err != nil { return err }`. Without it a delegated-USERS_MANAGE non-admin can demote/remove a higher-tier member (sweep-4 #1)."
+    origin: scripts/check-member-writes-require-outrank-check.sh

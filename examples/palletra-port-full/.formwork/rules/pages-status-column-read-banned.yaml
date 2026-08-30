@@ -1,0 +1,22 @@
+rules:
+  - id: pages-status-column-read-banned
+    type: forbidden-pattern
+    severity: error
+    # Rule 2 of check-page-status-schema-drift.sh excludes comment lines (`grep -vE
+    # '://[[:space:]]*//'`); decomment-go blanks Go comments (preserving line
+    # numbers) so an explanatory comment naming the dead column never fires.
+    preprocess: decomment-go
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/vendor/**"
+        - "**/shared/generated/**"
+        - "**/gen/go/**"
+        - "**/internal/proto/**"
+        - "**/*.pb.go"
+    params:
+      # pages.status / pg.status (pg = the conventional page-loader alias).
+      pattern: '\b(pages|pg)\.status\b'
+    cure: "Use intake_status — there is no `status` column on palletra.pages."
+    origin: scripts/check-page-status-schema-drift.sh

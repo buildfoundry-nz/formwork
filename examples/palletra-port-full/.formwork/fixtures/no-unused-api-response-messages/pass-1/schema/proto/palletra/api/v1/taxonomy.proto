@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+// StartParsingResponse is marshalled by the extraction handler and read in Go.
+message StartParsingResponse {
+  string job_id = 1;
+}
+
+// GetCategoryResponse is marshalled by the GET handler and read in Go.
+message GetCategoryResponse {
+  string name = 1;
+}

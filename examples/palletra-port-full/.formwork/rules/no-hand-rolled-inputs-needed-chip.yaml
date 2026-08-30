@@ -1,0 +1,34 @@
+# Ported from Palletra scripts/check-no-hand-rolled-inputs-needed-chip.sh
+# (sweep-9 #17). The error-styled "N inputs needed" pill has one home — the
+# FieldsRequiredChip widget (plt_widgets/fields_required_chip.dart). The .sh flags
+# any OTHER Dart file where the pill fingerprint co-occurs: `colors.errorContainer`
+# (the errorContainer fill) AND `Icons.error_outline` (the leading icon).
+#
+# The .sh is `rg -l colors.errorContainer` then a per-file `rg -q
+# Icons.error_outline` — a same-file, order-independent CO-OCCURRENCE. Ported as
+# a multiline forbidden-pattern with two order-independent lookaheads over the
+# whole file; `(?s)` crosses newlines. Zero-width at file start -> reported on
+# line 1. The canonical widget file + generated parts are carved out by path.
+rules:
+  - id: no-hand-rolled-inputs-needed-chip
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/fields_required_chip.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+    params:
+      # Whole-file co-occurrence (the port's (?=[\s\S]*A)(?=[\s\S]*B) lookahead
+      # conjunction), now linear RE2 all_of — was 6.6s over 1361 dart files.
+      # Fixture want-marker on line 1, so the all_of anchor is faithful.
+      all_of:
+        - 'colors\.errorContainer'
+        - 'Icons\.error_outline'
+      prefilter: 'errorContainer'
+    cure: "Render the shared plt_widgets FieldsRequiredChip instead of re-building the errorContainer pill chrome (Tooltip > InkWell > Container(errorContainer) > Row[error_outline, Text]) inline."
+    origin: scripts/check-no-hand-rolled-inputs-needed-chip.sh

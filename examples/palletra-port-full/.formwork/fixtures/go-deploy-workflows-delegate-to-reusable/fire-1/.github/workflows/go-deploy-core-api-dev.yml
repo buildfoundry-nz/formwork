@@ -1,0 +1,13 @@
+name: go-deploy-core-api-dev
+on:
+  push:
+    branches: [develop]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build image
+        run: docker build -t core-api:dev . # want: go-deploy-workflows-delegate-to-reusable
+      - name: apply infra
+        run: terraform apply -auto-approve # want: go-deploy-workflows-delegate-to-reusable

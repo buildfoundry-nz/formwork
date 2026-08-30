@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-page-metric-input-schema-single-source.sh
+# (SV-5, #7411/#4244) RULE 1. Page-metric palette-relevance input types live ON
+# the rule (metricspage.Aggregation.InputTypes). This bans resurrecting the
+# retired parallel registry: a hand-authored `map[string][]string{` composite
+# literal in non-test Go under internal/metricmenu. A derived make(...)
+# lookup (no literal brace) is fine. Comment-stripped (decomment-go).
+rules:
+  - id: page-metric-input-types-no-duplicate-registry
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/metricmenu/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'map\[string\]\[\]string\{'
+    cure: "Page-metric input types live on the rule (metricspage.Aggregation.InputTypes); read via metricspage.DefaultPageTallyRules(). Do not resurrect a parallel map."
+    origin: scripts/check-page-metric-input-schema-single-source.sh

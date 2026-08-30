@@ -1,0 +1,46 @@
+# Ported from Palletra scripts/check-update-proto-requires-optional-fields.sh (Phase 5
+# re-audit WI-5). Every SCALAR field on an Update*Request message
+# (schema/proto/palletra/api/v1/) must be declared `optional` (or repeated) so
+# the Go server can distinguish "absent" from "cleared to the zero value" via
+# proto3 explicit presence. ModifyJobDialog silently no-op'd every clear of
+# notes/job_reference/tier_area/estimateDueDate on this defect.
+#
+# Ported as a forbidden-pattern (regexp2, multiline): inside a
+# `message Update<Name>Request { ... }` block, forbid a scalar field line
+# (string/int*/uint*/sint*/fixed*/float/double/bool/bytes) that is NOT prefixed
+# by `optional` or `repeated`. The lazy `[^}]*?` keeps the match within the
+# message body up to the first closing brace.
+#
+# FP FIX: the .sh's awk EXEMPTS mandatory-key field NAMES — it skips any field
+# whose name matches
+#   (^(id|selected_page_ids|new_value|password|email|name|outcome|status|slug|
+#      location|anchor_role|type)$ | _id$ | _ids$)
+# because a row-addressing key (annotation_id, project_id) or an inherently
+# required field (name, slug, status) is not user-clearable, so listing it
+# `optional` is nonsense. The port carried no exempt list, so it fired on clean
+# develop messages like UpdateAnnotationRequest.annotation_id,
+# UpdateVatRequest.project_id and UpdateOrganizationRequest.{name,slug} — all
+# exempt in the gate. Two negative lookaheads on the field name reproduce the
+# gate's exempt set: one for the literal name list, one for any *_id / *_ids
+# suffix. A non-exempt bare scalar (e.g. `notes`) still fires.
+#
+# DIVERGENCE (noted): (1) the .sh's awk also skips fields inside a `oneof { }`;
+# a single regex cannot robustly re-enter after a oneof's inner `}`, so this
+# ports the scalar-needs-optional invariant over the message body up to the
+# first brace (no Update*Request on develop nests a scalar oneof, so no FP).
+# (2) bare google.protobuf.Timestamp/Struct/Value are omitted from the
+# alternation here (message-typed tokens); the scalar primitives are the
+# load-bearing set.
+rules:
+  - id: update-proto-requires-optional-fields
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "schema/proto/palletra/api/v1/*.proto"
+    params:
+      syntax: regexp2
+      multiline: true
+      pattern: 'message Update\w*Request \{[^}]*?\n[ \t]*(?:string|int32|int64|uint32|uint64|sint32|sint64|fixed32|fixed64|float|double|bool|bytes)[ \t]+(?!(?:id|selected_page_ids|new_value|password|email|name|outcome|status|slug|location|anchor_role|type)[ \t]*=)(?!\w*_ids?[ \t]*=)\w+[ \t]*='
+    cure: "Mark the scalar field `optional` so the Go handler can call HasField(...) to tell 'absent' from 'cleared to zero'. For float/int/Timestamp that must express an explicit clear, add the canonical field path to UpdateProjectRequest.reset_fields (audit WI-5). Row-addressing keys (*_id) and inherently-required names (name/slug/status) are exempt."
+    origin: scripts/check-update-proto-requires-optional-fields.sh

@@ -1,0 +1,29 @@
+rules:
+  - id: flutter-force-fresh-not-a-client-control
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        # Generated Dart, and here the carve-out is the whole reason the rule
+        # can be an error: `skip_cache` IS a field on the server's upload
+        # request, so protoc-dart necessarily emits `skipCache` into *.pb.dart —
+        # which `(?i)skip_?cache` matches. The rule bans a FLUTTER CONTROL
+        # spelling it, not the generated client of the API that owns it. Every
+        # entry is live in the tree these rules came from and dead in this
+        # slice, which carries no codegen output. Preventative, not rot; see
+        # .formwork/lint.yaml.
+        - "**/generated/**"     # whole codegen trees
+        - "**/.dart_tool/**"    # pub/build_runner scratch, never source
+        - "**/*.g.dart"         # build_runner / json_serializable output
+        - "**/*.freezed.dart"   # freezed copyWith args spell every field name
+        - "**/*.pb.dart"        # protoc-dart — emits skipCache from skip_cache
+        - "**/*.pbenum.dart"    # protoc-dart enums
+        - "**/*.pbjson.dart"    # protoc-dart JSON descriptors (field names verbatim)
+        - "**/*.gr.dart"        # auto_route generated routing
+    params:
+      pattern: '(?i)skip_?cache'
+    cure: "force-fresh is a server/QA-set override; drive it via the upload API (force_refresh_extraction=true), never surface it as a Flutter control (server-owned-logic)."
+    origin: scripts/check-flutter-force-fresh-not-a-client-control.sh

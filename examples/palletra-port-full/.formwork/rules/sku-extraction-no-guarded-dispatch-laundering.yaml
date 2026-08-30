@@ -1,0 +1,28 @@
+# Ported from Palletra scripts/check-sku-extraction-single-gate.sh (#3022).
+# PARTIAL PORT — this captures RULE 4 (the one exemption-free invariant): an
+# explicit GatedDispatchFn( conversion launders a raw transport into a
+# "guarded" one and is FORBIDDEN everywhere, including skuwire itself.
+# GatedDispatchFn's only sanctioned constructor is skuwire.Guard, so any
+# explicit conversion bypasses the type system. Non-test Go, comments stripped.
+#
+# The gate's other five sub-rules (RULES 1,2,3,5,6) confine EnqueueSkuExtraction,
+# WithSkuExtractEnqueuer(, ComposeEnqueuer(, skujob.Run( and the
+# sku_extraction_enabled reader/writer each to a DIFFERENT canonical-owner
+# allowlist. A single forbidden-pattern rule shares one exclude set across its
+# pattern, so per-symbol allowlists cannot be expressed here — each would need
+# its own rule with its own except.paths. Those are noted, not ported, to avoid
+# a union-exclude that would be too permissive (a false negative).
+rules:
+  - id: sku-extraction-no-guarded-dispatch-laundering
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'GatedDispatchFn\('
+    cure: "GatedDispatchFn exists so ONLY skuwire.Guard can mint one; an explicit conversion launders an ungated transport past the type system (#3022)."
+    origin: scripts/check-sku-extraction-single-gate.sh

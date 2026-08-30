@@ -1,0 +1,25 @@
+# Ported from Palletra scripts/check-dart-base-packages-forbid-feature-imports.sh (audit #28
+# / #I4), RULE 1 — the infra→feature import ban. The base packages
+# (packages/plt_*) sit below every feature in the dependency order and MUST NOT
+# import a feature package (package:feature_*); doing so inverts the dependency
+# arrow and couples infra to a feature's internals. Ported as a forbidden-pattern
+# over packages/plt_*/lib banning an import|export of package:feature_. RULE 2
+# (feature→DIFFERENT-feature) needs own-package awareness (allow package:<self>_)
+# that a single line-pattern can't express, so it is not the arm ported here.
+rules:
+  - id: dart-base-packages-forbid-feature-imports
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/plt_*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+    params:
+      pattern: "^\\s*(import|export)\\s+['\"]package:feature_"
+    cure: "Invert the dependency: a base package (packages/plt_*) must never import a feature (package:feature_*). Inject the feature-specific value as a slot/argument, or move the genuinely-shared primitive DOWN into the base package."
+    origin: scripts/check-dart-base-packages-forbid-feature-imports.sh

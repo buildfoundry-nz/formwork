@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-go-cache-key-must-not-be-volatile.sh (#1361
+# Go-cache-thrash gate).
+#
+# The Go cache steps of .github/workflows/ci.yml must not re-introduce the
+# regressions that blew the 10 GB Actions cache budget: a VOLATILE_KEY (a `key:`
+# embedding a per-run/per-commit context — github.sha / run_id / run_number /
+# run_attempt / head.sha — writing a new immutable entry per commit), the
+# COMBINED_AUTOSAVE actions/cache@v4 (auto-saves on every PR), an UNGATED_SAVE,
+# a MISSING_SAVE, BROKEN_WIRING, or MISSING_PDFIUM_HASH.
+#
+# The gate is an indentation-driven YAML structural scan of one file — a shape
+# no declarative type captures — so it ports to the `command` escape hatch. The
+# command reproduces the load-bearing regression (the per-commit-churn key that
+# started #1361): it fails when a `key:` line embeds a per-run/per-commit
+# context. Scope-level finding — fire-1's Go cache key is volatile, pass-1's is
+# go.sum-stable.
+#
+# APPROXIMATION (noted): this reproduces the VOLATILE_KEY class only; the
+# indentation-driven job/step model that also detects COMBINED_AUTOSAVE,
+# UNGATED_SAVE, MISSING_SAVE, BROKEN_WIRING and MISSING_PDFIUM_HASH is not
+# modeled by the grep.
+rules:
+  - id: go-cache-key-must-not-be-volatile
+    type: command
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/ci.yml"
+    params:
+      cmd:
+        - "sh"
+        - "-c"
+        - "! grep -nE 'key:.*(github\\.sha|github\\.run_id|github\\.run_number|github\\.run_attempt|head\\.sha)' .github/workflows/ci.yml"
+      expect:
+        exit: 0
+    cure: "Go cache key must be go.sum-stable with no per-run suffix: actions/cache/restore@v4 (id set; key go-<job>-${{ runner.os }}-${{ hashFiles('freightworks/go.sum') }}) + a develop-gated actions/cache/save@v4 keyed on the restore id. See #1361."
+    origin: scripts/check-go-cache-key-must-not-be-volatile.sh

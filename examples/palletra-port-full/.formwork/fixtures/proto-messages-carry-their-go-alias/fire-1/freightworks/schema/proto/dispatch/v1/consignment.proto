@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package freightworks.dispatch.v1;
+
+// No go_package option, so the preprocessor has no alias to qualify with and
+// leaves the message bare — which is the violation this rule is about.
+
+message Consignment {
+  string id = 1;
+  string status = 2;
+}

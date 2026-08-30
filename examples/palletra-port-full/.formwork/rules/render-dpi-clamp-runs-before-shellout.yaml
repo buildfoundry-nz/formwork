@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-render-resolution-clamp.sh (Plan 4 Phase 11, PR
+# #7922). The BoundedRenderDPI memory-safety clamp MUST fire between the base-DPI
+# resolution and the `gm convert` shellout: an oversized A0 facility plan rendered
+# at the unclamped base DPI is ~247M raw RGBA pixels (~740MB) and OOMs the 4GB
+# Cloud Run worker. The .sh pins the first-call-site line ORDER inside the
+# rasterizer (comment lines stripped): deriveDPI -> resolveBoundedDPI clamp ->
+# runCLI shellout.
+#
+# Ported as go/call-order-in-func over the single-file rasterizer shape: within
+# the render func, the call sequence r.deriveDPI -> r.resolveBoundedDPI ->
+# r.runCLI must hold in source order. This faithfully captures the central
+# memory-safety invariant BOTH the .sh orderings encode — deriveDPI precedes
+# the clamp, and (the load-bearing one) the clamp precedes the shellout, so
+# runCLI can only ever consume a resolveBoundedDPI-clamped value.
+#
+# DIVERGENCE (noted): (a) the .sh ALSO accepts a split rasterizer.go +
+# rasterizer_cli.go shape where the clamp+shellout leg lives behind an
+# r.renderBuffered hop in a second file — a cross-file call-site ordering the
+# per-func analyzer does not model; the faithful single-file ordering is ported.
+# (b) the .sh's bypass guard — no stray r.runCLI( in any OTHER non-test package
+# file — is a package-wide presence assertion, not a per-func ordering, and is
+# omitted.
+rules:
+  - id: render-dpi-clamp-runs-before-shellout
+    type: go/call-order-in-func
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/pageraster/rasterizer/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      funcs: '^Render$'
+      sequence:
+        - 'r\.deriveDPI'
+        - 'r\.resolveBoundedDPI'
+        - 'r\.runCLI'
+    cure: "In the rasterizer Render flow, resolve the base DPI (r.deriveDPI), clamp it (r.resolveBoundedDPI), THEN shell out (r.runCLI) — in that order. runCLI must consume the clamped DPI, or an oversized A0 plan renders at the unclamped base DPI and OOMs the Cloud Run worker (Wave 6 / PR #7922)."
+    origin: scripts/check-render-resolution-clamp.sh

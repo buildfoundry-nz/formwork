@@ -1,0 +1,21 @@
+rules:
+  - id: no-per-row-formula-labor-write
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/calceval/**/*.go"
+        - "freightworks/services/core-api/internal/stockroom/commit/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      # A write to one of the batched targets — UPDATE palletra.bom_line_items,
+      # INSERT INTO platform.subcategory_labor_rates, INSERT INTO
+      # platform.labor_rate_lines — selects the statement.
+      table: '(?:UPDATE\s+palletra\.bom_line_items|INSERT\s+INTO\s+platform\.subcategory_labor_rates|INSERT\s+INTO\s+platform\.labor_rate_lines)'
+      # A selected statement MUST be set-based (unnest). A selected write with no
+      # unnest is the per-row shape the .sh's (?!unnest) lookahead forbids.
+      require:
+        - 'unnest'
+    cure: "Write bom_line_items quantities / labor rates in ONE set-based statement over unnest($1::…[], …), not a tx.Exec per row inside a loop (sweep-7 #8)."
+    origin: scripts/check-no-per-row-formula-labor-write.sh

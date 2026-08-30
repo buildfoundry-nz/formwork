@@ -1,0 +1,1 @@
+- go_touched glob does not cover replace target shared/generated/

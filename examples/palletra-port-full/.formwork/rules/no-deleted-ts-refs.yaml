@@ -1,0 +1,33 @@
+# Ported from Palletra scripts/check-no-refs-to-retired-ts-tree.sh (sweep-3 A3-3).
+# The zero-JS cutover deleted the entire React/Express TypeScript tree, so ANY
+# .ts/.tsx FILE-TOKEN in a non-test Go or Dart-library comment names a file that
+# cannot exist. Match shape = a file-token ending in a .ts/.tsx extension on a
+# word boundary: [[:alnum:]_./-]+\.tsx?\b (RE2 POSIX class + \b, no lookaround).
+# Trips on "client/src/x.tsx" / "useFoo.ts" but not on prose like "the .ts
+# extension" (no leading token char before the dot).
+#
+# Scope: freightworks Go (non-test) + Dart library source (frontend/lib +
+# packages/*/lib), generated/vendored trees pruned. *_test.go is exempt (a test
+# may legitimately quote a historical TS fixture path).
+rules:
+  - id: no-deleted-ts-refs
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*_test.go"
+        - "**/generated/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+    params:
+      pattern: '[[:alnum:]_./-]+\.tsx?\b'
+    cure: "The .ts/.tsx tree is deleted. Drop a trailing '(mirrors X.ts)' clause, or reword whole-sentence provenance to keep the behavior and drop the dead path ('Ports the writer surface to Go'). Never delete the whole comment."
+    origin: scripts/check-no-refs-to-retired-ts-tree.sh

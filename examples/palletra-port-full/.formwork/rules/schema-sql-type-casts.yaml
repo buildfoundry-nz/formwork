@@ -1,0 +1,46 @@
+# Ported from Palletra scripts/check-schema-sql-type-casts.sh. Every
+# schema-qualified type cast in production Go SQL (`::palletra.<name>` /
+# `::platform.<name>`) must reference a type or domain that actually exists in the
+# canonical schema (schema.snapshot.sql). A raw SQL string that casts to a
+# non-existent type compiles fine, passes unit tests, and fails ONLY at
+# query-plan time in prod — exactly how #8097 shipped
+# `'unit_spec'::palletra.extracted_line_type` (the enum is
+# palletra.item_type) and ground the dev detection queue.
+#
+# Ported as a set-relation SUBSET join:
+#   A = every schema-qualified cast `::(palletra|platform).<name>` in production
+#       Go (the `::` is dropped by the capture group, matching the .sh's sed).
+#   B = every `CREATE TYPE|DOMAIN palletra.<name> / platform.<name>` in the
+#       snapshot.
+# A subset of B: a cast to a type absent from the snapshot is the violation.
+# Built-in casts (::uuid, ::jsonb, ...) are not schema-qualified and never enter A.
+#
+# DIVERGENCE (noted for fidelity): the .sh exits 2 when grep itself errors
+# (refuses to guess); set-relation has no such infra-error channel — a clean
+# empty scan just yields empty sets. Test Go is out of scope (the .sh excludes
+# *_test.go because gate fixtures embed bad casts as data). Scope-level
+# finding (fire-1.want carries `-`).
+rules:
+  - id: schema-sql-type-casts
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+      exclude:
+        - "**/*_test.go"
+    params:
+      a:
+        files:
+          - "freightworks/**/*.go"
+        pattern: '::((?:palletra|platform)\.[a-z_][a-z0-9_]*)'
+        group: 1
+      b:
+        files:
+          - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+        pattern: 'CREATE (?:TYPE|DOMAIN) ((?:palletra|platform)\.[a-z_][a-z0-9_]*)'
+        group: 1
+      relation: subset
+    cure: "A schema-qualified SQL cast must name a type/domain defined in schema.snapshot.sql. Fix the type name to match the schema (e.g. palletra.item_type, not palletra.extracted_line_type), or drop the cast and let the column's type coerce the literal (#8097)."
+    origin: scripts/check-schema-sql-type-casts.sh

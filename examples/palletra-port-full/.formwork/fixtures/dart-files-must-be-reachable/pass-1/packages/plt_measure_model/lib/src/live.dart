@@ -1,0 +1,3 @@
+class LiveState {
+  const LiveState();
+}

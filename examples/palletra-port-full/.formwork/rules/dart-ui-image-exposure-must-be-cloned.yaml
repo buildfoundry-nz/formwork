@@ -1,0 +1,128 @@
+# Ported from Palletra
+# scripts/check-dart-ui-image-exposure-must-be-cloned.sh (sweep-3 #1 /
+# sweep-4 #7 / sweep-5 #2).
+#
+# A cache that FREES decoded `ui.Image` bitmaps (`.dispose()` on LRU eviction /
+# sign-out flush) while ALSO EXPOSING them to a painter is a use-after-dispose
+# crash. The ownership fix: every exposed handle must be a fresh
+# `ui.Image.clone()`, un-laundered (not immediately `..dispose()`d). The .sh is
+# a bespoke signature-aware awk (pre-joins wrapped signatures, tracks brace
+# depth, classifies arrow/getter/block/raw-field exposures). No declarative
+# formwork type models "a method whose ui.Image return value must be a clone",
+# so this maps to the command escape hatch: a self-contained python that
+# reproduces the core detector — a file that STORES a ui.Image field AND calls
+# .dispose() must clone every public ui.Image exposure (arrow, getter, block
+# return), and must not launder the clone with a trailing dispose. A
+# constructor-injected `final ui.Image x;` (no initializer) input is exempt.
+# Scope-level finding; fire-1 exposes the raw field, pass-1 clones it.
+rules:
+  - id: dart-ui-image-exposure-must-be-cloned
+    type: command
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import os, re, sys
+          skip_dirs = {".dart_tool", "build", "node_modules", ".git"}
+          field_re = re.compile(
+              r"^\s+(final\s+|late\s+|var\s+|const\s+)*"
+              r"((Set|List|Map|Iterable|Stream)<[^=;(]*ui\.Image[^=;(]*>|ui\.Image\??)"
+              r"\s+[A-Za-z_]\w*\s*[=;]")
+          def reportable(rhs):
+              if re.search(r"(^|[^A-Za-z0-9_])null([^A-Za-z0-9_]|$)", rhs):
+                  return False
+              if ".clone()" in rhs and "dispose(" not in rhs:
+                  return False
+              return True
+          def strip_mods(s):
+              s = s.lstrip()
+              while True:
+                  n = re.sub(r"^(static|final|late|const|external|covariant)\s+", "", s)
+                  if n == s:
+                      return n
+                  s = n
+          def exposure_name(decl):
+              # decl has modifiers stripped and starts with a ui.Image-bearing type
+              h = re.split(r"(=>|\{|;)", decl, 1)[0]
+              if re.search(r"(^|[^A-Za-z0-9_])get\s", h):
+                  m = re.search(r"[^A-Za-z0-9_]get\s+([A-Za-z_]\w*)", h)
+                  return m.group(1) if m else ""
+              if "(" in h:
+                  return re.sub(r"\(.*", "", h).split()[-1]
+              return h.split()[-1] if h.split() else ""
+          def is_ui_return(decl):
+              if re.match(r"ui\.Image\??[\s]", decl):
+                  return True
+              if re.match(r"(Future|List|Set|Iterable|Stream)<[^>]*ui\.Image[^>]*>\s", decl):
+                  return True
+              return False
+          viol = []
+          for root, dirs, files in os.walk("."):
+              dirs[:] = [d for d in dirs if d not in skip_dirs]
+              for fn in files:
+                  if not fn.endswith(".dart") or fn.endswith(".g.dart") or fn.endswith(".freezed.dart"):
+                      continue
+                  path = os.path.join(root, fn)
+                  try:
+                      lines = open(path, errors="ignore").read().split("\n")
+                  except OSError:
+                      continue
+                  text = "\n".join(lines)
+                  if "ui.Image" not in text or ".dispose()" not in text:
+                      continue
+                  if not any(field_re.match(l) for l in lines):
+                      continue  # no stored ui.Image field: a minting factory is exempt
+                  inblock = False
+                  bdepth = 0
+                  for ln, line in enumerate(lines, 1):
+                      if inblock:
+                          if re.search(r"(^|[^.A-Za-z0-9_])return\s", line):
+                              rhs = re.sub(r".*return\s+", "", line)
+                              if reportable(rhs):
+                                  viol.append("%s:%d block return of a raw/laundered ui.Image" % (path, ln))
+                          bdepth += line.count("{") - line.count("}")
+                          if bdepth <= 0:
+                              inblock = False
+                          continue
+                      if not line[:1].isspace():
+                          continue  # top-level function: consumers only get a clone
+                      decl = strip_mods(line)
+                      if not is_ui_return(decl):
+                          continue
+                      name = exposure_name(decl)
+                      if name.startswith("_"):
+                          continue
+                      # public raw field: `<uitype> name [= init];`
+                      if line.rstrip().endswith(";") and "(" not in line and "=>" not in line and not re.search(r"(^|[^A-Za-z0-9_])get\s", line):
+                          if re.search(r"(^|[^A-Za-z0-9_])final\s", line) and "=" not in line:
+                              continue  # constructor-injected input, not owned
+                          viol.append("%s:%d public raw ui.Image field exposure" % (path, ln))
+                          continue
+                      if "=>" in line:
+                          rhs = re.sub(r".*=>", "", line)
+                          if reportable(rhs):
+                              viol.append("%s:%d arrow exposure of a raw/laundered ui.Image" % (path, ln))
+                          continue
+                      if line.rstrip().endswith("{"):
+                          inblock = True
+                          bdepth = line.count("{") - line.count("}")
+                          if bdepth <= 0:
+                              inblock = False
+          if viol:
+              for v in viol:
+                  sys.stderr.write(v + "\n")
+              sys.exit(1)
+          sys.exit(0)
+      expect:
+        exit: 0
+    cure: "Return image.clone() (NOT laundered with ..dispose()) from every exposing method/getter so the cache frees only its private handle; expose a clone via a getter instead of a public raw ui.Image field."
+    origin: scripts/check-dart-ui-image-exposure-must-be-cloned.sh

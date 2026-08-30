@@ -1,0 +1,1 @@
+- scripts/check-example-gate.go targets a path that no longer exists: freightworks/services/core-api/internal/gone

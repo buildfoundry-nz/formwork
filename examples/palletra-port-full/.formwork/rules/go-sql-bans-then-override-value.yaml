@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-go-sql-retired-column-tokens.sh + retired-column-tokens.tsv
+# row `then-override-value` (mode joined-regex). Bans the hand-rolled
+# `CASE ... THEN adjusted_value` reading of the effective metric value, whose one
+# canonical spelling is COALESCE(adjusted_value, value) (#6722). The .sh matches
+# an ERE over the file's space-joined string-literal contents; ported with
+# preprocess: strings-only-go and a per-line RE2. NOTE the divergence: the .sh
+# joins literals across newlines, so a formatter-wrapped `THEN`\n`adjusted_value`
+# it catches, a per-line match does not — same-line uses (the common form) fire.
+rules:
+  - id: go-sql-bans-then-override-value
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: strings-only-go
+    params:
+      pattern: 'THEN\s+([A-Za-z_][A-Za-z0-9_]*\.)?adjusted_value'
+    cure: "The effective metric value has one canonical spelling COALESCE(adjusted_value, value); replace the hand-rolled CASE ... THEN adjusted_value reading (#6722)."
+    origin: scripts/check-go-sql-retired-column-tokens.sh

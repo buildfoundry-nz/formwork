@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-arbitrator-worker-only.sh (#5046) — Rule B.
+# The LLM-decision verbs skuarbitrate.ComposePrompt/Decide/ArbitrationSchema
+# run ONLY in the async Cloud Tasks worker (internal/ratecardarbitratejob).
+# A caller anywhere else — a route, the sidebar hot read — leaks the Gemini
+# decision onto a hot path (the #5046 "Gemini leaked onto the read" regression).
+# The worker package, the offline eval CLI (cmd/extraction-eval), and *_test.go
+# are exempt.
+rules:
+  - id: arbitrator-decision-worker-only
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/services/core-api/internal/ratecardarbitratejob/**"
+        - "freightworks/services/core-api/cmd/extraction-eval/**"
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'skuarbitrate\.(ComposePrompt|Decide|ArbitrationSchema)\('
+    cure: "The read consumes a pre-resolved verdict; run skuarbitrate.ComposePrompt/Decide/ArbitrationSchema only inside the ratecardarbitratejob worker (#5046)."
+    origin: scripts/check-arbitrator-worker-only.sh

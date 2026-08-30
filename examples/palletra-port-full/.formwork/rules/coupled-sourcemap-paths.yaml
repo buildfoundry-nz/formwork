@@ -1,0 +1,75 @@
+# Ported from Palletra scripts/check-coupled-sourcemap-paths.sh (epic #5848 C3-6).
+# The source-map object path exists in THREE coupled surfaces that must never
+# diverge: the Go read path (symbolicate.go's fmt.Sprintf("sourcemaps/%s/
+# main.dart.js.map", buildID) — the single source of truth), the deploy
+# workflow's gs:// upload destination, and the client build-id env-key
+# (app_config.dart's buildId: String.fromEnvironment('<KEY>'), which the
+# workflow must set via --dart-define=<KEY>=<seg> to the SAME build-id segment
+# the map is uploaded under). Rename any one alone and every stack silently
+# falls back to raw with NO error.
+#
+# PORT MAPPING: this DERIVES the object key from Go source, the env-key from
+# Dart source, and then correlates both against every --source-maps workflow's
+# upload path + --dart-define — a three-file build-graph correlation no single
+# declarative rule expresses. It uses the ESCAPE HATCH: a command rule that
+# reproduces the coupling over the fixture tree. fire-1 uploads under one
+# build-id segment while --dart-define keys a different one (the silent
+# glyphindex miss); pass-1 keeps all three in lock-step.
+rules:
+  - id: coupled-sourcemap-paths
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          set -u
+          GO_SRC="freightworks/services/core-api/internal/glyphindex/symbolicate.go"
+          APP_CFG="packages/plt_core/lib/config/app_config.dart"
+          [ -f "$GO_SRC" ] || { echo "re-anchor: $GO_SRC missing" >&2; exit 2; }
+          [ -f "$APP_CFG" ] || { echo "re-anchor: $APP_CFG missing" >&2; exit 2; }
+
+          # The Go read key is the single source of truth for the object shape.
+          KEY_FMT=$(grep -oE '"sourcemaps/%s/[A-Za-z0-9._-]+"' "$GO_SRC" | head -1 | tr -d '"')
+          [ -n "$KEY_FMT" ] || { echo "re-anchor: no sourcemaps/%s/... literal in Go read path" >&2; exit 2; }
+          SUFFIX="${KEY_FMT##*%s}"   # /main.dart.js.map
+
+          # The env-key the client reads for build_id is the single source of
+          # truth for the --dart-define name the workflow must set.
+          KEY=$(grep -oE "buildId:[[:space:]]*String\.fromEnvironment\('[^']+'" "$APP_CFG" \
+                | grep -oE "'[^']+'" | tr -d "'" | head -1)
+          [ -n "$KEY" ] || { echo "re-anchor: no buildId env-key in app_config.dart" >&2; exit 2; }
+
+          esuffix=$(printf '%s' "$SUFFIX" | sed 's/[.]/\\./g')
+          fail=0; found=0
+          for wf in .github/workflows/*.yml .github/workflows/*.yaml; do
+            [ -f "$wf" ] || continue
+            grep -q -- '--source-maps' "$wf" || continue
+            found=1
+            obj=$(grep -oE "sourcemaps/[^/]+${esuffix}" "$wf" | head -1)
+            if [ -z "$obj" ]; then
+              echo "FAIL ${wf}: no gs:// upload targets the Go read key ${KEY_FMT}" >&2
+              fail=1; continue
+            fi
+            seg="${obj#sourcemaps/}"; seg="${seg%$SUFFIX}"
+            def=$(grep -oE -- "--dart-define=${KEY}=[^ ].*" "$wf" | head -1 \
+                  | sed -E "s/^--dart-define=${KEY}=//" | sed -E 's/[[:space:]]+$//')
+            if [ -z "$def" ]; then
+              echo "FAIL ${wf}: sets no --dart-define=${KEY} (client sends no build_id)" >&2
+              fail=1; continue
+            fi
+            if [ "$def" != "$seg" ]; then
+              echo "FAIL ${wf}: client ${KEY} '${def}' != upload build-id segment '${seg}'" >&2
+              fail=1
+            fi
+          done
+          [ "$found" -eq 1 ] || { echo "OK: no --source-maps workflow present"; exit 0; }
+          exit $fail
+      expect:
+        exit: 0
+    cure: "Derive the source-map object key from symbolicate.go and the build-id env-key from app_config.dart; every --source-maps workflow must upload to sourcemaps/<seg>/main.dart.js.map AND set --dart-define=<KEY>=<seg> to the SAME segment. Rename on any of the three surfaces hard-fails (epic #5848 C3-6)."
+    origin: scripts/check-coupled-sourcemap-paths.sh

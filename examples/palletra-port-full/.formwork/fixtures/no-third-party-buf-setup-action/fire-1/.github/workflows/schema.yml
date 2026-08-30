@@ -1,0 +1,9 @@
+name: schema
+on: [push]
+jobs:
+  buf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bufbuild/buf-setup-action@v1 # want: no-third-party-buf-setup-action
+      - run: buf lint

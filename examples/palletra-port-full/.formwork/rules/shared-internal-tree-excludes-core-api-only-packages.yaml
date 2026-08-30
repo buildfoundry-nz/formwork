@@ -1,0 +1,51 @@
+# Ported from Palletra scripts/check-shared-internal-tree-excludes-core-api-only-packages.sh (SV-ARC-8).
+# The monorepo has a SHARED internal tree (freightworks/internal/) and a
+# core-api-only tree (freightworks/services/core-api/internal/). A package parked
+# in the shared tree whose only importers are under services/core-api/ is
+# core-api-only code masquerading as shared, and must be relocated. THERE IS NO
+# GRANDFATHER LIST — every core-api-only package in the shared tree FAILs.
+#
+# PORT MAPPING: the .sh builds the intra-module import graph and runs a POSIX-awk
+# transitive-reachability BFS from the core roots and the non-core-api `main`
+# roots, then subtracts the sets. That is a whole-tree graph analysis, not a
+# declarative per-file predicate, so it uses the ESCAPE HATCH: a command rule
+# reproducing the placement test over the fixture tree. Port simplification: this
+# command uses DIRECT-importer reachability (a shared-tree package is "shared"
+# iff some importer lives outside services/core-api/) rather than the .sh's
+# transitive BFS; on the fixture the two agree. fire-1 has an internal/ package
+# imported only by core-api (exit 1); pass-1 has the same package additionally
+# imported by a non-core-api main (exit 0).
+rules:
+  - id: shared-internal-tree-excludes-core-api-only-packages
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          modprefix='github.com/palletra/freightworks/'
+          fail=0
+          for pkgdir in freightworks/internal/*/; do
+            [ -d "$pkgdir" ] || continue
+            pkg="${pkgdir#freightworks/}"; pkg="${pkg%/}"
+            imp="${modprefix}${pkg}"
+            core=0; shared=0
+            while IFS= read -r f; do
+              case "$f" in *_test.go) continue ;; esac
+              grep -q "\"${imp}\"" "$f" 2>/dev/null || continue
+              case "$f" in
+                freightworks/services/core-api/*) core=1 ;;
+                *)                               shared=1 ;;
+              esac
+            done < <(find freightworks -name '*.go' -type f)
+            if [ "$core" -eq 1 ] && [ "$shared" -eq 0 ]; then fail=1; fi
+          done
+          exit $fail
+      expect:
+        exit: 0
+    cure: "A package under freightworks/internal/ imported only by services/core-api/ belongs in the core-api tree: move it to freightworks/services/core-api/internal/<pkg>/, or give it a genuine non-core-api importer. There is no baseline — SV-ARC-8 finished and #4546 removed the grandfather list."
+    origin: scripts/check-shared-internal-tree-excludes-core-api-only-packages.sh

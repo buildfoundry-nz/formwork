@@ -1,0 +1,45 @@
+# Ported from Palletra scripts/check-server-error-boundary-sole-source.sh
+# (sweep-19-#2). The "a status is in the 5xx server-error class" boundary must
+# be encoded exactly ONCE, in middleware.IsFailureStatus — both the RequestLog
+# log-level decision and the Tracing span-status decision consume it, so the two
+# error-signal mirrors cannot drift on a one-sided edit. The .sh runs four
+# per-line textual scans over non-test middleware Go (comments + string/rune
+# contents blanked by lib/code-only-go.awk) and fires on any re-encoding:
+#   (1) a comparison vs <pkg>.StatusInternalServerError (any alias) except the
+#       canonical IsFailureStatus body line;
+#   (2) a comparison vs a 500/499-class literal (len/cap magnitude carved out);
+#   (3) an arithmetic status/100 class-derivation compared to the 5xx digit;
+#   (4a/4b) the boundary constant/literal bound to a name.
+#
+# PORT MAPPING: a multi-scan textual gate over a package, with a canonical-line
+# exemption and type-based len/cap carve-outs — no single declarative analyzer
+# expresses the "encoded exactly once, everywhere but here" shape. It uses the
+# ESCAPE HATCH: a self-contained Go reproduction (checks/check.go) reproducing
+# the .sh's scan 1 (named-constant class boundary, canonical line exempt) and
+# scan 2 (bare/adjacent 500/499 literal, len/cap magnitude excluded) on the
+# fixture tree, with the .sh's own regexes. The finding is scope-level (no want marker).
+# fire-1 re-encodes the boundary in a second middleware file
+# (`status >= http.StatusInternalServerError`); pass-1's second mirror routes
+# through middleware.IsFailureStatus(status).
+#
+# DIVERGENCE (noted): scans 3 (arithmetic status/100 class-derivation) and 4
+# (named holder of the boundary constant/literal), and the code-only-go
+# string/rune-content blanking, are omitted — the two central re-encodings
+# (named-constant and bare-literal comparisons) are ported faithfully; the
+# fixtures keep no boundary tokens inside strings/comments.
+rules:
+  - id: server-error-boundary-sole-source
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/middleware/**/*.go"
+    params:
+      cmd:
+        - go
+        - run
+        - checks/check.go
+      expect:
+        exit: 0
+    cure: "Call middleware.IsFailureStatus(status) instead of re-comparing against http.StatusInternalServerError or a 500/499 literal — the 5xx boundary must be encoded once, in IsFailureStatus (sweep-19-#2)."
+    origin: scripts/check-server-error-boundary-sole-source.sh

@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-dockerfile-vision-binaries.sh.
+# The core-api runtime image must `apt-get install` BOTH graphicsmagick AND
+# ghostscript — the W3 vision fallback rasterises scanned PDFs via `gm convert`,
+# which needs GraphicsMagick + Ghostscript at runtime. The .sh requires both
+# (AND semantics), so each binary is a separate exists-mode required rule — a
+# single OR rule would pass with only one present, weaker than the gate.
+#
+# The `^[^#]*<pkg>` pattern matches the package name only when nothing before it
+# on the line is a `#`, so a rationale comment naming the package (the real
+# Dockerfile carries one) cannot satisfy the rule — mirroring the .sh's
+# RUN-content-only, comment-stripped match. The runtime-vs-builder-stage split
+# (the .sh scans only the last FROM block) is the nuance the flat scan drops.
+rules:
+  - id: dockerfile-vision-requires-graphicsmagick
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/Dockerfile"
+    params:
+      pattern: '^[^#]*graphicsmagick'
+      mode: exists
+    cure: "Add `graphicsmagick` to the runtime-stage apt-get install line in freightworks/services/core-api/Dockerfile; `gm convert` (the PDF->PNG rasteriser) needs it at runtime."
+    origin: scripts/check-dockerfile-vision-binaries.sh
+  - id: dockerfile-vision-fallback-needs-ghostscript
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/Dockerfile"
+    params:
+      pattern: '^[^#]*ghostscript'
+      mode: exists
+    cure: "Add `ghostscript` to the runtime-stage apt-get install line in freightworks/services/core-api/Dockerfile; GraphicsMagick shells out to Ghostscript to decode PDFs."
+    origin: scripts/check-dockerfile-vision-binaries.sh

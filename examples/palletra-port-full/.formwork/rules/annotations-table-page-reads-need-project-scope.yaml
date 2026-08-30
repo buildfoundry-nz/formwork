@@ -1,0 +1,33 @@
+# Ported from Palletra scripts/check-annotations-table-page-reads-need-project-scope.sh
+# (#7491, Finding #1). palletra.annotations has NO page_id-leading index; its
+# only page-covering index is idx_annotation_project_page (project_id, page_id). A read
+# that value-filters the ANNOTATIONS alias's page_id WITHOUT a matching project_id
+# predicate in the same SQL literal cannot seek that composite and degrades to a
+# partition scan.
+#
+# FP FIX (was: alias-agnostic). The .sh is PER-ALIAS: it binds each alias to
+# palletra.annotations and checks THAT alias's `<alias>.page_id`. The port pattern
+# looked for ANY `.page_id =` inside a literal that merely mentioned annotations, so
+# a JOIN like `FROM ...associations a JOIN palletra.annotations ann ON ann.id=...
+# WHERE a.page_id=$1` false-fired: the value-filtered page_id belongs to a DIFFERENT
+# alias (`a`), while the annotations alias (`ann`) is reached by its PK and has no
+# page_id filter at all (internal/scalesuggest/db.go). Fixed by capturing the
+# alias bound to annotations (?<al>) and requiring THAT alias's page_id be
+# value-filtered with no THAT-alias project_id — the .sh's per-alias shape.
+rules:
+  - id: annotations-table-page-reads-need-project-scope
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/**/internal/scan/annotation/**"
+    params:
+      syntax: regexp2
+      multiline: true
+      pattern: "`(?=[^`]*palletra\\.annotations\\s+(?<al>[A-Za-z_][A-Za-z0-9_]*))(?=[^`]*\\b\\k<al>\\.page_id\\s*=\\s*(?:\\$|ANY|ARRAY|\\(|'|[0-9]))(?![^`]*\\b\\k<al>\\.project_id)[^`]*`"
+      prefilter: 'annotations'
+    cure: "An annotations page read/mutation that value-filters that alias's page_id must carry a matching <alias>.project_id predicate in the SAME SQL literal, so it seeks idx_annotation_project_page (project_id leads page_id) instead of scanning the partition (#7491). Add the project_id predicate, or route through internal/scan/annotation's canonical constant."
+    origin: scripts/check-annotations-table-page-reads-need-project-scope.sh

@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-integration-test-harness-usage.sh
+# (issue #7143 gate).
+#
+# ~40 internal packages hand-rolled the integration-test DB preamble per test
+# (migrations.Run(dsn) → db.NewPool(ctx, dsn) → GuaranteeServiceRoleGrants), each
+# opening a fresh pgxpool through the IAP tunnel until the tunnel became
+# unreliable mid-run. The cure is a single once-guarded shared pool,
+# testharness.Pool(t). Any *_test.go that calls BOTH `migrations.Run(` AND
+# `db.NewPool(` is a hand-rolled preamble and fails — a brand-new package that
+# hand-rolls it is caught immediately.
+#
+# Ported as a same-file CO-OCCURRENCE forbidden-pattern in linear RE2: the origin
+# is `grep -q "migrations.Run(" && grep -q "db.NewPool("` (order-independent
+# whole-file), so the line-anchored trigger migrations.Run( + require_present
+# db.NewPool( replaces the regexp2 alternation. It fires exactly once on the first
+# migrations.Run( line (the fixture want-marker). Five package prefixes are exempt
+# (testharness itself + the two packages it imports = import-cycle roots, the
+# gate synth dir, and routes/testsupport) via scope.exclude.
+rules:
+  - id: m06-integration-tests-use-harness
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*_test.go"
+      exclude:
+        - "freightworks/internal/testharness/**"
+        - "freightworks/internal/db/**"
+        - "freightworks/services/core-api/migrations/**"
+        - "freightworks/internal/gatetests/**"
+        - "freightworks/services/core-api/routes/testsupport/**"
+    params:
+      pattern: 'migrations\.Run\('
+      require_present:
+        - 'db\.NewPool\('
+      prefilter: 'migrations'
+    cure: "Replace the hand-rolled preamble (migrations.Run + db.NewPool) with `pool := testharness.Pool(t)` (github.com/palletra/freightworks/internal/testharness) — a single once-guarded shared pool. This is a permanent full-module gate with no opt-out; convert the test."
+    origin: scripts/check-integration-test-harness-usage.sh

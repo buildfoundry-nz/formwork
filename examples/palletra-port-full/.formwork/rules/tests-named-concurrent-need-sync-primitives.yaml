@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-tests-named-concurrent-need-sync-primitives.sh
+# (sweep-16 #5). A Go test whose name contains "Concurrent" claims to exercise
+# a race/interleaving; if its body uses no synchronisation primitive the racking
+# is decorative and the test proves a different path than its name suggests.
+#
+# The .sh is per-function (awk brace-walk); formwork's simplest faithful capture
+# is file-level pair-consistency: a file that declares a `func Test*Concurrent*(`
+# (trigger) must also contain at least one sync primitive somewhere in the same
+# file (requires) — `go func`, `sync.WaitGroup`, `make(chan`, a `pgxtest.`
+# interleave helper, or the inline `sweep-16-#5-concurrent-allowlist:` opt-out.
+# internal/gatetests (synthetic-violation fixtures) is excluded, matching
+# the .sh. The per-function granularity (a conformant sibling test cannot mask a
+# divergent one) is the nuance lost by the file-level approximation.
+rules:
+  - id: tests-named-concurrent-need-sync-primitives
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*_test.go"
+      exclude:
+        - "**/internal/gatetests/**"
+    params:
+      trigger: 'func Test[A-Za-z0-9_]*Concurrent[A-Za-z0-9_]*\('
+      requires: 'go\s+func|sync\.WaitGroup|make\(chan|pgxtest\.|sweep-16-#5-concurrent-allowlist:'
+    cure: "A *Concurrent* test must exercise real concurrency: launch a `go func`, coordinate with `sync.WaitGroup`/`make(chan`, or use a `pgxtest.` interleave helper. To opt out, add an inline `// sweep-16-#5-concurrent-allowlist: <reason>` comment in the test body."
+    origin: scripts/check-tests-named-concurrent-need-sync-primitives.sh

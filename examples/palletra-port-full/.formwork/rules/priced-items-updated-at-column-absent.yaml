@@ -1,0 +1,32 @@
+# Ported from scripts/check-priced-items-updated-at-column-absent.sh (sweep-16 #13).
+# platform.priced_lines has no updated_at column, so an UPDATE that sets
+# updated_at is SQLSTATE 42703. The .sh matches the multiline `UPDATE
+# platform.priced_lines … updated_at =` block with rg -U.
+#
+# FALSE-POSITIVE FIX. The earlier port collapsed that statement-scoped tie to a
+# blanket line-level ban on any `updated_at =` in stockroom_priced_lines*.go — but
+# stockroom_priced_lines_bulk.go also runs `UPDATE platform.rate_sources … SET
+# updated_at = now() … WHERE id IN (SELECT … FROM platform.priced_lines …)`:
+# rate_sources DOES have updated_at, and priced_lines only appears in the
+# subquery FROM, so the blanket ban false-fired on clean develop. Re-ported as
+# `sql/statement-predicate`, which reassembles the multi-line SQL held in each Go
+# string literal and evaluates it PER STATEMENT (the shell gate's exact scope):
+# only a statement whose text carries `UPDATE platform.priced_lines` is selected,
+# and it fails iff it also assigns `updated_at =`. The rate_sources UPDATE is
+# not selected (its target is not priced_lines); a real `UPDATE
+# platform.priced_lines … SET updated_at = …` still fires.
+rules:
+  - id: priced-items-updated-at-column-absent
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/routes/**/stockroom_priced_lines*.go'
+      exclude:
+        - '**/*_test.go'
+    params:
+      table: 'UPDATE\s+platform\.priced_lines\b'
+      forbid:
+        - 'updated_at\s*='
+    cure: 'platform.priced_lines has no updated_at column (sweep-16 #13); never write updated_at in an UPDATE platform.priced_lines statement.'
+    origin: scripts/check-priced-items-updated-at-column-absent.sh

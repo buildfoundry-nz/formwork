@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-page-geometry-route-drops-textruns.sh (sweep-1 PR #3740 #1).
+# The geometry wire envelope is dims/units/identity ONLY; dense text runs stay at
+# rest for the server-side search consumer (#1297). Two coupled invariants:
+#
+#   Rule 1 (required) — routes/page_layout/page_layout.go must contain the
+#            UNCOMMENTED strip `geo.TextRuns = nil` before serving. decomment-go
+#            blanks comments so a commented strip does not satisfy it.
+#   Rule 2 (forbidden) — no Flutter source (frontend/lib + packages/*/lib) outside
+#            generated files may reference `.textRuns` — a field the route strips.
+rules:
+  - id: page-geometry-route-drops-textruns
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/page_layout/page_layout.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'geo\.TextRuns[[:space:]]*=[[:space:]]*nil'
+      mode: exists
+    cure: "Keep (or un-comment) `geo.TextRuns = nil` in the page_layout handler before the serve (sweep-1 #1)."
+    origin: scripts/check-page-geometry-route-drops-textruns.sh
+
+  - id: flutter-forbids-textruns-field
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/generated/**"
+        - "**/.dart_tool/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+    params:
+      pattern: '\.textRuns'
+    cure: "The route strips text runs from the wire; an FE feature needing text matches calls the #1297 server-side endpoint, never .textRuns (sweep-1 #1)."
+    origin: scripts/check-page-geometry-route-drops-textruns.sh

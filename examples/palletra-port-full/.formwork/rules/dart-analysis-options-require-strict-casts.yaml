@@ -1,0 +1,106 @@
+# Ported from Palletra scripts/check-dart-analyzer-strictness.sh (required-anchor).
+# Pins the strict Dart analyzer posture. The .sh checks EACH present
+# analysis_options.yaml, so the required pins use mode: every-file (each in-scope
+# file missing the anchor fires), which is the faithful semantics — mode: exists
+# would pass a tree where only one of many configs is strict. The permissive-flag
+# bans (implicit-casts/implicit-dynamic on) are forbidden-pattern.
+#
+# Scope note: limb 0 (#2816 — every pub-workspace member owning hand-authored
+# Dart MUST HAVE its own analysis_options.yaml) is a structural presence check,
+# not a line pattern, and is not portable to forbidden/required-pattern (see
+# notes). The 13 required-lint pins follow the identical every-file shape as the
+# strict-flag rules below and are represented here by the L5 promotion pin.
+rules:
+  - id: dart-analysis-options-require-strict-casts
+    type: required-pattern
+    scope:
+      include:
+        - "**/analysis_options.yaml"
+      exclude:
+        - "**/node_modules/**"
+        - "**/.dart_tool/**"
+        - "**/build/**"
+        - "**/vendor/**"
+    params:
+      pattern: '^\s+strict-casts:\s+true\s*$'
+      mode: every-file
+    cure: "Every analysis_options.yaml must set analyzer.language.strict-casts: true."
+    origin: scripts/check-dart-analyzer-strictness.sh
+
+  - id: dart-analyzer-strictness-strict-inference-required
+    type: required-pattern
+    scope:
+      include:
+        - "**/analysis_options.yaml"
+      exclude:
+        - "**/node_modules/**"
+        - "**/.dart_tool/**"
+        - "**/build/**"
+        - "**/vendor/**"
+    params:
+      pattern: '^\s+strict-inference:\s+true\s*$'
+      mode: every-file
+    cure: "Every analysis_options.yaml must set analyzer.language.strict-inference: true."
+    origin: scripts/check-dart-analyzer-strictness.sh
+
+  - id: dart-analyzer-strictness-strict-raw-types-required
+    type: required-pattern
+    scope:
+      include:
+        - "**/analysis_options.yaml"
+      exclude:
+        - "**/node_modules/**"
+        - "**/.dart_tool/**"
+        - "**/build/**"
+        - "**/vendor/**"
+    params:
+      pattern: '^\s+strict-raw-types:\s+true\s*$'
+      mode: every-file
+    cure: "Every analysis_options.yaml must set analyzer.language.strict-raw-types: true."
+    origin: scripts/check-dart-analyzer-strictness.sh
+
+  - id: dart-analyzer-strictness-context-sync-error-promoted
+    type: required-pattern
+    scope:
+      include:
+        - "**/analysis_options.yaml"
+      exclude:
+        - "**/node_modules/**"
+        - "**/.dart_tool/**"
+        - "**/build/**"
+        - "**/vendor/**"
+    params:
+      pattern: '^\s+use_build_context_synchronously:\s+error\s*$'
+      mode: every-file
+    cure: "Every analysis_options.yaml must promote use_build_context_synchronously: error under analyzer.errors (audit L5 / #2816)."
+    origin: scripts/check-dart-analyzer-strictness.sh
+
+  - id: dart-analyzer-strictness-implicit-casts-banned
+    type: forbidden-pattern
+    scope:
+      include:
+        - "**/analysis_options.yaml"
+      exclude:
+        - "**/node_modules/**"
+        - "**/.dart_tool/**"
+        - "**/build/**"
+        - "**/vendor/**"
+    params:
+      pattern: '^\s+implicit-casts:\s+true\s*$'
+    cure: "implicit-casts must be false; setting it true re-opens implicit downcasts across the whole package."
+    origin: scripts/check-dart-analyzer-strictness.sh
+
+  - id: dart-analyzer-strictness-implicit-dynamic-banned
+    type: forbidden-pattern
+    scope:
+      include:
+        - "**/analysis_options.yaml"
+      exclude:
+        - "**/node_modules/**"
+        - "**/.dart_tool/**"
+        - "**/build/**"
+        - "**/vendor/**"
+    params:
+      pattern: '^\s+implicit-dynamic:\s+true\s*$'
+    cure: "implicit-dynamic must be false; setting it true re-opens implicit dynamic across the whole package."
+    origin: scripts/check-dart-analyzer-strictness.sh

@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-routes-log-gate-always-runs.sh (#4026
+# review #3/#4). check-routes-log-pre-500.sh scans the ENTIRE routes tree; it
+# must run on every non-docs PR/push (the always-run guardrail
+# job, `if: diff_scope != 'docs'`), NOT only when Go changed — that whole-tree
+# pass is the promotion-boundary backstop that re-catches a 500-without-log
+# which reached develop out-of-band before a Dart-only/config-only PR promotes
+# it develop->staging->main. A go/ast rewrite once needed `go` on PATH and the
+# gate was moved into the go_touched-gated integration job, silently narrowing
+# the backstop; this meta-lock makes the narrowing impossible.
+#
+# Invariant: in .github/workflows/ci.yml the job whose step invokes
+# check-routes-log-pre-500.sh MUST be guarded by `diff_scope != 'docs'` and
+# MUST NOT be gated on `go_touched`.
+#
+# PORT MAPPING: this reasons over CI WORKFLOW YAML structure — the enclosing
+# job's header region of the step that invokes a named gate — a surface no code/
+# SQL/AST/Dart analyzer models. It uses the ESCAPE HATCH: a self-contained Go
+# reproduction (checks/check.go) that reproduces the .sh's awk job-header
+# extraction and its two guard greps on the fixture's ci.yml. The finding is scope-level (no want
+# marker). fire-1's guardrails job is gated on go_touched; pass-1's runs on the
+# always-run (diff_scope != 'docs') job and is not go_touched-gated.
+rules:
+  - id: routes-log-gate-always-runs
+    type: command
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/ci.yml"
+    params:
+      cmd:
+        - go
+        - run
+        - checks/check.go
+      expect:
+        exit: 0
+    cure: "Keep the job that invokes check-routes-log-pre-500.sh guarded by `diff_scope != 'docs'` (the always-run guardrail job) and NOT gated on go_touched — a go_touched gate skips Dart-only/config promotions of a 500-without-log that reached develop out-of-band (#4026)."
+    origin: scripts/check-routes-log-gate-always-runs.sh

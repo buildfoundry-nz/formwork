@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+message ReinstateSectionAnnotationsRequest {
+  // The step identity IS the scope; the server resolves owned types from the
+  // approve registry, so no type list can ride the wire (#1114).
+  string segment_code = 1;
+}

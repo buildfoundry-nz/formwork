@@ -1,0 +1,31 @@
+# Ported from Palletra scripts/check-dart-measure-step-must-use-resolved-provider.sh (forbidden-pattern).
+# The Measure rail must read the RESOLVED activeStageCodeProvider, never the raw
+# targetStepCode (empty on landing). Bans code-level reads of the raw intent —
+# field access `.targetStepCode`, constructor arg `targetStepCode:`, or the
+# read-provider `targetStepCodeProvider` — across packages/*/lib, except the
+# 8-file allowlist that OWNS the two concepts and their resolution (ported to
+# except.paths). Generated Dart is excluded. A comment merely NAMING it is not a
+# code read; the .sh matches raw source and so does this rule.
+rules:
+  - id: dart-measure-step-must-use-resolved-provider
+    type: forbidden-pattern
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+    except:
+      paths:
+        - "packages/plt_canvas_kit/lib/measure/domain/plot_nav_state.dart"
+        - "packages/plt_canvas_kit/lib/measure/providers/plot_nav_controller.dart"
+        - "packages/plt_canvas_kit/lib/measure/providers/plot_nav_controller_actions.dart"
+        - "packages/plt_canvas_kit/lib/measure/providers/plot_nav_reads.dart"
+        - "packages/plt_canvas_kit/lib/measure/providers/plot_active_step_providers.dart"
+        - "packages/plt_canvas_kit/lib/measure/providers/plot_type_filter_providers.dart"
+        - "packages/feature_dimension/lib/providers/plot_section_layout_providers.dart"
+        - "packages/feature_dimension/lib/presentation/plot_body.dart"
+    params:
+      pattern: '\.targetStepCode\b|\stargetStepCode:|\btargetStepCodeProvider\b'
+    cure: "Operational consumers must read activeStageCodeProvider(projectId) (the resolved displayed step), not the raw targetStepCode."
+    origin: scripts/check-dart-measure-step-must-use-resolved-provider.sh

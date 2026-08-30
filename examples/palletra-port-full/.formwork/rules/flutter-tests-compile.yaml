@@ -1,0 +1,47 @@
+# Port of scripts/check-flutter-tests-compile.sh.
+#
+# The original runs `flutter analyze integration_test/` and fails on any
+# diagnostic — a compile-failing integration test never runs (the WI-104
+# milestone_05_sse_test.dart shipped a URI-resolution error that hid a contract for
+# a whole release window). That gate fundamentally runs the Flutter toolchain,
+# so it maps to the `command` escape hatch. Flutter is not available in the
+# fixture sandbox, so the command reproduces the exact failure the header calls
+# out — an UNRESOLVED relative import in an integration test, which is precisely
+# the "URI-resolution error" class the tool would reject — deterministically and
+# self-contained over the fixture tree. The finding is scope-level (no want
+# marker); fire-1 has a dangling import, pass-1 resolves clean.
+rules:
+  - id: flutter-tests-compile
+    type: command
+    severity: error
+    scope:
+      include:
+        - "frontend/integration_test/**/*.dart"
+    params:
+      cmd:
+        - bash
+        - -c
+        - |
+          set -uo pipefail
+          dir="frontend/integration_test"
+          [ -d "$dir" ] || exit 0
+          fail=0
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            d="$(dirname "$f")"
+            while IFS= read -r imp; do
+              p="$(printf '%s' "$imp" | sed -E "s/.*import '([^']+)'.*/\1/")"
+              case "$p" in
+                package:*|dart:*) continue ;;
+              esac
+              if [ ! -f "$d/$p" ]; then
+                echo "unresolved import '$p' in $f (integration_test must analyze clean)"
+                fail=1
+              fi
+            done < <(grep -E "^[[:space:]]*import '" "$f" 2>/dev/null || true)
+          done < <(find "$dir" -name '*.dart' 2>/dev/null)
+          exit $fail
+      expect:
+        exit: 0
+    cure: "integration_test/ must analyze clean — a compile-failing (e.g. unresolved-import) test never runs. Fix the diagnostics or move the test out of integration_test/."
+    origin: scripts/check-flutter-tests-compile.sh

@@ -1,0 +1,14 @@
+# Ported from scripts/check-positional-gauge-picker.sh, invariant 2c. pick.go
+# must declare func gatherScaleMatches( — the per-item '1:N' token collector.
+rules:
+  - id: positional-scale-match-collector-present
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/detection/scale/pick.go'
+    params:
+      pattern: '^func\s+gatherScaleMatches\('
+      mode: exists
+    cure: 'pick.go must declare func gatherScaleMatches( — the per-item scale-token collector.'
+    origin: scripts/check-positional-gauge-picker.sh

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+// StartParsingResponse — the whole request/response flow is dead; nothing
+// builds or reads it. A dead orphan struct in shared/generated.
+message StartParsingResponse {
+}
+
+// GetCategoryResponse is marshalled by the GET handler and read in Go.
+message GetCategoryResponse {
+  string name = 1;
+}

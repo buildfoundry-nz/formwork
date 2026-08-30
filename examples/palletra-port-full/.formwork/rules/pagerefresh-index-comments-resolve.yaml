@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-pagerefresh-index-comments-resolve.sh
+# (#8630 stale-index-name gate). Every idx_* name referenced in a Go COMMENT
+# under internal/pagerefresh/ MUST resolve to a live `CREATE [UNIQUE] INDEX
+# [CONCURRENTLY] <name>` in the committed schema snapshot; a comment naming a
+# dropped/never-created index sends a maintainer to recreate a phantom index.
+#
+# Ported as a set-relation SUBSET (A ⊆ B). Side A = every idx_ token in a
+# pagerefresh Go file; side B = every index CREATEd in schema.snapshot.sql.
+#
+# FALSE-POSITIVE FIX. The oracle restricts side A to COMMENT contents (via a
+# comments-only-go lexer); formwork ships no comments-only preprocessor, and in
+# PRODUCTION pagerefresh files every idx_ token IS a comment support-claim (the
+# planner, not the query text, picks indexes), so the raw scan is faithful there.
+# But the TEST files carry idx_ tokens in STRING LITERALS and in the
+# `pg_stat_user_indexes.idx_scan` column name (perf-baseline assertions) — code
+# data, not comment claims, that the comments-only lexer blanks. Those leaked
+# through the raw port as `idx_gauges_org_project_height` / `idx_scan` and
+# false-fired on clean develop. `*_test.go` is therefore excluded from scope;
+# every non-test pagerefresh idx_ token already resolves in the snapshot, and
+# the fixture's stale non-test comment (idx_notes_project_type) still fires.
+rules:
+  - id: pagerefresh-index-comments-resolve
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/pagerefresh/**/*.go"
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+      exclude:
+        - "**/*_test.go"
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/internal/pagerefresh/**/*.go"
+        pattern: 'idx_[a-z0-9_]+'
+        group: 0
+      b:
+        files:
+          - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+        pattern: 'CREATE (?:UNIQUE )?INDEX (?:CONCURRENTLY )?([a-z0-9_]+)'
+        group: 1
+      relation: subset
+    cure: "Name the live index the query actually seeks (grep schema.snapshot.sql), or add the missing CREATE INDEX in a migration and regenerate the snapshot (#8630). A comment naming a dropped/never-created index sends a maintainer to recreate a phantom index."
+    origin: scripts/check-pagerefresh-index-comments-resolve.sh

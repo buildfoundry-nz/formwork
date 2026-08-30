@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-go-rows-next-requires-err-check.sh (#4854).
+# A `for rows.Next() { ... }` loop that returns without inspecting `rows.Err()`
+# swallows a mid-stream failure: rows.Next() returns false at a broken stream
+# exactly as at a clean end-of-rows, so the caller reports success with a
+# truncated result set. Every function that drives a rows.Next() loop must also
+# reference <ident>.Err() somewhere in the same function.
+#
+# PORT MAPPING: go/per-func-count-relation, per-func, asserts
+# count(`\.Err$`) >= count(`\.Next$`) over each function's call selectors — a
+# function with a `.Next()` call but no matching `.Err()` fails the relation
+# (0 >= 1 is false) and is flagged. This is the AST analog of the .sh's
+# per-func Next()/Err() identifier tracking. (Faithful-limit: like the .sh it
+# is a presence check, not a data-flow check — the sibling of the .sh's own
+# "two loops in one func" known-limit.)
+rules:
+  - id: go-rows-next-requires-err-check
+    type: go/per-func-count-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/internal/targets/reader.go"
+    params:
+      left: '\.Err$'
+      right: '\.Next$'
+      relation: '>='
+    cure: "After the rows.Next() loop, propagate the iteration error — `return rows.Err()` or `if err := rows.Err(); err != nil { return err }`. A partial stream otherwise looks identical to a clean end-of-rows (#4854)."
+    origin: scripts/check-go-rows-next-requires-err-check.sh

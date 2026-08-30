@@ -1,0 +1,56 @@
+# Ported from Palletra scripts/check-no-hand-rolled-tone-pill-widget.sh (sweep-12 #2309).
+#
+# The small tinted status pill had ~a dozen hand-rolled copies, each rebuilding
+# the identical chrome: Container(padding: ShellSpacing.gapChip, decoration:
+# BoxDecoration(color: <tone>.withValues(alpha:...), borderRadius:
+# ShellSpacing.cornerRadiusSm), child: Text(...)). It now has ONE home —
+# plt_widgets ToneTag. This gate fails when the four pill tokens (gapChip,
+# cornerRadiusSm, withValues(, an inline Text(/Text.rich() re-co-occur outside it.
+#
+# The .sh is a 14-line WINDOW proximity awk over four order-independent tokens:
+# it fires only when all four co-occur inside one small span (the actual pill
+# construct, ~6-12 lines), NOT anywhere in the file.
+#
+# FP FIX (was: fired on packages/feature_dimension/lib/presentation/racking_partition_type_palette.dart
+# and packages/plt_job_kind_picker/lib/presentation/task_type_tile.dart). Both
+# carry all four tokens but SPREAD OUT — the lone `withValues(` (a shadowColor /
+# selected-tint) sits 85-95 lines from the chip-padded footer that has
+# gapChip+cornerRadiusSm+Text — so no 14-line window holds all four and the
+# .sh passes. The port's lookaheads used unbounded `[\s\S]*`, i.e. whole-file
+# co-occurrence, so they matched. Each lookahead is now BOUNDED to a forward
+# window (`.{0,700}` under `(?s)`), reproducing the awk's proximity constraint:
+# a match requires a position from which all four tokens fall within ~700 chars
+# (a compact pill spans ~250-450), so incidental co-occurrences 85+ lines apart
+# no longer fire, while a real hand-rolled pill still does.
+rules:
+  - id: no-hand-rolled-tone-pill-widget
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+        - "**/tone_tag.dart"
+        - "**/fields_required_chip.dart"
+        - "**/plot_toolbar_segment_toggle.dart"
+        - "**/marker_label_chip.dart"
+    preprocess: raw
+    params:
+      # The four pill tokens must co-occur within a 14-line window (origin's
+      # WINDOW=14 awk proximity span), reproduced by all_of + window: 14 — linear,
+      # anchored on the earliest token line. Replaces the regexp2 four-lookahead
+      # (?=.{0,700}…) form that backtracked ~14ms/file over 1358 dart files (20s).
+      # The 700-char lookahead bound was ~14 lines; the line window is exact.
+      window: 14
+      all_of:
+        - 'ShellSpacing\.gapChip'
+        - 'ShellSpacing\.cornerRadiusSm'
+        - 'withValues\('
+        - '[^A-Za-z0-9_]Text[.(]'
+      prefilter: 'cornerRadiusSm'
+    cure: "Render plt_widgets ToneTag.tint(label:, tone:) / ToneTag.solid(...) instead of hand-rolling the Container(ShellSpacing.gapChip) + BoxDecoration(tone.withValues(alpha:) + ShellSpacing.cornerRadiusSm) + Text pill chrome. Reference: sweep-12 #2309."
+    origin: scripts/check-no-hand-rolled-tone-pill-widget.sh

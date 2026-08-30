@@ -1,0 +1,52 @@
+# Ported from Palletra scripts/check-annotation-metrics-page-lookups-require-project-scope.sh
+# (#5692). palletra.annotation_gauges has NO page_id-leading index; its only
+# page-covering index is idx_gauges_project_page (project_id, page_id). A read
+# that value-filters an annotation_gauges alias's page_id WITHOUT a matching
+# project_id predicate in the same SQL literal cannot seek that composite and
+# degrades to a full/partition seq-scan — the #5692 rail + approve-tx timeout.
+#
+# Ported as a forbidden-pattern over non-test Go, preprocessed with
+# strings-only-go (Go code + comments blanked, only string-literal SQL is
+# scanned): the load-bearing shape is (a) a `.page_id` value-filter (= $N / ANY /
+# ARRAY / scalar-subquery / literal) — the line-anchored trigger, on the fixture
+# want-marker line — in a file that (b, require_present) references
+# palletra.annotation_gauges and (c, require_absent) carries NO project_id.
+# strings-only-go makes require_absent comment-immune (the #5692 rationale
+# comment names project_id in prose, exactly as the awk only ever read inside
+# backtick literals).
+# DIVERGENCE from the regexp2 port: those three lookaheads asserted co-occurrence
+# per-backtick-literal via a tempered `[^`]*`; RE2 has no tempered scope, so
+# require_present/require_absent are whole-file over the SQL strings. A file with
+# a page_id-only annotation_gauges literal AND a separate project_id-bearing
+# literal would be a false negative (accepted, matching the set-relation ports).
+#
+# DIVERGENCE (noted for fidelity): the .sh is per-alias and additionally exempts
+# a page_id that is only a projection, a RHS join, or a consistency predicate on
+# a PK-reached row (`hm.id = ... AND hm.page_id = ...`). The regexp2 port keys on
+# the load-bearing shape — a page_id value-filter with no project_id in the
+# literal — and treats project_id anywhere in the literal as satisfying it (the
+# same-literal companion the index needs). The internal/scan/metric package that
+# defines the canonical constant is exempted via scope.exclude.
+rules:
+  - id: annotation-metrics-page-lookups-require-project-scope
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/**/internal/scan/metric/**"
+    preprocess: strings-only-go
+    params:
+      # Trigger: a `.page_id` value-filter (= $ / ANY / ARRAY / ( / literal / digit),
+      # anchoring the finding on the same line the awk's page_id filter is on.
+      pattern: '\.page_id\s*=\s*(?:\$|ANY|ARRAY|\(|''|[0-9])'
+      # (b) the literal references the table, (c) it carries no project_id.
+      require_present:
+        - 'palletra\.annotation_gauges'
+      require_absent:
+        - 'project_id'
+      prefilter: 'annotation_gauges'
+    cure: "An annotation_gauges page read that value-filters page_id must carry a matching project_id predicate in the SAME SQL literal, so it seeks idx_gauges_project_page (project_id leads page_id) instead of seq-scanning the table (#5692). Add the project_id predicate, or route the read through internal/scan/metric's canonical constant."
+    origin: scripts/check-annotation-metrics-page-lookups-require-project-scope.sh

@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-partition-height-skip-filters-status.sh (#6359).
+# The retired cross-section partition-height-propagation surface must not reappear in
+# any .go or .proto under the live scopes (freightworks/internal, the partitionheight
+# package, routes/, schema/proto, shared/generated). The .sh awk-matches an
+# ~11-way alternation of the deleted identifiers + route/RPC strings on raw lines
+# (tests INCLUDED via --include-tests), excluding gatetests and build/ dirs.
+rules:
+  - id: partition-height-skip-filters-status
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/internal/**/*.go"
+        - "freightworks/internal/**/*.proto"
+        - "freightworks/services/core-api/internal/partitionheight/**/*.go"
+        - "freightworks/services/core-api/internal/partitionheight/**/*.proto"
+        - "freightworks/services/core-api/routes/**/*.go"
+        - "freightworks/services/core-api/routes/**/*.proto"
+        - "schema/proto/**/*.proto"
+        - "schema/proto/**/*.go"
+        - "shared/generated/**/*.go"
+        - "shared/generated/**/*.proto"
+      exclude:
+        - "**/internal/gatetests/**"
+        - "**/build/**"
+    params:
+      pattern: 'RegisterPartitionHeightPropagate|ApplyPartitionHeightsToSections|apply-partition-heights-to-sections|PartitionHeightPropagation|PropagatePartitionHeights|GetPartitionHeightPropagation|partition_height_propagate|partition-height/propagate|partition-height/propagation-targets|PagesWithApprovedPositivePartitionHeight|PartitionHeightPropagationTargetPageKinds'
+    cure: "Remove the legacy partition-height propagation route/RPC contract; manual partition-height create remains the supported flow."
+    origin: scripts/check-partition-height-skip-filters-status.sh

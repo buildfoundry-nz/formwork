@@ -1,0 +1,8 @@
+{
+  "hosting": {
+    "rewrites": [
+      { "source": "**", "note": "want: firebase-rewrite-api-before-catchall ", "destination": "/index.html" },
+      { "source": "/api/**", "run": { "serviceId": "core-api", "region": "us-central1" } }
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+# Scope-level: the snapshot's last two bytes are \xff\xfe, which no UTF-8
+# decoder accepts. This tree is pass-1 byte for byte apart from them.
+#
+# Python's open().read() decoded strictly and died on those bytes (exit 1); Go's
+# string(data) keeps them, and the FK and index regexes go on matching the valid
+# remainder — so the run reports on the part of the snapshot it could read and
+# says nothing about the part it could not (#262 finding 3).
+#
+# It is built on pass-1 rather than fire-1 on purpose. On fire-1 the FK finding
+# survives the bad bytes and the checker exits 1 both before and after the fix,
+# which is no RED at all; on pass-1 the difference is exactly exit 0 -> exit 1.
+#
+# Pinned to the detector's header sentence, so the pin holds whatever the
+# decoder says about the offending offset.
+- [check-schema-fk-delete-path-indexed] ERROR — the schema snapshot at freightworks/services/core-api/migrations/schema.snapshot.sql is not valid UTF-8

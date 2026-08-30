@@ -1,0 +1,25 @@
+# Ported from Palletra scripts/check-docs-plans-status-field.sh (#4335) — Rule 1.
+# Every DATED plan (basename YYYY-MM-DD-*.md) under docs/plans/ and
+# docs/superpowers/{plans,specs}/ MUST carry a **Status:** field in one of the
+# corpus forms ('**Status:** …', '- **Status:** …', '**Status**: …'). Non-dated
+# corpus files (decision logs, worklists, STATUS.md, _TEMPLATE.md) are exempt —
+# the scope globs select only dated basenames, so exempt files are never in
+# scope. every-file required-pattern faithfully mirrors the per-dated-plan grep.
+#
+# Rule 2 (docs/plans/README.md must byte-match a fresh --write regeneration of
+# the index) requires executing the generator and diffing; it has no declarative
+# formwork equivalent and is NOT ported here (see the batch skip list).
+rules:
+  - id: dated-plans-require-status-field
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "docs/plans/**/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.md"
+        - "docs/superpowers/plans/**/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.md"
+        - "docs/superpowers/specs/**/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.md"
+    params:
+      pattern: '^\s*[-*]?\s*\*\*Status(:\*\*|\*\*:)'
+      mode: every-file
+    cure: "Give every dated plan a **Status:** field (docs/plans/_TEMPLATE.md has mandated it since day one); update it as phases complete (#4335)."
+    origin: scripts/check-docs-plans-status-field.sh

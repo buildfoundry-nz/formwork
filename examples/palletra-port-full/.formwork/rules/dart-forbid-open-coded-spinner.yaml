@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-dart-forbid-open-coded-spinner.sh (audit #29
+# / DUP). Bans an open-coded `CircularProgressIndicator(` in feature
+# presentation widgets so every loading affordance routes through the shared
+# InlineLoader / RemoteLoadingView / Async*/PendingButton widgets. Scope is the
+# feature packages' presentation trees (packages/*/lib/**/presentation/**);
+# the shared spinner home packages/plt_widgets/lib/** is carved out, along
+# with generated files. Deliberately NO test carve-out (lib presentation only).
+rules:
+  - id: dart-forbid-open-coded-spinner
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/presentation/**/*.dart"
+      exclude:
+        - "packages/plt_widgets/lib/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+    params:
+      pattern: 'CircularProgressIndicator\('
+    cure: "Consume the shared InlineLoader / RemoteLoadingView (or an Async*/PendingButton) instead of open-coding a CircularProgressIndicator — those widgets pin the stroke/size the feature sites must not re-drift."
+    origin: scripts/check-dart-forbid-open-coded-spinner.sh

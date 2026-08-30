@@ -1,0 +1,74 @@
+# Ported from Palletra scripts/check-migrations-cap-backfill-row-count.sh (SV-ARC-9).
+# golang-migrate wraps each up.sql step in a single transaction, so a large
+# UPDATE/INSERT body or a PL/pgSQL LOOP inside a migration rolls back the schema
+# change it ships with if the migrate-only Cloud Run container is killed
+# mid-flight. Any forward migration (4-digit prefix >= 66) whose body contains a
+# LOOP block OR a non-exempt UPDATE/INSERT body over 100 lines MUST carry the
+# sentinel `-- BACKFILL: see freightworks/backfills/<slug>/`, which pairs the
+# migration with its resumable Cloud Run Job. A pure static VALUES seed (INSERT
+# whose only row source is a VALUES literal, no FROM table / no JOIN) is exempt.
+#
+# ESCAPE HATCH (type: command). The gate is a whole-FILE heuristic — count the
+# lines of the largest DML body, detect a LOOP, and require a file-level sentinel
+# comment — which is cross-statement and line-counting, not a single-statement
+# SQL predicate. Ported as a self-contained python3 reproduction over the fixture
+# tree; finding is scope-level. fire-1 has a LOOP migration without the sentinel;
+# pass-1 is the same migration carrying the sentinel.
+rules:
+  - id: migrations-cap-backfill-row-count
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.up.sql"
+    params:
+      cmd:
+        - python3
+        - -c
+        - |
+          import glob, os, re, sys
+          THRESH = 100
+          ANCHOR = 66
+
+          def dml_max(text):
+              inb = False; cur = 0; mx = 0; kind = ""; body = ""
+              for ln in text.split("\n"):
+                  if not inb and re.match(r'^\s*(UPDATE|INSERT)\s+', ln, re.I):
+                      inb = True; cur = 1; body = ln.lower()
+                      kind = "insert" if re.match(r'^\s*insert', ln, re.I) else "update"
+                      continue
+                  if inb:
+                      cur += 1; body += "\n" + ln.lower()
+                      if re.search(r';\s*$', ln):
+                          exempt = False
+                          if kind == "insert" and ("(values" in body or re.search(r'values\s*\(', body)):
+                              s = re.sub(r"'[^']*'", "", body)
+                              s = re.sub(r'from\s*\(values', '', s)
+                              if not re.search(r'[^a-z_]from\s', s) and not re.search(r'[^a-z_]join[^a-z_]', s):
+                                  exempt = True
+                          if not exempt and cur > mx:
+                              mx = cur
+                          inb = False; cur = 0; body = ""
+              if inb and cur > mx:
+                  mx = cur
+              return mx
+
+          fail = 0
+          for f in sorted(glob.glob("**/*.up.sql", recursive=True)):
+              base = os.path.basename(f)
+              m = re.match(r'(\d+)_', base)
+              if not m or int(m.group(1)) < ANCHOR:
+                  continue
+              txt = open(f, encoding="utf-8").read()
+              needs = bool(re.search(r'\bLOOP\b', txt)) or dml_max(txt) > THRESH
+              if not needs:
+                  continue
+              if re.search(r'--\s*BACKFILL:\s+see\s+freightworks/backfills/', txt):
+                  continue
+              print("FAIL long-running migration body without backfill sentinel:", f)
+              fail = 1
+          sys.exit(1 if fail else 0)
+      expect:
+        exit: 0
+    cure: "Move the data-movement body to a Cloud Run Job at freightworks/backfills/<slug>/main.go and cite it from the migration with `-- BACKFILL: see freightworks/backfills/<slug>/`. Keep migrations DDL-only so a kill-restart never leaves the schema dirty (SV-ARC-9)."
+    origin: scripts/check-migrations-cap-backfill-row-count.sh

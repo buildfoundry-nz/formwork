@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-parsed-table-source-field-consumed.sh (sweep-3 #9).
+# ParsedSheet.RawBytes is the vision cost-class trace signal. At least one non-
+# test file under freightworks MUST READ `.RawBytes` (leading dot => a read, not
+# a struct-literal write). If the read site disappears the wire is broken.
+# exists-mode across non-test freightworks Go.
+rules:
+  - id: parsed-table-source-bytes-has-reader
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\.RawBytes\b'
+      mode: exists
+    cure: "Restore the trace decoration that reads ParsedSheet.RawBytes (attribute.Int64(\"stockroom.vision.raw_bytes\", ...)) so the vision cost class stays observable."
+    origin: scripts/check-parsed-table-source-field-consumed.sh

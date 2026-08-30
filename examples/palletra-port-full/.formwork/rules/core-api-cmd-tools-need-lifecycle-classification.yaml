@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-core-api-cmd-tools-need-lifecycle-classification.sh (#3121 /
+# #6923). A bidirectional operational-tool catalog: every `package main`
+# directory under freightworks/services/core-api/cmd/ MUST appear as a row in that
+# dir's cmd/README.md `## Index` table with a recognized lifecycle CLASS
+# (durable / generator / one-shot / diagnostic / eval), and — reverse — every
+# index row MUST point at a directory that still exists (no stale rows). A new
+# tool can't silently drift out of the index; a deleted/renamed one can't leave a
+# stale row behind. Missing cmd dir or README is target-path rot (exit 2).
+#
+# Why the ESCAPE HATCH (type: command): the forward half enumerates DIRECTORIES
+# on disk and tests each for `^package main` (a directory-name set, not a content
+# token set), then joins that to a Markdown table parsed cell-by-cell with awk to
+# read each row's class column. formwork's set/pair rule types extract value sets
+# from file CONTENT and cannot enumerate directory names, so neither direction of
+# this dir↔README join is declaratively expressible. It runs the real check.
+rules:
+  - id: core-api-cmd-tools-need-lifecycle-classification
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-core-api-cmd-tools-need-lifecycle-classification.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/cmd/**"
+    params:
+      cmd:
+        - bash
+        - scripts/check-core-api-cmd-tools-need-lifecycle-classification.sh
+      expect:
+        exit: 0
+    cure: "List every services/core-api/cmd/<name> `package main` dir as a `## Index` row in cmd/README.md with a recognized lifecycle class (durable / generator / one-shot / diagnostic / eval), and delete any index row whose cmd dir no longer exists (#3121)."
+    origin: scripts/check-core-api-cmd-tools-need-lifecycle-classification.sh

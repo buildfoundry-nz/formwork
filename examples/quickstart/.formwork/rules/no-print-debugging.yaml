@@ -1,0 +1,35 @@
+# RULE 1 — the simplest useful shape: one pattern, one scope, one cure.
+#
+# Read this one first. Every other rule in this corpus is a variation on it.
+rules:
+  - id: no-print-debugging
+    type: forbidden-pattern
+
+    # `error` fails the run (exit 1). `warn` reports without failing.
+    severity: error
+
+    # Which files this rule looks at. Doublestar globs, relative to the repo
+    # root. A rule with no scope would run over the whole tree, which is almost
+    # never what you want — scope it to where the invariant actually applies.
+    scope:
+      include:
+        - "cmd/**/*.go"
+        - "internal/**/*.go"
+      exclude:
+        - "**/*_test.go"
+
+    params:
+      # RE2 by default: fast, linear-time, no catastrophic backtracking.
+      pattern: 'fmt\.Print(f|ln)?\('
+
+    # The cure is the whole point of writing a rule rather than a grep. It is
+    # what the person who tripped the rule reads at 5pm, and it should tell
+    # them what to do instead — not restate what they did wrong.
+    cure: "Use the structured logger (log/slog) instead of printing to stdout. Print statements bypass log levels and are invisible in production."
+
+    # Free-form provenance. Point at the incident, ADR, or issue that made this
+    # a rule, so the next reader can judge whether it still applies.
+    origin: "quickstart-example"
+
+    # Tags are how lanes select rules — see .formwork/formwork.yaml.
+    tags: [go]

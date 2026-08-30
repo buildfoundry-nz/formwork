@@ -1,0 +1,17 @@
+# Ported from scripts/check-drawingquality-no-false-blockers.sh (#6430), Rule A
+# (required half). A gate-skipped page must record NO verdict:
+# scale.StatusExempt (mapped to a NULL scale_verdict). decomment-go so a
+# doc comment naming the token does not satisfy the anchor.
+rules:
+  - id: drawingquality-scale-gate-status-not-applicable
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/workerharness/scalewire/scale_verify_gate.go'
+    preprocess: decomment-go
+    params:
+      pattern: 'scale\.StatusExempt\b'
+      mode: exists
+    cure: 'The gate-skip path must persist scale.StatusExempt so the page records no verdict (#6430 Rule A).'
+    origin: scripts/check-drawingquality-no-false-blockers.sh

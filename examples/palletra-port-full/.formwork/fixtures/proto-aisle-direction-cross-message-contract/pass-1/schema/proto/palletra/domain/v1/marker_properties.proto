@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package palletra.domain.v1;
+
+message VisionkitAnnotationProperties {
+  string label = 1;
+  AisleDirection aisle_direction = 10;
+}

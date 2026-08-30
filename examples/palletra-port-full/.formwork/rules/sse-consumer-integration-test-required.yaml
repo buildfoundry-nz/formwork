@@ -1,0 +1,58 @@
+# Ported from Palletra scripts/check-sse-consumer-integration-test-required.sh (Phase 5
+# re-audit T3.8 / #6514). Every Dart SSE / live-events consumer MUST ship with a
+# matching integration test that opens a real SSE stream, asserts bearer
+# attachment, and surfaces a typed 401 via isA<UnauthorizedException>(). A consumer
+# shipped with no matching test is the violation.
+#
+# Ported as a set-relation SUBSET join:
+#   A = the public class symbol of each SSE consumer.
+#   B = every capitalised symbol referenced in the SSE integration tests
+#       (frontend/integration_test/*sse*.dart).
+# A subset of B: a consumer class named by no *sse*.dart integration test fails.
+#
+# FP FIX: the .sh DISCOVERS consumers by CONTENT — a lib file is a consumer only
+# if it appends `Accept: text/event-stream` OR constructs an EventSource — and
+# then checks that consumer's FIRST public class. The port pinned A to EVERY
+# `.dart` under packages/plt_core/lib/sse and extracted EVERY class, so
+# non-consumer siblings in that dir (SseEnvelope, StreamFrameParser in
+# stream_frame_parser.dart; CommonProjectActivitySource in
+# common_project_activity_source.dart — none of which append the header) were
+# demanded to appear in an *sse*.dart test and, being untested helper types,
+# tripped the subset on clean develop. The content-detected consumers on develop
+# are exactly the three `*_stream.dart` files (their first classes
+# ProjectActivityStream / TasksQueueEventsStream / DockIntakeEventsStream ARE named
+# in the test) — the three no longer share one qualifier word (Activity / Events /
+# Updates each shows up in one), so the glob keys on the shared `_stream.dart`
+# suffix rather than a specific qualifier. Narrowing A's file glob to
+# `*_stream.dart` — the consumer naming convention — matches the gate's
+# consumer set without re-deriving it from content, and drops the helper-type
+# false positives (neither stream_frame_parser.dart nor
+# common_project_activity_source.dart ends in `_stream.dart`).
+#
+# DIVERGENCE (noted): (1) content-derivation is approximated by the
+# `*_stream.dart` file convention (the header-appending stream consumers).
+# (2) The .sh ALSO requires each covering test to assert `isA<UnauthorizedException>()`;
+# a subset join can only check the class is NAMED, not that the assertion is
+# present. (3) per-class coverage is approximated by the union subset.
+rules:
+  - id: sse-consumer-integration-test-required
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "packages/plt_core/lib/sse/*_stream.dart"
+        - "frontend/integration_test/*sse*.dart"
+    params:
+      a:
+        files:
+          - "packages/plt_core/lib/sse/*_stream.dart"
+        pattern: '^\s*class\s+([A-Z][A-Za-z0-9_]*)'
+        group: 1
+      b:
+        files:
+          - "frontend/integration_test/*sse*.dart"
+        pattern: '\b([A-Z][A-Za-z0-9_]*)\b'
+        group: 1
+      relation: subset
+    cure: "Add frontend/integration_test/phase_NN_sse_test.dart that names EACH SSE consumer class, opens a real SSE stream against dev core-api, asserts bearer attachment / first event, AND surfaces a typed 401 via isA<UnauthorizedException>() (Phase 5 re-audit T3.8 / #6514)."
+    origin: scripts/check-sse-consumer-integration-test-required.sh

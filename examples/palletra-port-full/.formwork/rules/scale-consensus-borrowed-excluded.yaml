@@ -1,0 +1,104 @@
+# Ported from Palletra scripts/check-gauge-consensus-donors-independent.sh
+# (#4464). scaleconsensus lets a page with no detectable scale borrow one from
+# its siblings. Borrowing is only sound while the donors are independent of each
+# other and of the borrower, so the query that selects them must exclude
+# already-borrowed rows, and the consensus it reaches must be unanimous over a
+# floor of donors. The .sh runs POSITIVE-TOKEN gate over
+# the de-commented, whitespace-stripped package corpus: four tokens a correct
+# query MUST carry (deleting a guard trips by ABSENCE, so an aliased bypass
+# cannot slip a ban-list) plus one forbidden token.
+#
+#   Rule 1 — donor query MUST exclude 'copied_from_neighbor' via NOT IN.
+#   Rule 2 — donor query MUST exclude 'rolled_over' via the same NOT IN.
+#   Rule 3 — consensus query MUST require COUNT(DISTINCT scale) = 1 (unanimity).
+#   Rule 4 — consensus query MUST require COUNT(*) >= 3 (the donor floor).
+#   Rule 5 — (negative) the donor status filter MUST NOT admit 'requires_review'
+#            or 'not_true_scale' via a scale_verdict IN (...) group.
+#
+# PORT MAPPING: the four required tokens are required-pattern (mode: exists) over
+# the package — the token must appear in some in-scope file or a scope-level
+# finding fires — and the forbidden token is a forbidden-pattern. preprocess:
+# decomment-go mirrors the .sh's strip_comments_go step, so the package's own prose
+# (which necessarily names every token while explaining it) cannot satisfy a
+# required rule nor mask the forbidden one. The token EREs allow inline
+# whitespace, matching the .sh's whitespace-stripped corpus for a gofmt-wrapped
+# SQL string. Scope: the scaleconsensus package, non-test Go.
+#
+# DIVERGENCE (noted): the .sh strips ALL whitespace including newlines into one
+# corpus; the per-line matchers here require each token to sit on a single line,
+# which is how the gofmt'd raw-string SQL actually writes them (the NOT IN list,
+# the HAVING clause). A token split ACROSS lines is the one shape not covered.
+rules:
+  - id: scale-consensus-borrowed-excluded
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/detection/scaleconsensus/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: "NOT\\s+IN\\s*\\([^)]*'copied_from_neighbor'"
+      mode: exists
+    cure: "Keep the donor CTE's scale_basis NOT IN ('copied_from_neighbor', ...) exclusion — a borrowed scale is not independent evidence, and admitting one lets pass N seed pass N+1 (the homogenisation cascade). #4464."
+    origin: scripts/check-gauge-consensus-donors-independent.sh
+
+  - id: scale-consensus-excludes-rolled-over-donor
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/detection/scaleconsensus/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: "NOT\\s+IN\\s*\\([^)]*'rolled_over'"
+      mode: exists
+    cure: "Keep 'rolled_over' in the donor NOT IN exclusion — three sheets carrying one prior-revision decision are that decision counted three times, not three independent reads. #4464."
+    origin: scripts/check-gauge-consensus-donors-independent.sh
+
+  - id: scale-consensus-requires-agreement
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/detection/scaleconsensus/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: "COUNT\\s*\\(\\s*DISTINCT\\s+scale\\s*\\)\\s*=\\s*1"
+      mode: exists
+    cure: "Keep HAVING COUNT(DISTINCT scale) = 1 — without unanimity a mixed-scale document homogenises, turning a correct 1:20 detail into a plausible 1:100. #4464."
+    origin: scripts/check-gauge-consensus-donors-independent.sh
+
+  - id: scale-consensus-min-donor-count
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/detection/scaleconsensus/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: "COUNT\\s*\\(\\s*\\*\\s*\\)\\s*>=\\s*3"
+      mode: exists
+    cure: "Keep HAVING COUNT(*) >= 3 donors — two agreeing sheets is a coincidence a third could contradict. #4464."
+    origin: scripts/check-gauge-consensus-donors-independent.sh
+
+  - id: scale-consensus-donor-status-strict
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/detection/scaleconsensus/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: "scale_verdict\\s+IN\\s*\\([^)]*'(requires_review|not_true_scale)'"
+    cure: "Keep the donor status filter to strong_confidence/confirmed only — an ambiguous read (requires_review) is not confident evidence and is where the default-scale seed lands (three defaulted pages would 'unanimously' agree on the default); not_true_scale asserts no usable scale at all. #4464."
+    origin: scripts/check-gauge-consensus-donors-independent.sh

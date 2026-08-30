@@ -1,0 +1,31 @@
+# Ported from Palletra scripts/check-sole-display-settings-reader.sh
+# (sweep-2 #11 / DD-7). The standalone view_settings_snapshot reader (the
+# per-job hidden annotation-type overlay as a lone JSON blob) lives ONCE, in
+# internal/workflow/data/project.go (workflowdata.ReadProjectViewSettingsSnapshot).
+# Any other non-test Go file carrying the standalone projection as its FIRST
+# selected column — SELECT COALESCE(view_settings_snapshot ... — is a re-copy
+# that can drift on the default ('{}' vs error). A JOINed multi-column SELECT that
+# merely includes the column is NOT flagged (the regex anchors on SELECT COALESCE
+# being adjacent). The .sh greps the raw file, so preprocess is omitted.
+#
+# DIVERGENCE (noted): the .sh uses grep -z so SELECT and COALESCE may straddle a
+# gofmt line-break; RE2 here matches per-line, so only a same-line
+# `SELECT COALESCE(view_settings_snapshot` (the common form) fires. A
+# formatter-split SELECT\nCOALESCE would be missed — an approximation, not a
+# weakening of the common case.
+rules:
+  - id: sole-display-settings-reader
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    except:
+      paths:
+        - "freightworks/services/core-api/internal/workflow/data/project.go"
+    params:
+      pattern: 'SELECT\s+COALESCE\(\s*view_settings_snapshot'
+    cure: "Call workflowdata.ReadProjectViewSettingsSnapshot(ctx, tx, projectID) — the single canonical reader of the project's display-settings overlay (sweep-2 #11)."
+    origin: scripts/check-sole-display-settings-reader.sh

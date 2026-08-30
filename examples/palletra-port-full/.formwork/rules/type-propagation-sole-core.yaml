@@ -1,0 +1,34 @@
+# Ported from Palletra scripts/check-type-propagation-sole-core.sh (SV-4, #4244).
+# post_type / strut_type propagation were structural twins; the shared validation +
+# audit envelope + affected-pages query now lives in ONE core,
+# services/core-api/internal/typepropagate.Propagate. Each per-type package keeps
+# only a thin wrapper (supplies a Stamp closure + its literal AuditNote and
+# delegates to the core). The re-divergence this bans: a new/resurrected type
+# propagator that names a `<x>_kind_propagation` audit reason but re-implements
+# the envelope inline instead of delegating.
+#
+# Ported as pair-consistency: a file that names a `<x>_kind_propagation` reason
+# (trigger) MUST also call `typepropagate.Propagate(` (requires) in the same file.
+#   - the core (typepropagate/propagate.go) forwards opts.AuditNote with no
+#     literal, so it never matches the trigger — no path exemption needed;
+#   - a thin wrapper names its literal AND delegates -> both present -> passes;
+#   - an inline re-clone names the reason but never calls the core -> FAIL.
+# preprocess: decomment-go mirrors the .sh's strip_comments_go step so a mention of
+# either token inside a `//` or `/* */` comment cannot arm the trigger or fake
+# the required delegation; the audit-reason literal lives in a Go string, which
+# decomment-go preserves.
+rules:
+  - id: type-propagation-sole-core
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      trigger: '[a-z_]+_kind_propagation'
+      requires: 'typepropagate\.Propagate\('
+    cure: "Route type propagation through services/core-api/internal/typepropagate.Propagate — supply a Stamp closure + AuditNote; do not re-implement the validation/audit-envelope/affected-pages envelope inline (the SV-4 drifted-clone divergence, #4244)."
+    origin: scripts/check-type-propagation-sole-core.sh

@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-flutter-js-error-bridge-bootstrap-required.sh
+# (C1 #8648, epic #5848). The JS error bridge captures errors raised OUTSIDE the
+# Dart/Flutter zone — window.onerror (a thrown JS/third-party error) and a
+# rejected JS Promise (unhandledrejection) — that never reach the Dart global
+# handlers, routing each through Logger('js.uncaught'). The .sh's four rules:
+#   Rule 1 — frontend/lib/main.dart calls installJsErrorRelay( at the bootstrap
+#   Rule 2 — EXACTLY ONE `window.onerror =` assignment tree-wide (anti-shadow)
+#   Rule 3 — EXACTLY ONE unhandledrejection listener tree-wide
+#   Rule 4 — the bridge routes via Logger('js.uncaught') and never touches the
+#            Dart global handlers.
+# The gate's namesake install is Rule 1, so this ports it as a required-pattern:
+# main.dart MUST call installJsErrorRelay( or JS-layer errors ship nowhere
+# (#8648). That is the primary defect — a missing install call.
+#
+# Port note: code-only-dart, not raw. That projection blanks comment bytes and
+# string CONTENTS while leaving the quote delimiters and all real code, so the
+# install call still matches and a comment merely NAMING installJsErrorRelay
+# does not. Checked against pass-1, where the call is code and the only literals
+# are import paths, so nothing the rule needs lives inside a string. Under raw a
+# comment naming the call WAS the required match, so the bootstrap could drop
+# the install — the #8648 defect — with this gate still green (fire-2 is that
+# shape; #263.3).
+#
+# DIVERGENCE (noted): this file ports Rule 1 — the bootstrap install — and only
+# that. Rule 2 (exactly one `window.onerror =` tree-wide) and Rule 3 (exactly
+# one unhandledrejection listener) are pattern-counts, and Rule 3 is not
+# expressible here at all: dart format splits addEventListener('unhandledrejection'
+# across lines, pattern-count is line-oriented, and formwork ships no
+# newline-flattening preprocessor. Rule 4 is a cross-condition on a second file,
+# the relay itself. None of the three is expressed here, so a green on this rule
+# says nothing about them.
+rules:
+  - id: js-error-bridge-bootstrap-required
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/main.dart"
+    preprocess: code-only-dart
+    params:
+      pattern: "installJsErrorRelay\\s*\\("
+      mode: exists
+    cure: "Install the JS error bridge at the one bootstrap: frontend/lib/main.dart must call installJsErrorRelay(...) or window.onerror / unhandledrejection errors (JS-layer, outside the Dart zone) ship nowhere (#8648)."
+    origin: scripts/check-flutter-js-error-bridge-bootstrap-required.sh

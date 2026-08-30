@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-schema-boundary-contract.sh.
+# At least one Go helper under freightworks/services/core-api/internal/scan/ must
+# import the canonical generated proto module palletra.example/schema/gen/go/;
+# losing the import means the transport boundary reverted to hand-coded DTOs.
+# exists mode is the faithful shape (the .sh does a recursive grep -l for one
+# match anywhere in scan/).
+# KNOWN LIMIT: the .sh treats a MISSING scan/ dir as a FAIL; formwork exists
+# mode passes on an empty scope (formwork lint owns empty-scope rot). The
+# present-tree "import was deleted" case — the live defect class — is covered.
+rules:
+  - id: schema-boundary-contract
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/scan/**/*.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'palletra\.example/schema/gen/go/'
+      mode: exists
+    cure: "Keep at least one scan/ helper importing palletra.example/schema/gen/go/ so rows project into canonical proto messages, not hand-coded DTOs."
+    origin: scripts/check-schema-boundary-contract.sh

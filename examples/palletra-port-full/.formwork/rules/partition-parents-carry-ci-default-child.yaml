@@ -1,0 +1,45 @@
+# Ported from Palletra scripts/check-partition-parents-carry-ci-default-child.sh
+# (#8004). Every RANGE-partitioned parent in the committed schema snapshot MUST
+# have a DEFAULT (catch-all) partition attached, so the no-partman integration DB
+# (plain pgvector, no pg_partman) does not lose all partitions at a date rollover
+# — a range parent whose only children are fixed date ranges has NO partition
+# once the clock crosses the last range, and EVERY insert then fails 23514
+# (`no partition of relation … found for row`), which is exactly what detonated
+# on the 2026-07-01 Q2→Q3 rollover.
+#
+# Ported as a set-relation SUBSET (A ⊆ B) over schema.snapshot.sql. Side A = every
+# range-partitioned parent; side B = every parent that has a DEFAULT partition
+# attach. A parent in A but not B has no catch-all and fires (scope-level).
+#
+# DIVERGENCE (noted): the .sh identifies a range parent by the `PARTITION BY
+# RANGE` clause, which pg_dump writes on its OWN line several lines below the
+# `CREATE TABLE <name> (` that carries the name — a two-line stateful join a
+# per-line set-relation cannot do. Side A instead keys on the single-line
+# range-child seed attach every range parent carries in the snapshot
+# (`ALTER TABLE ONLY <parent> ATTACH PARTITION <child> FOR VALUES FROM … TO …`
+# — FOR VALUES FROM/TO is range, vs FOR VALUES IN for list), which names the
+# parent on one line. In this repo the two sets coincide (11 range parents ↔ 11
+# such seed attaches). The only theoretical gap — a range parent with a DEFAULT
+# but NO seed range child — is a state that already PASSES the .sh (it has a
+# default), so this proxy yields no false negative for the missing-default class.
+rules:
+  - id: partition-parents-carry-ci-default-child
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+        pattern: 'ALTER TABLE ONLY ([a-z0-9_]+\.[a-z0-9_]+) ATTACH PARTITION [a-z0-9_.]+ FOR VALUES FROM'
+        group: 1
+      b:
+        files:
+          - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+        pattern: 'ALTER TABLE ONLY ([a-z0-9_]+\.[a-z0-9_]+) ATTACH PARTITION [a-z0-9_.]+ DEFAULT'
+        group: 1
+      relation: subset
+    cure: "Attach a CI DEFAULT partition (partman-guarded, mirroring 0027 / ci_baseline_partitions) for the range parent and regenerate the snapshot (scripts/db-schema-snapshot.sh). Without it the no-partman CI DB 23514s at the next date rollover (#8004)."
+    origin: scripts/check-partition-parents-carry-ci-default-child.sh

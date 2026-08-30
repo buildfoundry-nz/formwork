@@ -1,0 +1,21 @@
+# Ported from scripts/check-drawingquality-no-false-blockers.sh (#6430), Rule B.
+# drawingquality.check.go's rasterMinDPIFloor must be DERIVED from
+# renderpolicy.MaxRenderExtent, never a bare numeric literal (resolved_dpi is the
+# POST-RESIZE DPI; a source-DPI literal is a unit error unreachable by every real
+# sheet). This single required-exists rule folds both the .sh's 'assignment
+# exists', 'not a bare numeric literal', and 'references MaxRenderExtent' checks: an
+# assignment line that references renderpolicy.MaxRenderExtent is, by construction,
+# not a bare literal.
+rules:
+  - id: drawingquality-raster-floor-derived
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/drawingquality/check.go'
+    preprocess: decomment-go
+    params:
+      pattern: 'rasterMinDPIFloor\s*=.*renderpolicy\.MaxRenderExtent'
+      mode: exists
+    cure: 'Derive rasterMinDPIFloor from renderpolicy.MaxRenderExtent; never a bare numeric literal (#6430 Rule B).'
+    origin: scripts/check-drawingquality-no-false-blockers.sh

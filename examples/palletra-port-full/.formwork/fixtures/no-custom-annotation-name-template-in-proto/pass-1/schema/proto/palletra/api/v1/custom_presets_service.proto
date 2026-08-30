@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+// The kept sibling names do NOT contain the banned token.
+message CustomAnnotationTagEntry {
+  string label = 1;
+}
+
+message CustomPagePreset {
+  string id = 1;
+}

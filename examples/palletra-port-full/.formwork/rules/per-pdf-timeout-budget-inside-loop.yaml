@@ -1,0 +1,55 @@
+# Ported from Palletra scripts/check-per-pdf-timeout-budget-inside-loop.sh (sweep-12 #4 /
+# PF-4 / #7280). ProcessIncomingSubmission handles every PDF attachment
+# sequentially in one goroutine. The regression: it opened a SINGLE
+# `context.WithTimeout(context.Background(), 5*time.Minute)` at FUNCTION scope
+# and passed that one ctx into the `for _, att := range pdfFiles` loop. A mailbox
+# with many/large plan sets exhausted the shared 5-minute budget mid-loop; every
+# remaining attachment then deadline-failed into failed[]. The cure is a FRESH
+# per-PDF context.WithTimeout created INSIDE the loop body.
+#
+# FP FIX: the original port modelled this as an `ordering` rule (before =
+# `range pdfFiles`, after = `context.WithTimeout(`, within = file). But engine.go
+# legitimately opens OTHER function-scope WithTimeouts BEFORE the loop —
+# `stampCtx` (submission-mark), a helper that `return context.WithTimeout(...)`,
+# and `settleCtx` after the loop — none of which feed processOnePDF. A
+# file-wide "any WithTimeout before the loop" ordering therefore fired on clean
+# develop. The .sh escapes this by tracking WHICH ctx var flows into
+# processOnePDF; a two-anchor file ordering cannot.
+#
+# Re-expressed as the precise regression shape the .sh pins, anchored on the
+# offending WithTimeout: a `context.WithTimeout(` (the shared budget) that is
+# followed — with NO intervening `context.WithTimeout(` — by the
+# `for _, att := range pdfFiles {` header, and then the `processOnePDF(` call
+# is reached inside the loop with STILL no intervening `context.WithTimeout(`.
+# That is exactly the function-scope-ctx-passed-into-the-loop shape: the shared
+# WithTimeout flows straight into processOnePDF because no fresh per-PDF
+# WithTimeout is opened between it and the call. The two lazy gaps each carry a
+# negative lookahead for `context.WithTimeout(`, so:
+#   • a per-PDF WithTimeout opened INSIDE the loop (clean develop) sits between
+#     the loop header and processOnePDF and blocks the second gap → no match;
+#   • a legit function-scope WithTimeout (stampCtx/settleCtx/a helper's return)
+#     is separated from the loop by the loop's OWN per-PDF WithTimeout, which
+#     blocks the first or second gap → no match.
+# It fires only when a WithTimeout reaches the loop and then the call with no
+# per-PDF budget in between. The match starts at the offending WithTimeout line.
+# decomment-go strips a commented example so it neither opens nor satisfies it.
+#
+# DIVERGENCE (noted): the .sh additionally treats a bare context.Background()
+# with no per-attachment WithTimeout anywhere as a violation via PSVAR var-flow.
+# This pattern models the primary documented regression (a WithTimeout opened
+# outside the loop, none inside before the call); the "no WithTimeout at all"
+# var-flow shape is not separately modeled.
+rules:
+  - id: per-pdf-timeout-budget-inside-loop
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/intakeflow/engine.go"
+    preprocess: decomment-go
+    params:
+      multiline: true
+      syntax: regexp2
+      pattern: 'context\.WithTimeout\((?:(?!context\.WithTimeout\()[\s\S])*?for\s+_,\s*att\s*:=\s*range\s+pdfFiles\s*\{(?:(?!context\.WithTimeout\()[\s\S])*?processOnePDF\('
+    cure: "Create each attachment's context.WithTimeout INSIDE the `for _, att := range pdfFiles` loop (a fresh per-PDF budget), never a function-scope ctx opened before the loop — a slow early PDF must not starve the tail (sweep-12 #4 / #7280)."
+    origin: scripts/check-per-pdf-timeout-budget-inside-loop.sh

@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-no-invented-sku-category-default.sh
+# (#7329). FP FIX: the .sh scopes Arm 1 to Go files that REFERENCE
+# platform.sku_(catalog|category) (`grep -rl`). The port dropped that scope
+# and scanned all non-test Go under freightworks, so it fired on unrelated
+# `[cC]ategory = "..."` code — gaugebook/categories.go's
+# `CategoryDefault Category = "floor"` const block and labordisposition.go — that
+# has nothing to do with the sku catalog. The fix restores the .sh's
+# content scope with `require_present` (a substring both sku_catalog and
+# sku_category contain): a file is scanned only if it mentions the sku
+# catalog, exactly the .sh's `grep -rl` gate. require_present is the
+# explicitly-semantic slot for verdict-changing scope (#9) — this scope
+# originally rode in `prefilter:`, which is documented as a pure optimization.
+#
+# Line-anchored mode (no multiline:) matches the .sh's line-based grep. That is
+# NARROWER than the multiline form this rule briefly used: an assignment split
+# across lines (`category :=` / `"general"`) is not seen, exactly as the origin
+# grep never saw it. pass-2 pins that shape as deliberately out of remit.
+# decomment-go is intentionally NOT applied: the .sh runs its SCOPE grep on the
+# RAW file (comments included) and only the PATTERN on decommented content;
+# formwork's single-preprocess model would blank the fixture's comment-only
+# sku reference and lose scope, so scope is kept raw. On develop this is
+# still silent — no sku-scope file carries any `[cC]ategory = "<literal>"`
+# (comment or code).
+rules:
+  - id: no-invented-sku-category-default
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: '[a-zA-Z_]*[cC]ategory[[:space:]]*:?=[[:space:]]*"[a-z_]+"'
+      require_present:
+        - 'platform\.sku_cat'
+    cure: "An unclassified sku row is NULL, not 'general'. Pass the caller's value straight through (the STOREs map an empty string to SQL NULL) — never assign a hardcoded sku category at a write boundary (#7329)."
+    origin: scripts/check-no-invented-sku-category-default.sh

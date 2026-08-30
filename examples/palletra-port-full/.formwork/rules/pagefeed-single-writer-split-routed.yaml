@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-single-writer-pagefeed-existence.sh
+# (sweep-1 #3, link 3). The eager-split skip-gate (pdfcarve.hasOutput) must
+# decide presence via pagefeed.AssetPresent(size), not a bare Size-probe
+# truthiness.
+rules:
+  - id: pagefeed-single-writer-split-routed
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/pdfcarve/worker_wiring.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'pagefeed\.AssetPresent\('
+      mode: exists
+    cure: "pdfcarve.hasOutput must decide presence via pagefeed.AssetPresent(size), not a bare Size-probe truthiness (sweep-1 #3)."
+    origin: scripts/check-single-writer-pagefeed-existence.sh

@@ -1,0 +1,60 @@
+# Ported from Palletra scripts/check-dart-js-interop-and-ignore-bans.sh.
+# NOTE ON MAPTYPE: wave1.json tags this gate "required-anchor", but the .sh is a
+# HARD-FAIL-on-banned-content gate (its own header: "HARD FAIL on any of ...").
+# The two content bans below are therefore forbidden-pattern rules, matching the
+# .sh's grep -E bans:
+#   (1)/(2) `import 'package:js' / 'package:js_util'` anywhere in app Dart.
+#   (3)     file-level `// ignore_for_file:` directive.
+# The .sh's rule (4) — a hand-rolled *.g.dart/*.freezed.dart/*.gr.dart file
+# outside lib/generated/ that lacks the build_runner first-line marker — is a
+# FILENAME+first-line shape, not a line-content pattern, and is NOT expressible
+# as forbidden/required-pattern; it is recorded in skipped[]. The .sh's
+# build_runner-marker exemption (first line == "// GENERATED CODE - DO NOT MODIFY
+# BY HAND") is likewise not a line pattern; rule (3) here approximates it by
+# excluding the generated-name extensions from scope.
+rules:
+  - id: dart-forbid-js-interop-imports
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.dart"
+      exclude:
+        - "**/*.pb.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbserver.dart"
+        - "**/*.pbgrpc.dart"
+        - "**/generated/**"
+        - "shared/generated/**"
+        - "**/node_modules/**"
+        - "**/build/**"
+        - "**/.dart_tool/**"
+    params:
+      pattern: "^import[[:space:]]+'package:js(_util)?/"
+    cure: "Leave the JS surface behind — use Dart typed FFI / native channels instead of package:js / package:js_util in app Dart code."
+    origin: scripts/check-dart-js-interop-and-ignore-bans.sh
+  - id: dart-forbid-file-level-analyzer-ignore
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.gr.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbserver.dart"
+        - "**/*.pbgrpc.dart"
+        - "**/generated/**"
+        - "shared/generated/**"
+        - "**/node_modules/**"
+        - "**/build/**"
+        - "**/.dart_tool/**"
+    params:
+      pattern: '//[[:space:]]*ignore_for_file:'
+    cure: "Remove the file-level analyzer ignore; fix the flagged code or narrow to an inline // ignore only where genuinely unavoidable (and prefer neither)."
+    origin: scripts/check-dart-js-interop-and-ignore-bans.sh

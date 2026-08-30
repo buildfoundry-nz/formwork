@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-wizard-columns-step-roundtrip.sh arm 1 (sweep-3 #3).
+# The producer scan_session.go must call ScanSuppliers (bare or
+# pkg-qualified) so the wizard Suppliers step renders. The .sh rg's each of five
+# anchors across two files; since exists-mode enforces one anchor at a time, each
+# anchor is its own required-pattern rule (a single OR rule would pass with only
+# one anchor, weaker than the gate). This is one of the five.
+rules:
+  - id: wizard-producer-calls-analyze-suppliers
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/stockroom/analyze/scan_session.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\bScanSuppliers\('
+      mode: exists
+    cure: "scan_session.go must keep calling ScanSuppliers or the wizard Suppliers step will not render (sweep-3 #3)."
+    origin: scripts/check-wizard-columns-step-roundtrip.sh

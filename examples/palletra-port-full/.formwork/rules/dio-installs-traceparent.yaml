@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-flutter-dio-traceparent-interceptor.sh
+# (B0, #5848), Rule 1. The outbound interceptor stamps a W3C traceparent on the
+# MAIN dio so the server span parents under the FE trace. http_client_provider.dart must
+# install TraceHeaderInterceptor. The .sh strips comments then greps the file
+# for `TraceHeaderInterceptor(`; exists-mode over that one file through
+# code-only-dart is the faithful port — that projection blanks comment bytes and
+# string CONTENTS while keeping all real code, so it strips exactly what the .sh
+# strips and the install call, which is code, still matches. Raw would not: a
+# comment naming TraceHeaderInterceptor( satisfied the anchor, so the
+# interceptor could be removed from the main dio and described in a passing
+# remark with this rule still green (fire-2 is that shape; #263.3).
+rules:
+  - id: dio-installs-traceparent
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/plt_core/lib/network/http_client_provider.dart"
+    preprocess: code-only-dart
+    params:
+      pattern: 'TraceHeaderInterceptor[[:space:]]*\('
+      mode: exists
+    cure: "http_client_provider.dart must install TraceHeaderInterceptor on the main dio, or outbound calls carry no traceparent and the server span never parents under the FE trace (#5848)."
+    origin: scripts/check-flutter-dio-traceparent-interceptor.sh

@@ -1,0 +1,18 @@
+rules:
+  - id: no-todo-markers
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include: ["**/*.txt"]
+    params:
+      pattern: 'TODO'
+    except:
+      paths: ["src/clean.txt"]
+    cure: "Resolve the item or move it to the issue tracker."
+  - id: readme-mentions-formwork
+    type: required-pattern
+    scope:
+      include: ["README.md"]
+    params:
+      pattern: 'formwork'
+      mode: exists

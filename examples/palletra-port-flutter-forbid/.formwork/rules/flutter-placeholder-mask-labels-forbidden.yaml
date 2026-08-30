@@ -1,0 +1,35 @@
+rules:
+  # Port of scripts/check-flutter-placeholder-mask-labels-forbidden.sh (sweep-1 #7).
+  # A scalar workflow mask is a read-only server value (WorkflowStage.plain_value),
+  # not a placeholder. The .sh FAILs on two DISTINCT-SCOPE patterns, so this
+  # port keeps them as two rules (shared origin).
+
+  # 1. Em-dash placeholder LABEL: a string-interpolation close `}` followed by
+  #    ` —` and a closing Dart quote (`} —'` / `} —"`). Scoped to the measure
+  #    feature where the scalar-mask sub-tab strip lives.
+  - id: flutter-no-placeholder-mask-label
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/**/*.dart"
+    preprocess: raw
+    params:
+      pattern: '\} —[''"]'
+    cure: "Render the server value (WorkflowStage.plain_value) verbatim, not a '${title} —' em-dash placeholder."
+    origin: scripts/check-flutter-placeholder-mask-labels-forbidden.sh
+
+  # 2. Deferral racking ('deferred pending review' / 'not yet finished') that excuses a
+  #    half-port as deferred — anywhere under the Flutter lib source.
+  - id: flutter-no-placeholder-deferral-framing
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+    preprocess: raw
+    params:
+      pattern: 'deferred pending review|not yet finished'
+    cure: "A scalar value is built (server plain_value). Remove the 'deferred pending review'/'not yet finished' excuse."
+    origin: scripts/check-flutter-placeholder-mask-labels-forbidden.sh

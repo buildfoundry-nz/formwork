@@ -1,0 +1,25 @@
+# Ported from Palletra scripts/check-flutter-out-of-bounds-badge-server-owned.sh
+# (#2229 / #2074 / #5661), Rule A. RangeBoundsFlag.message is the server-
+# composed, unit-aware out-of-bounds sentence; the FE must render it verbatim and
+# never recompose it. This forbids the two shapes the deleted client-side
+# composer used, across every metric-card presentation file:
+#   A1: reading out_of_bounds `.violated` to pick copy from the broken side.
+#   A2: interpolating a `.min`/`.max`/`.value` bound off an out-of-bounds
+#       receiver (oob / outOfGauge / rangeBounds) into a string.
+# RE2-clean (no lookaround); receiver-scoped so an unrelated `metric.value`
+# display is not flagged.
+rules:
+  - id: oob-message-not-recomposed-client-side
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/presentation/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+    params:
+      pattern: '\.violated\b|\$\{[^}]*\b(?:oob|outOfGauge|rangeBounds)\.(?:min|max|value)\b'
+    cure: "Render the server RangeBoundsFlag.message verbatim; do not read .violated or interpolate an out-of-bounds min/max/value bound into client-composed copy (#2074/#5661)."
+    origin: scripts/check-flutter-out-of-bounds-badge-server-owned.sh

@@ -1,0 +1,67 @@
+# Ported from Palletra scripts/check-migrations-version-no-collision.sh — the
+# UNIQ-VER gate. No two DIFFERENT migrations under
+# freightworks/services/core-api/migrations/{palletra,platform}/ may share a
+# golang-migrate version (the leading numeric prefix before the first '_'). A
+# migration's own up.sql + down.sql sharing a version is legitimate; two DISTINCT
+# stems landing on the SAME version is a collision that bricks boot-migrate
+# (golang-migrate refuses a source with duplicate versions — the 2031-06-26
+# span_count/page_gauge double-stamp of 20000221093000 that aborted every deploy
+# until a renumber landed).
+#
+# Why the ESCAPE HATCH (type: command): the rule is "group migration FILES by
+# their filename-derived numeric version prefix and fail if any version maps to
+# >1 distinct stem" — a grouping/uniqueness join over a filename-derived key that
+# no declarative formwork type expresses (pattern-count is a whole-scope total,
+# set-relation is a 2-sided A/B relation, file-naming cannot detect collisions).
+# It IS fully self-contained (a pure filename scan, no external tool), so this is
+# a fixture-PROVABLE command escape: the inline bash faithfully reproduces the
+# .sh — per domain, one "version<TAB>stem" line per file, `sort -u` collapses a
+# migration's up+down, and a version mapped to >1 distinct stem is the finding.
+# fire-1 double-stamps two distinct stems on one version; pass-1 is unique.
+rules:
+  - id: migrations-version-no-collision
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/palletra/**/*.sql"
+        - "freightworks/services/core-api/migrations/platform/**/*.sql"
+    params:
+      cmd:
+        - bash
+        - "-c"
+        - |
+          set -uo pipefail
+          MIG_BASE="freightworks/services/core-api/migrations"
+          rc=0
+          check_domain() {
+            dir="${MIG_BASE}/$1"
+            [ -d "$dir" ] || return 0
+            pairs=""
+            while IFS= read -r -d '' f; do
+              base="${f##*/}"
+              stem="${base%.up.sql}"; stem="${stem%.down.sql}"
+              version="${base%%_*}"
+              case "$version" in ''|*[!0-9]*) continue ;; esac
+              pairs="${pairs}${version}	${stem}
+          "
+            done < <(find "$dir" -type f \( -name '*.up.sql' -o -name '*.down.sql' \) -print0 2>/dev/null)
+            pairs="$(printf '%s' "$pairs" | sort -u)"
+            dups="$(printf '%s\n' "$pairs" | awk -F'\t' 'NF==2 {print $1}' | sort | uniq -d)"
+            [ -n "$dups" ] || return 0
+            while IFS= read -r v; do
+              [ -n "$v" ] || continue
+              echo "$1: version $v is shared by two or more distinct migrations:" >&2
+              printf '%s\n' "$pairs" | awk -F'\t' -v ver="$v" '$1==ver {print "    "$2}' >&2
+              rc=1
+            done <<EOF
+          $dups
+          EOF
+          }
+          check_domain palletra
+          check_domain platform
+          exit $rc
+      expect:
+        exit: 0
+    cure: "golang-migrate refuses a source with duplicate versions, so a collision bricks boot-migrate on every fresh apply. Restamp the LATER-authored migration above the frontier (scripts/new-migration.sh --restamp), preserving any ordering dependency."
+    origin: scripts/check-migrations-version-no-collision.sh

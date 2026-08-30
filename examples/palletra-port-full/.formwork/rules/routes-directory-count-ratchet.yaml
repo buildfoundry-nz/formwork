@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-routes-directory-count-ratchet.sh (#7120).
+#
+# The core-api route surface had grown to 40 flat sibling directories under
+# routes/ (an architecture-review finding #7120). The fix is a hierarchical structure (chi
+# sub-routers nested under a domain dir); this gate is the regression lock: the
+# number of DIRECT child directories of routes/ must not EXCEED a single pinned
+# integer literal (MAX_ROUTE_CHILD_DIRS, currently 36). The pin is a down-only
+# ratchet — each domain-nesting PR LOWERS it in the same commit; it is never
+# raised to admit a new flat package. A test seam can only TIGHTEN it.
+#
+# PORT MAPPING: COMMAND ESCAPE. The check counts DIRECT CHILD DIRECTORIES of a
+# tree (`find -mindepth 1 -maxdepth 1 -type d | wc -l`) and compares that count
+# to a pinned down-only ratchet ceiling. formwork's declarative types operate on
+# FILES and their CONTENT — pattern-count counts pattern matches within files,
+# file-size is per-file, filenaming matches names — none enumerates directories
+# or holds a ratchet pin literal to compare a directory count against. Not
+# expressible declaratively, so this is the spec's sanctioned escape: params.cmd
+# runs the real check, which verifies in CI. No fixture (formwork lint
+# enumerates it).
+rules:
+  - id: routes-directory-count-ratchet
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-routes-directory-count-ratchet.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**"
+    params:
+      cmd:
+        - bash
+        - scripts/check-routes-directory-count-ratchet.sh
+      expect:
+        exit: 0
+    cure: "The routes/ tree must get FLATTER over time, not wider: nest the new package under its domain directory (chi sub-router, e.g. routes/<domain>/<package>/), or restore the nesting that was undone. Never raise MAX_ROUTE_CHILD_DIRS to accommodate a new flat package — the pin is a ceiling that only ratchets down (#7120)."
+    origin: scripts/check-routes-directory-count-ratchet.sh

@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-proto-deprecated-field-writer-disconnected.sh
+# (sweep-3 #5). The deprecated UpdateRatedItemRequest.active_rate field was a
+# destructive-edit vector; sweep-3 #5 closed it by dropping the field and
+# reserving both its wire slot (field 6) and its name. This ports the strongest
+# single required anchor: the stockroom_priced_item.proto MUST keep reserving the
+# name "active_rate", so a regression cannot re-add the field under the same
+# name. required-pattern exists mode = the anchor must be present in the proto.
+#
+# Not ported (the .sh's other arms need types formwork's line-oriented pattern
+# rules do not express here): `reserved 6;` (a second required anchor), the
+# multiline message-body scoping of the reservation, the `active_rate = <N>`
+# re-introduction ban, and the handler-side `req.ActiveRate` forbidden arm.
+rules:
+  - id: proto-deprecated-field-writer-disconnected
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "schema/proto/palletra/api/v1/stockroom_priced_item.proto"
+    params:
+      pattern: 'reserved\s+"active_rate"\s*;'
+      mode: exists
+    cure: "UpdateRatedItemRequest must keep reserving name \"active_rate\" so a regression cannot re-add the deprecated field at a different wire slot (sweep-3 #5)."
+    origin: scripts/check-proto-deprecated-field-writer-disconnected.sh

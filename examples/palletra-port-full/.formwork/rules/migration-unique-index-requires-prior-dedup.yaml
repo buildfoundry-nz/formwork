@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-migration-unique-index-requires-prior-dedup.sh (sweep-13 §A1).
+# FP FIX: the ported pattern anchored neither UPDATE nor CREATE UNIQUE INDEX to a
+# line start, so it matched those keywords inside COMMENTS (0024's
+# "anonymisation UPDATE fires", 20260707's "keeping the sole UPDATE after CREATE
+# UNIQUE INDEX" — the whole forbidden span lived in one comment line) and it
+# treated a MERGE's `WHEN MATCHED THEN UPDATE SET` clause as a dangerous UPDATE
+# (0068), even though the .sh's `^[[:space:]]*` anchors ignore comment lines and
+# the .sh passes any file with a MERGE/DELETE before the index. The fix mirrors
+# the .sh's anchors: `(?m)^[ \t]*UPDATE` (never a comment line, which starts
+# `--`) and `^[ \t]*CREATE[ \t]+UNIQUE[ \t]+INDEX`. A whole-file require_absent
+# forbids the `^`-anchored DELETE FROM / MERGE INTO dedup step (the pass-1 shape).
+rules:
+  - id: migration-unique-index-requires-prior-dedup
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.up.sql"
+    params:
+      # Origin: a *.up.sql with a first `^\s*UPDATE\s+` BEFORE the first
+      # `^\s*CREATE UNIQUE INDEX`, and NO intervening `^\s*DELETE FROM` / `^\s*MERGE
+      # INTO` dedup step. Linear-RE2 multiline: the pattern spans the ordered
+      # UPDATE→CREATE UNIQUE INDEX with a plain lazy `[\s\S]*?` (linear in RE2, no
+      # backtracking) — preserving the UPDATE-before-INDEX ordering and anchoring the
+      # finding on the UPDATE line (= fixture want-marker) — and the tempered-dot
+      # "no intervening DELETE/MERGE" moves to whole-file require_absent (faithful: a
+      # dedup step precedes the index in real migrations). The `^[ \t]*` anchors keep
+      # UPDATE/CREATE/DELETE/MERGE off comment lines (which start `--`). The regexp2
+      # `(?!SET\b)` is dropped: the origin has no SET carve-out — its line-start anchor
+      # already skips a MERGE's non-line-start `WHEN MATCHED THEN UPDATE SET`, and a
+      # MERGE migration is covered by the `MERGE INTO` require_absent.
+      multiline: true
+      pattern: '(?m)^[ \t]*UPDATE[ \t]+\S[\s\S]*?^[ \t]*CREATE[ \t]+UNIQUE[ \t]+INDEX'
+      require_absent:
+        - '(?m)^[ \t]*DELETE[ \t]+FROM'
+        - '(?m)^[ \t]*MERGE[ \t]+INTO'
+    cure: "Insert a DELETE FROM <table> (keeper-by-created_at,id) or MERGE INTO <table> step between the canonicalising UPDATE and the CREATE UNIQUE INDEX so pre-existing duplicates are resolved before the index rejects them (SQLSTATE 23505). See migration platform/0021_platform_stock_lines_dedup_unique.up.sql for the canonical shape (sweep-13 §A1)."
+    origin: scripts/check-migration-unique-index-requires-prior-dedup.sh

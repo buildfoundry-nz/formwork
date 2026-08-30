@@ -1,0 +1,25 @@
+rules:
+  # sweep-9b #8 (DD-1): wrappers.PredictErr is the single canonical
+  # Visionkit-Infer error classifier. The ONLY declaration of an predictErr/PredictErr
+  # function under modelreg/ lives in wrappers/errors.go. Any other
+  # `func predictErr(` / `func PredictErr(` is a re-introduced duplicate. Tests are
+  # excluded (a synth fixture declares one); the canonical home is excluded.
+  - id: modelreg-no-duplicate-infererr
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include: ["freightworks/services/core-api/internal/modelreg/**/*.go"]
+      exclude:
+        # Both entries are live in the tree these rules came from and dead in
+        # this slice, which carries neither a _test.go nor the wrappers/
+        # package. Preventative, not rot — see .formwork/lint.yaml.
+        - "**/*_test.go"  # tests define local predictErr fakes on purpose
+        # THE CANONICAL DEFINITION. wrappers.PredictErr is the one the cure
+        # tells you to call, so the rule must not fire on the file that
+        # declares it. A file-exact exclude, not a glob, for that reason.
+        - "freightworks/services/core-api/internal/modelreg/wrappers/errors.go"
+    preprocess: raw
+    params:
+      pattern: 'func\s+[pP]redictErr\s*\('
+    cure: "Delete the local copy and call wrappers.PredictErr(name, err) (sweep-9b #8 / DD-1)."
+    origin: scripts/check-modelreg-no-duplicate-infererr.sh

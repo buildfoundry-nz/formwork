@@ -1,0 +1,53 @@
+# Port of scripts/check-flutter-keepalive-caches-flushed-on-logout.sh.
+#
+# The original gate enforces several coupled Riverpod invariants so per-project
+# caches cannot survive a sign-out. Three of them are pure method-delegation
+# facts — "method X's body must call Y" — which map exactly onto the
+# dart/method-delegates analyzer (a method header matched by regex whose
+# brace-tracked body must contain a required call). The remaining invariants
+# (evictAll iterating a snapshot built from BOTH ..._projectGrouped AND ..._unkeyed,
+# and the per-build session-erasure gate before a fetch) are value-flow /
+# multi-token-in-one-initializer facts that method-delegates cannot express and
+# are recorded in this batch's skipped[] rationale.
+rules:
+  # Invariant 1 — flushSessionCaches drains the LRU registry via .evictAll(.
+  - id: lru-drained-on-caches-flush
+    type: dart/method-delegates
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+    params:
+      method: 'void flushSessionCaches\('
+      must_call: '\.evictAll\('
+    cure: "flushSessionCaches must call SessionStoreLru.evictAll() so EVERY LRU-retained cache is drained on sign-out, not just an explicit subset."
+    origin: scripts/check-flutter-keepalive-caches-flushed-on-logout.sh
+
+  # Invariant 2 — the sessionState provider's signed-out branch flushes.
+  - id: keepalive-session-transition-flushes-caches
+    type: dart/method-delegates
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+    params:
+      method: 'Future<SessionState>\s+sessionState\('
+      must_call: 'flushSessionCaches\('
+    cure: "sessionState must call flushSessionCaches(ref) so the flush rides the sign-out transition (covering involuntary token-expiry logout, not just buttons)."
+    origin: scripts/check-flutter-keepalive-caches-flushed-on-logout.sh
+
+  # Invariant 4b — evictAll must FORCEFULLY invalidate a still-watched cache.
+  - id: keepalive-evictall-invalidates-watched-cache
+    type: dart/method-delegates
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+    params:
+      method: 'void evictAll\('
+      must_call: '\.invalidate\('
+    cure: "evictAll must call the invalidate tear-off (.invalidate()) so a STILL-WATCHED cache is erased on sign-out, not just closed (sweep-5 #1)."
+    origin: scripts/check-flutter-keepalive-caches-flushed-on-logout.sh

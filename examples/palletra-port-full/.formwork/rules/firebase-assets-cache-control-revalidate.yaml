@@ -1,0 +1,34 @@
+# Ported from Palletra scripts/check-firebase-assets-cache-control-revalidate.sh (#8274 / #2937) —
+# RULE 1 half. Every firebase*.json hosting target's `/assets/**` headers'
+# Cache-Control MUST equal "no-cache, must-revalidate". Flutter web does not
+# content-hash /assets/** paths (the tree-shaken SkuIcons subset ships at a
+# stable URL), so any long-lived / immutable cache there pins browsers to stale,
+# glyph-missing bytes after a deploy (the #2937 cross-browser icon incident).
+# The companion rule firebase-ignore-list-includes-canvaskit covers RULE 2.
+#
+# Ported as forbidden-pattern multiline + regexp2: fire when a `/assets/**`
+# source block reaches a Cache-Control key whose value is NOT
+# "no-cache, must-revalidate". A tempered token `(?:(?!"source")[\s\S])*?` walks
+# from the /assets/** source to the next Cache-Control WITHOUT crossing into a
+# following source block, and a negative lookahead rejects the correct value.
+# The finding anchors to the /assets/** source line.
+#
+# DIVERGENCE (noted for fidelity): the .sh is structural jq (per-target,
+# object-or-array, treats a missing /assets/** rule as a failure). This text port
+# catches a WRONG Cache-Control value on a present /assets/** rule; a config that
+# omits the /assets/** header rule entirely is not flagged here (formwork lint /
+# the required-pattern sibling own presence). The core "must revalidate, never
+# immutable" invariant is faithfully ported.
+rules:
+  - id: firebase-assets-cache-control-revalidate
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "firebase*.json"
+    params:
+      multiline: true
+      syntax: regexp2
+      pattern: '"/assets/\*\*"(?:(?!"source")[\s\S])*?"Cache-Control"(?:(?!"source")[\s\S])*?"value"\s*:\s*"(?!no-cache, must-revalidate")'
+    cure: "Set the /assets/** Cache-Control to \"no-cache, must-revalidate\" in every firebase*.json hosting target — Flutter web does not fingerprint /assets/** paths; a long/immutable cache pins browsers to stale bytes after a deploy (#8274 / #2937)."
+    origin: scripts/check-firebase-assets-cache-control-revalidate.sh

@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-go-decode-boundary-types.sh.
+# Wire-boundary decode narrowing: json/protojson.Unmarshal or a .Decode into a
+# weak target (any / interface{} / map[...]any) is banned; the decode target must
+# be a typed struct or proto type. Two regex passes combined by alternation.
+# The .sh greps RAW source (no decomment despite the JSON hint), so preprocess is
+# omitted for parity — a commented weak decode trips it exactly as in the .sh.
+# Carve-outs mirror the .sh: tests, vendor/gen/generated, internal/supplierjson,
+# internal/proto, *_pb.go, zz_generated_*.go, *_generated.go.
+rules:
+  - id: go-decode-boundary-no-weak-target
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/vendor/**"
+        - "**/gen/**"
+        - "**/generated/**"
+        - "**/internal/supplierjson/**"
+        - "**/internal/proto/**"
+        - "**/*_pb.go"
+        - "**/zz_generated_*.go"
+        - "**/*_generated.go"
+    params:
+      pattern: '\b(json|protojson)\.Unmarshal\([^,]+,\s*&?(map\[[^]]+\]\s*)?(any|interface\{\s*\})|\.Decode\(\s*&?(map\[[^]]+\]\s*)?(any|interface\{\s*\})'
+    cure: "Decode into a typed struct (proto-generated or hand-rolled where permitted), then propagate the typed value inward — never Unmarshal/Decode into any / interface{} / map[...]any."
+    origin: scripts/check-go-decode-boundary-types.sh

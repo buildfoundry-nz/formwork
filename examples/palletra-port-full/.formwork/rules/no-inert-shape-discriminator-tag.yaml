@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-no-inert-shape-discriminator-tag.sh (sweep-3
+# ESC-C2-3). The inert #4176 shape-discriminator identifier (and its
+# blank-assign keep) must not appear in Go source under freightworks/ or
+# scripts/. Generated *.pb.go, vendor and gatetests fixtures are exempt.
+rules:
+  - id: no-inert-shape-discriminator-tag
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+        - "scripts/**/*.go"
+      exclude:
+        - "**/*.pb.go"
+        - "**/vendor/**"
+        - "**/gatetests/**"
+    params:
+      pattern: 'shapeTag'
+    cure: "Delete the inert shape-discriminator pad; rely on the package-scoped go-type-shapes-no-duplicates detector (sweep-3)."
+    origin: scripts/check-no-inert-shape-discriminator-tag.sh

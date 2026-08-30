@@ -1,0 +1,31 @@
+# Ported from Palletra scripts/check-decomment-lexers-must-go-through-wrapper.sh (#3168).
+# Meta-gate: no scripts/*.go (maxdepth 1) may name a decomment lexer file
+# (decomment-{go,dart,sh,yaml}.awk) in code — every consumer must reach the
+# lexers through the shared wrapper (freightworks/scripts/lib/decomment).
+#
+# Post-conversion note: the gated referent — the .awk lexer files — does not
+# exist in a zero-shell tree, so what this rule now guards is NAME-STRING
+# references to those historical lexer filenames: a gate hardcoding
+# "scripts/lib/decomment-go.awk" is the bypass shape (it pins a lexer path
+# that only the wrapper should know).
+#
+# Mechanism: the shell original anchored the pattern `^[^#]*` so a `#`
+# comment mention never fired. Go has no `#` comments, so this port uses
+# `preprocess: decomment-go` with an anchor-less pattern instead — the pass
+# fixture's `//` comment mention is BLANKED by the preprocessor rather than
+# anchored out, the same net effect. scripts/lib/ is the wrapper's own home
+# and is excluded (also naturally out of the maxdepth-1 `scripts/*.go` glob).
+rules:
+  - id: decomment-lexers-must-go-through-wrapper
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "scripts/*.go"
+      exclude:
+        - "scripts/lib/**"
+    preprocess: decomment-go
+    params:
+      pattern: 'decomment-(go|dart|sh|yaml)\.awk'
+    cure: "Import the shared wrapper and call it — the ONE package that knows a lexer's filename (#3168): `freightworks/scripts/lib/decomment`, then `decomment.StripCommentsGo(f)` (or StripCommentsDart / StripCommentsYAML)."
+    origin: scripts/check-decomment-lexers-must-go-through-wrapper.sh

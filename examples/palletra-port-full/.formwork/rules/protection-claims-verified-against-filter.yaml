@@ -1,0 +1,46 @@
+# Ported from Palletra scripts/check-protection-claims-verified-against-filter.sh
+# (CI-redesign audit, no-false-self-protective-claims gate).
+#
+# Any file under scripts/ whose body asserts it is in the "Policy-Tamper-Guard
+# protected set" MUST actually appear as a canonical `- 'path'` entry under the
+# protected: paths-filter block of .github/workflows/config-tamper-guard.yml —
+# so the comment can never outrun the filter, leaving its own anchor editable in
+# the very diff it guards.
+#
+# PORT MAPPING: COMMAND ESCAPE. This is a cross-file predicate whose set element
+# is a FILE'S OWN PATH gated on that file's CONTENT: "the repo-relative path of
+# each script that matches the claim phrase must be a canonical anchored list
+# item in another file." set-relation extracts string VALUES from file content
+# and cannot emit a file's path conditioned on a content match; pair-consistency
+# is same-file only. No declarative type expresses path-membership-conditioned-
+# on-content, nor the anchored `- 'path'` list-item parse that rejects a path
+# named only in a YAML comment or as a substring. This is the sanctioned escape:
+# params.cmd runs the real check, which verifies in CI. No fixture (formwork
+# lint enumerates it).
+rules:
+  - id: protection-claims-verified-against-filter
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-protection-claims-verified-against-filter.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "scripts/**"
+        - ".github/workflows/config-tamper-guard.yml"
+    params:
+      cmd:
+        - bash
+        - scripts/check-protection-claims-verified-against-filter.sh
+      expect:
+        exit: 0
+    cure: "Either add the script's repo-relative path to the protected: paths-filter in .github/workflows/config-tamper-guard.yml (and CODEOWNERS + lint-policy.sh), or remove the false 'Policy-Tamper-Guard protected set' claim from the script body. The comment must never outrun the filter."
+    origin: scripts/check-protection-claims-verified-against-filter.sh

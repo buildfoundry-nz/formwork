@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "command": "cat .claude/hooks/review-standard-banner.txt" }
+    ]
+  }
+}

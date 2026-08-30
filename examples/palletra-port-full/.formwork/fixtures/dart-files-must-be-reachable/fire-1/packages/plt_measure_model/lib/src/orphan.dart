@@ -1,0 +1,3 @@
+class OrphanLeftover {
+  const OrphanLeftover();
+}

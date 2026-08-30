@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-restore-scope-derives-from-registry.sh (#1114).
+# "Restore" resets a workflow step's annotations to the model's stored
+# predictions — the most destructive decision on the Measure canvas. The
+# predecessor took its scope from the CLIENT (a repeated marker_types field)
+# and read the empty list as "every type", so a user reviewing Shelving pressed
+# Restore and lost their Partitions/Racking work too. The fix: the client names the
+# step (segment_code) and the SERVER resolves the owned types from the canonical
+# approve registry. This gate makes the old semantics unreachable on both sides
+# of the wire:
+#   RULE 1 (handler) — markers_restore_by_section.go MUST resolve scope via
+#     approveall.GetConfig(.
+#   RULE 2 (handler) — the same file MUST NOT read a caller-supplied type list
+#     (GetMarkerTypes() / .AnnotationTypes).
+#   RULE 3 (proto)   — ReinstateSectionAnnotationsRequest MUST carry segment_code
+#     and MUST NOT carry a repeated annotation-type field.
+#
+# PORT MAPPING: this is a multi-file, multi-assertion contract spanning a Go
+# handler AND a .proto wire definition (a non-Go, non-SQL surface), combining a
+# MANDATORY-presence check (approveall.GetConfig(, segment_code) with
+# forbidden-token checks — a shape no single declarative analyzer expresses. It
+# uses the ESCAPE HATCH: a self-contained Go reproduction (checks/check.go,
+# committed in each fixture) that strips comments and re-derives all three
+# rules on the fixture tree. The finding is scope-level (no want marker). fire-1's handler
+# reads .AnnotationTypes and its proto carries a repeated marker_types field;
+# pass-1 is registry-derived and the wire cannot express a type list.
+rules:
+  - id: restore-scope-derives-from-registry
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/annotations/**/*.go"
+        - "schema/proto/palletra/api/v1/*.proto"
+    params:
+      cmd:
+        - go
+        - run
+        - checks/check.go
+      expect:
+        exit: 0
+    cure: "The restore request names the workflow step (segment_code); the handler resolves approveall.GetConfig(sectionCode).ScopedAnnotationTypeCodes() + .GroupFilter. Never accept a type list from the client (no .AnnotationTypes read, no repeated annotation-type proto field), and never let an empty scope mean 'everything' (#1114)."
+    origin: scripts/check-restore-scope-derives-from-registry.sh

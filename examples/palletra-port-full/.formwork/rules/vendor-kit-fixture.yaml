@@ -1,0 +1,90 @@
+# Ported from Palletra scripts/check-vendor-kit-fixture.sh (#5598, epic #6132).
+#
+# docs/corpus-evidence/vendor-kit/ is the external vendor kit corpus-evidence
+# package (switch->kit rates, activation-token classification, kitimport
+# reconciliation, executable-equivalence census). It is EVIDENCE, not a runtime
+# input: no Go reads it. generate.py is the sole home of the derivation logic
+# and this gate is the only thing between the corpus and silent rot. The .sh
+# pins dozens of exact census/token/reconciliation counts, verifies SHA256
+# checksums over the evidence files, asserts meta.counts self-consistency, holds
+# a ROUND_HALF_UP VAT invariant on the line-items rows, and finally runs
+# generate.py --check to prove every derived file reproduces byte-for-byte.
+#
+# PORT MAPPING: none of that is a declarative per-file predicate — it is a
+# data-integrity tool run (checksums + count re-derivation + a python generator
+# in --check mode). So this uses the ESCAPE HATCH: a command rule reproducing
+# the fixture's own integrity invariants over the corpus tree. This
+# fixture-provable port reproduces three representative arms of the real gate:
+#   (1) required evidence files exist (a missing file is a FAIL, never a skip);
+#   (2) SHA256 checksums in CHECKSUMS.sha256 match the named files byte-for-byte
+#       (the "a changed byte re-derives every count from a different decode"
+#       provenance arm);
+#   (3) meta.counts self-consistency: counts.switches == len(switches) and
+#       counts.edges == sum(len(kit)) recomputed from the data.
+# The remaining pins (activation-token/census/reconciliation counts, the VAT
+# invariant, generate.py --check) are the same shape — a value re-derived from
+# the evidence and compared to a declared/committed number. Scope-level finding
+# (no want marker); fire-1 corrupts the checksum + drifts a declared count,
+# pass-1 is a consistent, checksum-clean corpus.
+rules:
+  - id: vendor-kit-fixture
+    type: command
+    severity: error
+    scope:
+      include:
+        - "docs/corpus-evidence/vendor-kit/**"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import hashlib, json, os, sys
+          FIX = "docs/corpus-evidence/vendor-kit"
+          REQUIRED = ["switch-kit-rates.json", "CHECKSUMS.sha256"]
+          rc = 0
+          # Arm 1: required evidence files must exist (target-rot guard).
+          for f in REQUIRED:
+              if not os.path.isfile(os.path.join(FIX, f)):
+                  sys.stderr.write("missing required fixture file: %s\n" % f)
+                  rc = 1
+          if rc:
+              sys.exit(rc)
+          # Arm 2: checksums pin the immutable evidence.
+          with open(os.path.join(FIX, "CHECKSUMS.sha256")) as fh:
+              for line in fh:
+                  line = line.strip()
+                  if not line or line.startswith("#"):
+                      continue
+                  want, name = line.split(None, 1)
+                  name = name.lstrip("*").strip()
+                  path = os.path.join(FIX, name)
+                  if not os.path.isfile(path):
+                      sys.stderr.write("CHECKSUMS names a missing file: %s\n" % name)
+                      rc = 1
+                      continue
+                  h = hashlib.sha256()
+                  with open(path, "rb") as bf:
+                      for chunk in iter(lambda: bf.read(1 << 20), b""):
+                          h.update(chunk)
+                  if h.hexdigest() != want:
+                      sys.stderr.write("checksum mismatch for %s: evidence changed\n" % name)
+                      rc = 1
+          # Arm 3: meta.counts self-consistency, recomputed from the data.
+          with open(os.path.join(FIX, "switch-kit-rates.json")) as fh:
+              doc = json.load(fh)
+          switches = doc["switches"]
+          counts = doc["meta"]["counts"]
+          if len(switches) != counts["switches"]:
+              sys.stderr.write("meta.counts.switches=%r but len(switches)=%d\n"
+                               % (counts["switches"], len(switches)))
+              rc = 1
+          edges = sum(len(s["kit"]) for s in switches)
+          if edges != counts["edges"]:
+              sys.stderr.write("meta.counts.edges=%r but computed edges=%d\n"
+                               % (counts["edges"], edges))
+              rc = 1
+          sys.exit(rc)
+      expect:
+        exit: 0
+    cure: "Adding/altering a pinned count is deliberate: update the constants AND the README table AND say why in the PR (#5598). On a checksum mismatch the evidence itself changed — re-run generate.py so every derived file and count is re-derived from the new decode; never hand-edit a derived file to match a stale pin. That friction is the point."
+    origin: scripts/check-vendor-kit-fixture.sh

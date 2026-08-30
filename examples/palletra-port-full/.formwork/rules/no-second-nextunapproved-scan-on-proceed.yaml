@@ -1,0 +1,26 @@
+# Ported from Palletra
+# scripts/check-no-second-nextunapproved-scan-on-proceed.sh (Measure-port
+# #24 / Sweep-2 #C1). #24 folded next_pending into GetMainActionResponse,
+# so the footer's proceed-to-Pricing gate reads it off the SAME project scan the
+# primary-action decision already runs. The redundant standalone second scan is
+# removed and must not return under packages/feature_dimension/lib/**.
+#
+# Two ban signals (one regex): the standalone Riverpod provider
+# `upcomingUnapprovedProvider`, and a direct repo fetch `.upcomingUnapproved(` (the
+# trailing `(` distinguishes the fetch from field access `response.upcomingUnapproved`
+# — the #24 GREEN shape — which stays allowed). *.g.dart re-exports are excluded.
+# The workflow sidebar's legitimate standalone endpoint lives in a SEPARATE
+# package (plt_canvas_kit/lib/workflow/**), outside this measure-feature scope.
+rules:
+  - id: no-second-nextunapproved-scan-on-proceed
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+    params:
+      pattern: 'upcomingUnapprovedProvider|\.upcomingUnapproved\('
+    cure: "Read next_pending off the GetMainActionResponse the footer already fetched (response.upcomingUnapproved.pageId.isEmpty) — never a second scan via upcomingUnapprovedProvider or approvalRepository.upcomingUnapproved() (#24)."
+    origin: scripts/check-no-second-nextunapproved-scan-on-proceed.sh

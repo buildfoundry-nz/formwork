@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-flutter-pdf-page-handle-retain-not-discarded.sh (#2483).
+# pdf_page_lease_provider.dart must not DISCARD the pinInProjectCache release
+# handle (the pre-#2483 leak: a bare `ref.pinInProjectCache(projectId);`
+# statement whose return value is unbound). This ports the FORBIDDEN discard limb.
+# The .sh detects "a pinInProjectCache( line with no `=`"; RE2 has no negative
+# lookahead, so this anchors the discard shape structurally — a statement whose
+# leading token IS the pinInProjectCache( call (an assignment is preceded by
+# `<lhs> = ` so the call is not at line start and does not match). The .sh's two
+# positive anchors (references pdfPageLeaseLruProvider AND calls .retain()) are
+# required-pattern limbs a single forbidden-pattern rule cannot express — see notes.
+rules:
+  - id: flutter-pdf-page-handle-retain-not-discarded
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/plt_page_raster/lib/providers/pdf_page_lease_provider.dart"
+    params:
+      pattern: '^[[:space:]]*(ref\.)?pinInProjectCache\('
+    cure: "Capture the release handle (final release = ref.pinInProjectCache(...)) and register it with PdfPageLeaseLru (pdfPageLeaseLruProvider .retain(...)), or the pdfium-wasm heap grows unbounded within a project."
+    origin: scripts/check-flutter-pdf-page-handle-retain-not-discarded.sh

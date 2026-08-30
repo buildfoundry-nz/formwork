@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-error-code-enum-fully-wired.sh (#6679).
+# Every generated apiv1.ErrorCode value must have an entry in the FE's single
+# wire-resolution map (_protoToErrorCode in error_code.dart) — a value with no
+# mapping merges green and silently drops the actionable copy at runtime (the
+# #5873 ERROR_CODE_FEATURE_DISABLED gap). The .sh derives wire =
+# toLower(trimPrefix(EnumValueName,"ERROR_CODE_")) from the generated enum and
+# asserts a matching lowercase key exists.
+#
+# Ported as a set-relation SUBSET over the UPPERCASE enum symbol, which both
+# files carry verbatim: side A = every `ERROR_CODE_*` const declared in the
+# generated pbenum; side B = every `ERROR_CODE_*` symbol REFERENCED in
+# error_code.dart (each map row `'wire': ErrorCode.ERROR_CODE_*` names it, and
+# the `?? ErrorCode.ERROR_CODE_UNSPECIFIED` fallback covers the UNSPECIFIED
+# sentinel the .sh drops). A ⊆ B means every enum value is wired into the FE map.
+#
+# DIVERGENCE (noted): the .sh anchors the lowercase KEY first-on-line to reject a
+# dead/commented entry; matching the uppercase value-symbol here does not strip
+# comments, so a commented-out `ErrorCode.ERROR_CODE_*` reference would satisfy
+# side B (the dead-entry refinement is lost). The primary defect — a new enum
+# value with no map row at all — is caught identically. Scope-level finding
+# (fire-1.want carries the `-` marker; no line to anchor).
+rules:
+  - id: error-code-enum-fully-wired
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "shared/generated/dart/lib/palletra/api/v1/error_code.pbenum.dart"
+        - "packages/plt_core/lib/network/error_code.dart"
+    params:
+      a:
+        files:
+          - "shared/generated/dart/lib/palletra/api/v1/error_code.pbenum.dart"
+        pattern: 'static const ErrorCode (ERROR_CODE_[A-Z0-9_]+)[ \t]*='
+        group: 1
+      b:
+        files:
+          - "packages/plt_core/lib/network/error_code.dart"
+        pattern: 'ERROR_CODE_[A-Z0-9_]+'
+        group: 0
+      relation: subset
+    cure: "Add a _protoToErrorCode entry for the new ErrorCode value in packages/plt_core/lib/network/error_code.dart (wire = toLower(trimPrefix(name,'ERROR_CODE_'))) — #6679/#5873."
+    origin: scripts/check-error-code-enum-fully-wired.sh

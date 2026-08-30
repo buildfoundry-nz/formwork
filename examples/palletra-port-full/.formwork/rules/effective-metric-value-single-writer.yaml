@@ -1,0 +1,28 @@
+# Ported from Palletra scripts/check-effective-metric-value-single-writer.sh
+# (#1721), RULE C. The BOM formula-variable feed (calcvars.Build) reads
+# the ProjectTally value in Go, not SQL, so it MUST assemble the priced value
+# through the effectiveValue(m) helper (ManualOverride ?? Value), never a bare
+# `:= float64(m.GetValue())` — the #1721 dual-use override-drop that silently
+# over/under-bills. Bans that raw-read shape in calcvars.go. The .sh
+# decomments before the Rule C grep, so preprocess: decomment-go.
+#
+# DIVERGENCE (noted): the gate's primary RULE A — a bare `am.value` SQL literal is
+# legal ONLY inside COALESCE(am.adjusted_value, am.value), any other bare am.value
+# fails — needs a negative-lookbehind / gsub-then-check ("am.value NOT preceded by
+# the COALESCE wrapper"), which RE2 (no lookaround) cannot express as a single
+# forbidden-pattern; it is not ported. RULE B (five pinned pricing feeds must keep
+# the COALESCE spelling AND must not reference RawAmountExpr) is a per-file
+# required+forbidden pair across a fixed file list; not ported here. Only RULE C —
+# a genuine, faithful forbidden-pattern — is ported.
+rules:
+  - id: effective-metric-value-single-writer
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/calcvars/calcvars.go"
+    preprocess: decomment-go
+    params:
+      pattern: ':=\s*float64\(m\.GetValue\(\)\)'
+    cure: "Read the priced value through effectiveValue(m) (ManualOverride ?? Value); never sum the raw float64(m.GetValue()), which drops the override (#1721)."
+    origin: scripts/check-effective-metric-value-single-writer.sh

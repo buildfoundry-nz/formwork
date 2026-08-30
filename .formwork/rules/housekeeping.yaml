@@ -1,0 +1,19 @@
+rules:
+  - id: no-todo-comments
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include: ["cmd/**/*.go", "internal/**/*.go"]
+    params:
+      pattern: '//\s*(TODO|FIXME|HACK)\b'
+    cure: "Resolve the item now or track it in an issue; marker comments rot."
+    except:
+      marker: true
+  - id: spec-exists
+    type: required-pattern
+    scope:
+      include: ["docs/specs/*.md"]
+    params:
+      pattern: 'Formwork — Design Spec'
+      mode: exists
+    cure: "The design spec is the source of truth; do not remove it."

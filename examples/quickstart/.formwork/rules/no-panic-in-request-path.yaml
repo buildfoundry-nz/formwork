@@ -1,0 +1,33 @@
+# RULE 2 — the same shape, plus a preprocessor.
+#
+# THE PROBLEM THIS SOLVES. A regex over raw file bytes cannot tell code from
+# prose. Ban `panic(` and you also fire on:
+#
+#     // We used to panic( here; now we return an error.
+#
+# ...which is a false positive on a comment that is *documenting the fix*.
+# False positives are not a cosmetic problem: a rule that cries wolf gets
+# suppressed, and a suppressed rule guards nothing.
+#
+# `preprocess:` runs the file through a transform before matching. decomment-go
+# blanks Go comments while preserving line numbers, so the finding still points
+# at the right line — the matcher sees code only.
+#
+# Preprocessed variants are computed once per file and shared by every rule
+# that asks for the same one, so this costs nothing per additional rule.
+# `formwork list preprocessors` shows what the binary you have supports.
+rules:
+  - id: no-panic-in-request-path
+    type: forbidden-pattern
+    severity: error
+    preprocess: decomment-go
+    scope:
+      include:
+        - "internal/handler/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: '\bpanic\('
+    cure: "Return an error and let the handler's error path turn it into a response. A panic in a request handler takes down the whole process for one bad request."
+    origin: "quickstart-example"
+    tags: [go]

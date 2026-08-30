@@ -1,0 +1,16 @@
+# Ported from scripts/check-per-item-vendor-id-wired.sh (sweep-3 #2), reader
+# half anchor 4. scan/stockroom/supplier.go's SupplierQueryColumns item_count aggregate
+# must reference pi.vendor_id or the supplier list item_count miscounts
+# per-item-linked rows.
+rules:
+  - id: per-item-supplier-id-referenced-by-scan-query
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/scan/stockroom/supplier.go'
+    params:
+      pattern: 'pi\.vendor_id'
+      mode: exists
+    cure: 'scan/stockroom/supplier.go must keep referencing pi.vendor_id or supplier list item_count miscounts items linked via the per-item supplier FK (sweep-3 #2 reader half).'
+    origin: scripts/check-per-item-vendor-id-wired.sh

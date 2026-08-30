@@ -1,0 +1,8 @@
+name: patrol-tests
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: go test ./scripts/ci/...

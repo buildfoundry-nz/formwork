@@ -1,0 +1,22 @@
+rules:
+  # Port of check-dart-flutter-state-and-theme-rules.sh (S) state-management bans that are
+  # line-shaped: (S1) `extends StateNotifier`, (S2) `StateNotifierProvider`,
+  # (S3) `.valueOrNull` — all removed/forbidden under the Riverpod 3.x posture.
+  # These are plain alternations, so RE2 (no lookaround). (The gate's multiline
+  # asData->value chain (S3c) and the import-scoped S4 check are not line-shaped
+  # and stay out of this port.)
+  - id: dart-forbid-legacy-riverpod-state-apis
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+    params:
+      pattern: '\bextends\s+StateNotifier\b|\bStateNotifierProvider\b|\.valueOrNull\b'
+    cure: "Use Notifier<T> / AsyncNotifier<T> and NotifierProvider / AsyncNotifierProvider; read the retained value with asyncValue.value (Riverpod 3.x removed .valueOrNull)."
+    origin: scripts/check-dart-flutter-state-and-theme-rules.sh

@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-sku-readers-read-the-entity.sh
+# (#2413 PH-4), RULE A (the old fold stays dead). projectparses.Group( must
+# have zero callers and must not be re-declared; its replacement Project() does
+# arithmetic over an identity it is handed, it does not decide identity. The .sh
+# scans all .go except gatetests (test files ARE scanned) and matches either
+# a Group( call or the `func Group(rows []SkuRow)` re-declaration.
+rules:
+  - id: sku-reader-old-fold-dead
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/gatetests/**"
+    params:
+      pattern: 'projectparses\.Group\(|func Group\(rows \[\]SkuRow\)'
+    cure: "The old fold is dead — resolve identity via projectparses.EntitySkus, never re-fold raw sightings through Group( (#2413)."
+    origin: scripts/check-sku-readers-read-the-entity.sh

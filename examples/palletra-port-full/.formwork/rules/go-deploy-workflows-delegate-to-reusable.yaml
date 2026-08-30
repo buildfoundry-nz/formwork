@@ -1,0 +1,34 @@
+# Ported from Palletra scripts/check-go-deploy-workflows-delegate-to-reusable.sh (#4990).
+# The 16 go-deploy-*.yml service×env deployers were near-identical clones of one
+# build→wait→read-through→apply→smoke body; #4990 collapsed them into two
+# REUSABLE workflows (go-deploy-service.yml / go-deploy-core-api.yml) with
+# every deployer reduced to a thin `uses:` wrapper. This gate keeps that
+# permanent: every .github/workflows/go-deploy-*.yml that is NOT one of the two
+# reusables must be a thin wrapper — it must not re-embed the deploy body,
+# detected by the two markers no wrapper legitimately contains, `docker build`
+# and `terraform apply` (both live only in the reusables).
+#
+# Ported as a forbidden-pattern banning those two markers, scoped to the
+# go-deploy-*.yml workflows with the two reusables scope-excluded (their body IS
+# the sanctioned home).
+#
+# DIVERGENCE (noted): the .sh strips full-line YAML `#` comments before matching
+# (a decomment-yaml preprocessor formwork does not yet ship), so a full-line
+# comment that merely mentions "terraform apply" in prose would false-fire here.
+# The re-embedded-body defect — a real docker build / terraform apply step in a
+# wrapper — is caught identically.
+rules:
+  - id: go-deploy-workflows-delegate-to-reusable
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/go-deploy-*.yml"
+      exclude:
+        - ".github/workflows/go-deploy-service.yml"
+        - ".github/workflows/go-deploy-core-api.yml"
+    preprocess: raw
+    params:
+      pattern: 'docker\s+build|terraform\s+apply'
+    cure: "Keep the wrapper thin: move the deploy body into go-deploy-service.yml / go-deploy-core-api.yml and delegate via `uses:` (#4990)."
+    origin: scripts/check-go-deploy-workflows-delegate-to-reusable.sh

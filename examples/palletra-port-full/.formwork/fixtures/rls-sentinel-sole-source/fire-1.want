@@ -1,0 +1,2 @@
+# Scope-level: a second all-zeros sentinel literal is declared under a second name.
+- second/inline sentinel literal (not a canonical nullUUID decl): freightworks/internal/db/tenant.go: const nullSiteID = "00000000-0000-0000-0000-000000000000"

@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-stage-event-wide-event-mirror.sh (#8905,
+# funnel-observability Rule B). No open-coded `INSERT INTO
+# palletra.workflow_stage_events` in a non-test routes/**/*.go file — routes
+# must route funnel writes through phasefeed.LogInTx (which owns the INSERT
+# and the post-commit mirror). The .sh drops full-line // comments (dead code is
+# not a write); decomment-go is the faithful port.
+rules:
+  - id: stage-event-wide-event-mirror
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'INSERT INTO palletra\.workflow_stage_events'
+    cure: "Route the funnel write through phasefeed.LogInTx(ctx, tx, Transition, Claim) (flush the returned Mirror post-commit); never open-code the INSERT in routes/ (#8905)."
+    origin: scripts/check-stage-event-wide-event-mirror.sh

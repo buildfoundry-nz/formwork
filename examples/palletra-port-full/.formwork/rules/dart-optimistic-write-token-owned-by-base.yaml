@@ -1,0 +1,45 @@
+# Ported from Palletra scripts/check-dart-optimistic-write-token-owned-by-base.sh
+# (measure-revisions audit B). The freshness-token lifecycle
+# (register -> isNewest -> release) is OWNED by the abstract base
+# OptimisticAnnotationWrite; a leaf that touches the plumbing directly can leak
+# a token and wedge WriteTokenLedger.hasPending, silently disabling the
+# measure streaming reload.
+#
+# FAIL conditions (per top-level class segment):
+#   A. A CONCRETE `class … extends SpeculativeWrite` that calls enrolMutation(
+#      (hand-rolls the token instead of extending OptimisticAnnotationWrite).
+#   B. A `class … extends OptimisticAnnotationWrite` that touches the plumbing
+#      directly — enrolMutation( / stopMutation( / a `void releasePermit(`
+#      override — instead of letting the base own it.
+# Exempt: the abstract base (`abstract class … extends SpeculativeWrite`) and
+# token-free direct SpeculativeWrite subclasses (match neither arm).
+#
+# Mapped to a multiline forbidden-pattern (regexp2): both arms are a same-class
+# co-occurrence of an `extends …SpeculativeWrite` header and a token-plumbing
+# call. `(?<!abstract )` drops the base; the tempered `(?:(?!\bclass\b)[\s\S])*?`
+# keeps each match inside its own class segment so a conformant sibling does not
+# mask a leaky one and the plumbing call cannot be borrowed from the next class.
+#
+# DIVERGENCE (noted): dart format wraps long `class …\n    extends …` headers;
+# `\s+` spans the wrap. The .sh classifies per physical class segment via awk;
+# the tempered pattern approximates that per-file. Not comment-aware (no dart
+# decomment preprocessor); a plumbing call inside a doc-comment example could
+# match — none exist in real leaves.
+rules:
+  - id: dart-optimistic-write-token-owned-by-base
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/**/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+    params:
+      syntax: regexp2
+      multiline: true
+      pattern: '(?<!abstract )class\s+\w+\s+extends\s+SpeculativeWrite\b(?:(?!\bclass\b)[\s\S])*?enrolMutation\(|class\s+\w+\s+extends\s+OptimisticAnnotationWrite\b(?:(?!\bclass\b)[\s\S])*?(?:enrolMutation\(|stopMutation\(|void\s+releasePermit\()'
+      prefilter: 'OptimisticAnnotationWrite'
+    cure: "Extend OptimisticAnnotationWrite and implement applySpeculativePatch/call/consumeResponse/rollback only — the base owns register/isNewest/release. A leaf must never call enrolMutation/stopMutation or override releasePermit (audit B)."
+    origin: scripts/check-dart-optimistic-write-token-owned-by-base.sh

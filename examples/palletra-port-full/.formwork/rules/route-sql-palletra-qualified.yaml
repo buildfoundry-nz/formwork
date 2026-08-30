@@ -1,0 +1,48 @@
+# Ported from Palletra scripts/check-route-sql-palletra-qualified.sh (#3427,
+# #1347). Every reference to a palletra.* table in non-test Go SQL MUST name its
+# schema (`palletra.<table>`). A bare table name leans on the connection
+# search_path ORDER (palletra first) instead of being explicit; a future
+# search_path reorder / same-named platform table / a pool skipping the
+# AfterConnect (the #7159 `relation does not exist` outage) silently mis-targets
+# or breaks it, and the same fact ends up held two non-equivalent ways.
+#
+# formwork's sql/statement-predicate reassembles SQL from Go string literals
+# (one record per statement, concat + builder aware) and selects statements by
+# the `table` regex — exactly the phase-4 analyzer the .sh needed. So:
+#   table:  select any statement that references a real palletra table.
+#   forbid: a SQL keyword (FROM/JOIN/INSERT INTO/DELETE FROM/UPDATE) IMMEDIATELY
+#           followed by the BARE table name. A qualified `FROM palletra.<t>`
+#           puts `palletra.` between the keyword and the table, so the forbid
+#           regex never matches it — qualified refs are excluded structurally,
+#           just as in the .sh. Keywords stay upper-case (the .sh's deliberate
+#           case-sensitivity convention: SQL is upper-cased, Go error prose is
+#           lower-cased).
+#
+# DIVERGENCE (noted):
+#   (1) The .sh reads the authoritative palletra table set LIVE from
+#       migrations/schema.snapshot.sql. A rule cannot read a non-scanned snapshot,
+#       so the table set is pinned to a representative subset here
+#       (account_profiles, page_bitmaps). A real bare palletra table still
+#       fails; a CTE/alias/function name that is not a real table cannot (it is
+#       not in the set) — the same precision the snapshot buys.
+#   (2) The .sh excludes a CTE whose name collides with a real table, scoped to
+#       the SAME statement (`WITH boms AS (…)`). sql/statement-predicate has no
+#       CTE carve, so a same-statement CTE named like a pinned table would
+#       false-positive. Documented fidelity gap; the common bare-ref shape is
+#       caught faithfully.
+rules:
+  - id: route-sql-palletra-qualified
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/testsupport/**"
+    params:
+      table: '(account_profiles|page_bitmaps)'
+      forbid:
+        - '(FROM|JOIN|INSERT INTO|DELETE FROM|UPDATE)\s+(account_profiles|page_bitmaps)\b'
+    cure: "Schema-qualify the palletra table (e.g. `FROM palletra.account_profiles`, `INSERT INTO palletra.<table>`). A bare name resolves only by search_path order and diverges from the 700+ qualified sites (#3427)."
+    origin: scripts/check-route-sql-palletra-qualified.sh

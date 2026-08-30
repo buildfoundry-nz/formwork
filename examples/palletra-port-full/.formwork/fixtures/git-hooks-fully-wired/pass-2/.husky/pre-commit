@@ -1,0 +1,3 @@
+#!/bin/bash
+# bash is a POSIX-sh-family interpreter and node-free: accepted.
+flutter analyze && gofmt -l .

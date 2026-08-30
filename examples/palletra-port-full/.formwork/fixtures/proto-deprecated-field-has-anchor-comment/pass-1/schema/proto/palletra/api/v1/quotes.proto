@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+message Quote {
+  // Deprecated — superseded by total_cents (int64); the sweep-15 closeout
+  // moved all writers to the canonical column.
+  string deprecated_total_pct = 1 [deprecated = true];
+}

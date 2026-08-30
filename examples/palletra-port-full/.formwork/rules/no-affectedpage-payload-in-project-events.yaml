@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-no-affectedpage-payload-in-project-events.sh (#7587).
+# Project-event payloads carry routing ids only; a structpb payload field keyed
+# "impactedPage" embeds the full-page aggregate and can cross the 8KB WriteEvent
+# cap, rolling back the mutation. Bans a quoted "impactedPage" key immediately
+# followed by a colon in non-test Go under freightworks/. decomment-go strips the
+# comment layer so doc-comment prose naming the key stays legal (the .sh drops
+# comment-leading lines).
+rules:
+  - id: no-affectedpage-payload-in-project-events
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '"impactedPage"\s*:'
+    cure: "Project events carry ids only; observing windows refetch via GET /api/projects/{id}/pages/{pageId}/annotations. Do not embed an ImpactedPage aggregate in the event payload (#7587)."
+    origin: scripts/check-no-affectedpage-payload-in-project-events.sh

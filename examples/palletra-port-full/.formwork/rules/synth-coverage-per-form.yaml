@@ -1,0 +1,53 @@
+# Ported from Palletra scripts/check-synth-coverage-per-form.sh (sweep-6 #4).
+# Anti-fig-leaf meta-rule: a gate that locks a CLASS of violation must prove its
+# synth exercises MORE THAN ONE form of that class. For each class key in
+# CLASS_KEYS (bare-pool, blind-write, pdftrace, no-drop) the synth dir must
+# carry >=2 DISTINCT `// FORM(<key>): <name>` markers AND >=1
+# `// PASSFORM(<key>): <name>` marker, OR a `// SINGLEFORM(<key>): <reason>`
+# justification for a genuinely single-form class.
+#
+# PORT MAPPING (maptype = unportable-declaratively): the invariant is a
+# per-key conditional over DISTINCT marker counts across the synth dir, with an
+# OR-escape (SINGLEFORM) — a shape no single declarative count/set-relation rule
+# expresses. It uses the ESCAPE HATCH: a command rule that reproduces the .sh's
+# distinct-count-per-key logic over the fixture synth tree. fire-1 drops the
+# PASSFORM control for one class key (exit 1); pass-1 satisfies every key (exit 0).
+rules:
+  - id: synth-coverage-per-form
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          set -u
+          SYNTH_DIR="freightworks/internal/gatetests"
+          [ -d "$SYNTH_DIR" ] || { echo "OK: no gatetests dir"; exit 0; }
+          CLASS_KEYS="bare-pool blind-write pdftrace no-drop"
+          distinct_count() {
+            grep -rhoE "//[[:space:]]*$1\\($2\\):[[:space:]]*.+" "$SYNTH_DIR" 2>/dev/null \
+              | sed -E "s#//[[:space:]]*$1\\($2\\):[[:space:]]*##" \
+              | sort -u | sed '/^$/d' | grep -c .
+          }
+          fail=0
+          for key in $CLASS_KEYS; do
+            if grep -rqE "//[[:space:]]*SINGLEFORM\\($key\\):" "$SYNTH_DIR" 2>/dev/null; then
+              continue
+            fi
+            forms=$(distinct_count FORM "$key")
+            passes=$(distinct_count PASSFORM "$key")
+            if [ "$forms" -lt 2 ] || [ "$passes" -lt 1 ]; then
+              echo "FAIL ${key}: ${forms} FORM + ${passes} PASSFORM (need >=2 FORM + >=1 PASSFORM, or a // SINGLEFORM(${key}): <reason>)" >&2
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] && echo "OK: every class-locking gate enumerates >=2 forms + a PASS control"
+          exit $fail
+      expect:
+        exit: 0
+    cure: "A gate that locks a CLASS must exercise >=2 forms of it in its synth (raw + dquote, qualified + unqualified, call + value, ...) plus a PASS control, marked // FORM(<key>): / // PASSFORM(<key>): — or justify a genuine single-form class with // SINGLEFORM(<key>): <reason> (sweep-6 #4)."
+    origin: scripts/check-synth-coverage-per-form.sh

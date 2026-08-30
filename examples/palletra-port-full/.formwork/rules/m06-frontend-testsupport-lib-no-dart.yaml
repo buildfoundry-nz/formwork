@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-frontend-module-boundaries.sh (audit
+# closeout #25) — the FIRST of the gate's invariants, run UNCONDITIONALLY.
+#
+# packages/plt_test_support was a central test-fake hub: ~20 packages dev-depped
+# it, so any package dev-depping the hub became an affected-selection HUB —
+# editing a fake there made a one-feature change "affect" the whole repo under
+# melos --include-dependents, defeating the split. The package is DISSOLVED and
+# must never come back: ANY *.dart under packages/plt_test_support/lib/ is a
+# hard FAIL. Cross-shared fakes now live in the FAKED package's lib/testing/;
+# single-consumer fakes in that consumer's test/support/ — never a central pkg.
+#
+# Ported as file-naming forbid_ext: any path with a .dart extension inside the
+# resurrected hub lib/ is the violation. The name (not the content) is the
+# defect, so the finding is file-level and the fire fixture declares it via a
+# fire-1.want manifest.
+rules:
+  - id: m06-frontend-testsupport-lib-no-dart
+    type: file-naming
+    severity: error
+    scope:
+      include:
+        - "packages/plt_test_support/lib/**"
+    params:
+      forbid_ext:
+        - ".dart"
+    cure: "packages/plt_test_support is DISSOLVED (audit #25) — it was a central test-fake hub that made every dependent an affected-selection hub. Delete the Dart file and relocate the fake to the FAKED package's lib/testing/ (cross-shared) or the single consumer's test/support/. Never a central test-support package."
+    origin: scripts/check-frontend-module-boundaries.sh

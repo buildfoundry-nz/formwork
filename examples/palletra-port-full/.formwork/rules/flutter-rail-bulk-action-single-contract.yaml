@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-flutter-rail-bulk-action-single-contract.sh (#2654).
+# Every Measure rail bulk approve/confirm affordance renders from the ONE
+# server-driven contract (PlotRailBulkActions). Bans:
+#   A. the deleted `tie_confirm_all` rail-block kind,
+#   B. a hardcoded 'Confirm all '/'Approve all ' bulk-button label literal,
+#   C. the retired partition-height section-propagation affordance/provider tokens (#6359).
+# The .sh scopes A to packages/**/lib but B and C to packages/feature_dimension/lib.
+# A single formwork rule has one scope; consolidated here to feature_dimension/lib,
+# which narrows A's scope (a tie bulk block realistically lives in the measure
+# feature) — see notes.
+#
+# FP FIX (was: scanned raw text): the .sh de-comments Dart (decomment-dart.awk)
+# so a doc/inline comment quoting a banned token in PROSE cannot false-fire —
+# and on develop plot_rail_bulk_actions.dart's own doc comment quotes
+# `"Approve all shelving under Internal Partitions"` (describing the bug it fixed),
+# which the raw scan matched via the `['"](Approve all) ` limb. Dart shares Go's
+# comment syntax, so preprocess: decomment-go blanks comments while PRESERVING
+# string literals (so Rule B's real `'Confirm all '` / `'Approve all '` label
+# literal in code still fires, exactly as the gate's strip_comments_dart preserves
+# strings).
+rules:
+  - id: flutter-rail-bulk-action-single-contract
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+    preprocess: decomment-go
+    params:
+      pattern: 'tie_confirm_all|[''"](Confirm all|Approve all) |clear_all_sections|onConfirmAllSections|_clearAllSections|partitionHeightPropagationTargets|partitionHeightApproveAll|partition_height_propagate|PartitionHeightApplyResult'
+    cure: "Route the bulk action through the server batch_actions list rendered by PlotRailBulkActions; never hand-roll a bulk approve/confirm button or a hardcoded label."
+    origin: scripts/check-flutter-rail-bulk-action-single-contract.sh

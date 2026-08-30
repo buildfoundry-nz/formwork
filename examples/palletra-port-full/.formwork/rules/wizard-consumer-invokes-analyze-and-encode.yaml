@@ -1,0 +1,18 @@
+# Ported from Palletra scripts/check-wizard-columns-step-roundtrip.sh arm 5 (sweep-3 #3).
+# The consumer stockroom_pricing_upload.go must call ScanAndEncode (bare or
+# pkg-qualified) — otherwise the upload route runs no supplier/column analysis and
+# strands the wizard with a nil payload. One of the five exists-mode anchors split
+# from the .sh.
+rules:
+  - id: wizard-consumer-invokes-analyze-and-encode
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/stockroom/pricing/stockroom_pricing_upload.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\bScanAndEncode\('
+      mode: exists
+    cure: "stockroom_pricing_upload.go must keep calling ScanAndEncode or the upload route runs no supplier/column analysis (sweep-3 #3)."
+    origin: scripts/check-wizard-columns-step-roundtrip.sh

@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-domain-attributes-no-untyped-struct.sh (#8948).
+# A domain object's attributes/metadata field MUST NOT be an untyped
+# google.protobuf.Struct bag (a compile-free, test-free regression: a key rename
+# silently deserializes to null). Give it a typed schema (json_name-pinned keys)
+# like internal/markprops / internal/bommeta. Comment lines are exempt (decomment-go);
+# the two stockroom dynamic-attribute protos are an intentional path allowlist.
+rules:
+  - id: domain-attributes-no-untyped-struct
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "schema/proto/palletra/**/*.proto"
+    preprocess: decomment-go
+    params:
+      pattern: 'google\.protobuf\.Struct[[:space:]]+(attributes|metadata)[[:space:]]*='
+    except:
+      paths:
+        - "schema/proto/palletra/domain/v1/rated_item.proto"
+        - "schema/proto/palletra/domain/v1/sku_catalog.proto"
+    cure: "Give the field a typed message (json_name-pinned keys) marshalled through a typed contract; never an untyped google.protobuf.Struct bag (#8948)."
+    origin: scripts/check-domain-attributes-no-untyped-struct.sh

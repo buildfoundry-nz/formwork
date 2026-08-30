@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-web-interop-glob-matches-enumeration.sh
+# (audit-#6 gate). A meta/registry-consistency gate: it extracts the
+# platform-edge `--glob '!...'` exclusions from
+# check-dart-web-interop-confined-to-platform-edges.sh (minus the defensive
+# generated-file globs) and asserts every edge token is named in ALL THREE
+# machine-comparable copies — the enumeration doc block in
+# docs/gate-enumeration.md, the edges-script's own docstring, and its FAIL
+# message — so a renamed/new edge that lands in the glob but not the doc
+# hard-fails.
+#
+# ESCAPE (type: command). This is a bespoke cross-file registry join: parse one
+# script's `--glob` tokens (with generated-file globs filtered out and each
+# reduced to a boundary-anchored path token), then verify presence across two
+# other in-repo copies. No declarative formwork type extracts glob exclusions
+# from a shell script and cross-checks three heterogeneous copies. The real
+# script is the faithful check and verifies in CI; it SKIPs in the local
+# fixture harness (enumerated by lint). No fixture.
+rules:
+  - id: web-interop-glob-matches-enumeration
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-web-interop-glob-matches-enumeration.sh —
+      the validating target's own gate script, which this corpus does not
+      carry and cannot: it is written in that tree's vocabulary, and this
+      repository tracks no shell scripts at all. In a fixture tree bash would
+      exit 127 in the fire tree and the pass tree alike, so the fire proof
+      would be satisfied by the detector NOT EXISTING and the pass proof would
+      report that same missing-detector exit as a finding. What the port
+      asserts here is the SCOPE and the CURE, both readable against the origin
+      script; the detection runs where the script does.
+    scope:
+      include:
+        - "scripts/check-dart-web-interop-confined-to-platform-edges.sh"
+        - "docs/gate-enumeration.md"
+    params:
+      cmd:
+        - bash
+        - scripts/check-web-interop-glob-matches-enumeration.sh
+      expect:
+        exit: 0
+    cure: "When you add/rename a web-interop platform edge in check-dart-web-interop-confined-to-platform-edges.sh, name the file token in all three copies: the enumeration doc block in docs/gate-enumeration.md, the edges-script docstring, and its FAIL message. The registry must not drift (audit-#6)."
+    origin: scripts/check-web-interop-glob-matches-enumeration.sh

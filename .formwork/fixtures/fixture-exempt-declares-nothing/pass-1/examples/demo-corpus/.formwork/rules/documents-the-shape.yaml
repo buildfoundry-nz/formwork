@@ -1,0 +1,22 @@
+# Comment immunity, which a rule that bans a token has to earn: the file that
+# DOCUMENTS the banned shape must not be reported for documenting it. The
+# pattern anchors the key at the start of its line after indentation, so a
+# comment can quote every one of these and stay silent:
+#
+#     fixture_exempt: "   "
+#     fixture_exempt: '  '
+#     fixture_exempt: >-
+#
+# and the single-quoted backslash escape below, which is a two-character
+# reason rather than a tab, because a backslash inside single quotes is
+# literal in YAML. The double-quoted spelling of it is a tab and IS reported.
+rules:
+  - id: backslash-t-is-literal-in-single-quotes
+    type: command
+    severity: error
+    fixture_exempt: '\t'
+    scope:
+      include: ["**/*.go"]
+    params:
+      cmd: ["true"]
+    cure: "Declare the reason or carry fixtures."

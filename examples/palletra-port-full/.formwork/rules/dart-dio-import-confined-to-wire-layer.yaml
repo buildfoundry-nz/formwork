@@ -1,0 +1,30 @@
+# Ported from Palletra scripts/check-dart-http-client-wire-layer.sh (Phase 5 WI-13,
+# re-hardened #7381), Arm 1 — the IMPORT-level ban, which is the structural teeth
+# the other arms (construction / bare-verb-call / export-allowlist) reinforce.
+# No feature or base package outside the wire layer may import package:dio/dio.dart
+# directly; wire calls go through WireDio.* and the Dio type comes from
+# http_client_provider.dart. Scope is the app shell + every package lib EXCEPT
+# plt_core/lib/network/ (the wire layer that legitimately composes Dio internals)
+# and lib/testing/ (cross-shared test doubles). A single forbidden import line is
+# the faithful port of Arm 1; construction/method arms need lookaround/receiver
+# analysis beyond a single line-pattern.
+rules:
+  - id: dart-dio-import-confined-to-wire-layer
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+      exclude:
+        - "packages/plt_core/lib/network/**"
+        - "**/lib/testing/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+    params:
+      pattern: "^import\\s+['\"]package:dio/dio\\.dart['\"]"
+    cure: "Do not import package:dio/dio.dart outside packages/plt_core/lib/network/. Wire calls → WireDio.* / WireDioMedia.*; the Dio type → import package:plt_core/network/http_client_provider.dart; bare-client needs → plt_core/network/raw_http_client.dart (#7381)."
+    origin: scripts/check-dart-http-client-wire-layer.sh

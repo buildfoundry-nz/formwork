@@ -1,0 +1,1 @@
+- dropComments() is defined 2 times across scripts/ (must be at most once, in scripts/lib/gate-text.go)

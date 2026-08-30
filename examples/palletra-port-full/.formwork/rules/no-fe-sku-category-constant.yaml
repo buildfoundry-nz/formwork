@@ -1,0 +1,18 @@
+# Ported from Palletra scripts/check-no-fe-sku-category-constant.sh
+# (NP-M9 / M18). platform.sku_category is a server-owned closed enum; the
+# FE must render it, never mirror it as a hand-rolled Dart list. The .sh greps
+# frontend/lib + every packages/*/lib for the `skuCategories = [` list
+# identifier (optionally <String>-typed). Line-oriented forbidden-pattern is a
+# faithful port.
+rules:
+  - id: no-fe-sku-category-constant
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+    params:
+      pattern: 'skuCategories\s*=\s*(<String>)?\['
+    cure: "The server owns the closed platform.sku_category set — render categories from the server response, never a hardcoded Dart list."
+    origin: scripts/check-no-fe-sku-category-constant.sh

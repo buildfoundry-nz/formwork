@@ -1,0 +1,18 @@
+# Ported from scripts/check-ratecard-current-rate-reserved.sh (sweep-3 #7).
+# message RatedItem must NOT re-declare a `active_rate = <N>` field — the
+# reservation must hold.
+# NOTE: the .sh extracts the RatedItem message body (multiline) before checking;
+# formwork is line-oriented and scopes to the whole proto file instead. active_rate
+# is a RatedItem-specific field name, so cross-message confusion is unlikely; the
+# name-reservation + field-redeclaration anchors are the distinctive fingerprint.
+rules:
+  - id: priced-item-current-rate-stays-undeclared
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - 'schema/proto/palletra/domain/v1/rated_item.proto'
+    params:
+      pattern: 'active_rate\s*=\s*[0-9]+'
+    cure: 'RatedItem must not re-introduce active_rate = <N>; the field 8 + name reservation must hold (sweep-3 #7).'
+    origin: scripts/check-ratecard-current-rate-reserved.sh

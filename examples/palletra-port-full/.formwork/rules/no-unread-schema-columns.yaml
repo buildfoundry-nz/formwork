@@ -1,0 +1,122 @@
+# Ported from Palletra scripts/check-no-unread-schema-columns.sh (#3948).
+# A DB column that lives in migrations/schema.snapshot.sql but is named by no
+# non-migration .go/.dart/.sql/.proto file is a zero-reader reservoir — a
+# born-dead column accumulating inside a heavily-used table where the table-level
+# write-only gate can never fire. Rule: every snapshot column MUST have at least
+# one token hit in the non-migration corpus, OR be listed in
+# scripts/unread-column-exemptions.tsv as `schema.table.column<TAB>#NNNN`
+# (a machine-checked issue ref — free-text justifications are rejected).
+#
+# ESCAPE HATCH (type: command). The gate is a cross-corpus reachability scan
+# (parse every snapshot column, then grep the whole non-migration tree for each
+# token, cross-checked against a tsv exemption list) — not a single-file
+# declarative shape. Ported as a self-contained python3 reproduction over the
+# fixture tree; finding is scope-level. fire-1 has a snapshot column named by no
+# corpus file and no exemption; pass-1 covers every column (referenced or
+# issue-ref exempted).
+rules:
+  - id: no-unread-schema-columns
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+    params:
+      cmd:
+        - python3
+        - -c
+        - |
+          import os, re, sys
+
+          snap = "freightworks/services/core-api/migrations/schema.snapshot.sql"
+          if not os.path.isfile(snap):
+              print("no schema snapshot; skipping")
+              sys.exit(0)
+
+          # Parse (table, column) pairs from CREATE TABLE ( ... ) blocks.
+          text = open(snap, encoding="utf-8").read()
+          text = re.sub(r'--[^\n]*', '', text)
+          pairs = []
+          NONCOL = ("PRIMARY", "FOREIGN", "CONSTRAINT", "UNIQUE", "CHECK", "EXCLUDE", "LIKE")
+          for m in re.finditer(r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\S+)\s*\((.*?)\)\s*(?:PARTITION\s+BY|WITH|TABLESPACE|;)',
+                               text, re.I | re.S):
+              tbl = m.group(1).replace('"', "")
+              schema = tbl.split(".")[0] if "." in tbl else "public"
+              tname = tbl.split(".")[-1]
+              depth = 0; field = ""; fields = []
+              for ch in m.group(2):
+                  if ch == "(":
+                      depth += 1
+                  elif ch == ")":
+                      depth -= 1
+                  if ch == "," and depth == 0:
+                      fields.append(field); field = ""
+                  else:
+                      field += ch
+              fields.append(field)
+              for fl in fields:
+                  fl = fl.strip()
+                  if not fl:
+                      continue
+                  col = fl.split()[0].replace('"', "")
+                  if col.upper() in NONCOL or not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', col):
+                      continue
+                  pairs.append((schema, tname, col))
+
+          # Build the non-migration corpus (exclude migrations dir).
+          corpus = []
+          for dp, dns, fns in os.walk("."):
+              dns[:] = [d for d in dns if d not in (".git", "node_modules", "vendor")]
+              if "migrations" in dp.split(os.sep):
+                  continue
+              for fn in fns:
+                  if fn.endswith((".go", ".dart", ".sql", ".proto")):
+                      corpus.append(os.path.join(dp, fn))
+          blob = ""
+          for f in corpus:
+              try:
+                  blob += open(f, encoding="utf-8", errors="ignore").read() + "\n"
+              except OSError:
+                  pass
+
+          # Load exemptions: schema.table.column<TAB>#NNNN (integrity: exactly 2 fields, ref = #digits).
+          exempt = set()
+          integrity = []
+          extsv = "scripts/unread-column-exemptions.tsv"
+          if os.path.isfile(extsv):
+              for ln in open(extsv, encoding="utf-8"):
+                  ln = ln.rstrip("\n")
+                  if not ln.strip() or ln.lstrip().startswith("#"):
+                      continue
+                  cols = ln.split("\t")
+                  if len(cols) != 2 or not re.match(r'^#\d+$', cols[1].strip()):
+                      integrity.append(ln)
+                      continue
+                  exempt.add(cols[0].strip())
+
+          fail = 0
+          for ln in integrity:
+              print("INTEGRITY unverifiable exemption:", ln)
+              fail = 1
+
+          def referenced(col):
+              # snake_case token OR camelCase Go-ident form.
+              camel = re.sub(r'_([a-z])', lambda mo: mo.group(1).upper(), col)
+              for tok in {col, camel}:
+                  if re.search(r'(^|[^A-Za-z0-9_])' + re.escape(tok) + r'([^A-Za-z0-9_]|$)', blob):
+                      return True
+              return False
+
+          for schema, tname, col in pairs:
+              fq = f"{schema}.{tname}.{col}"
+              if fq in exempt:
+                  continue
+              if referenced(col):
+                  continue
+              print("ZERO zero-reader column:", fq)
+              fail = 1
+          sys.exit(1 if fail else 0)
+      expect:
+        exit: 0
+    cure: "Drop the column via a migration (born-dead / no planned consumer, #3948 Rule 7) and regenerate schema.snapshot.sql, OR — only when a named technical blocker keeps it — add `schema.table.column<TAB>#NNNN` to scripts/unread-column-exemptions.tsv. Free-text justifications are rejected; a stale exemption also fails."
+    origin: scripts/check-no-unread-schema-columns.sh

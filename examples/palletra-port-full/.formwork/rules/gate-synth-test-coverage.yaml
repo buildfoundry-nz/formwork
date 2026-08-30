@@ -1,0 +1,52 @@
+# Ported from Palletra scripts/check-gate-synth-test-coverage.sh (sweep-2 #G2).
+# Every scripts/check-*.go MUST have a synth under
+# freightworks/internal/gatetests/ that proves the gate FIRES on a violation
+# — not merely NAMES the gate. A covered gate is one whose basename resolves
+# from a invokeScript-family call followed by an `err == nil` fire assertion (the
+# gate was run against a bad fixture and demanded a failure). A genuinely
+# un-fireable gate declares one `// UNFIREABLE(check-X.go): <reason>` marker.
+# The original gate delegated to a python AST helper (dev/gate-synth-fires.py).
+#
+# Why the ESCAPE HATCH (type: command): the gate shells out to a helper
+# that resolves const/var/:= script-argument bindings and pairs each with its
+# fire assertion across the synth tree — cross-file dataflow no declarative type
+# expresses. This command reproduces the anti-fig-leaf contract on the fixture
+# tree: for every scripts/check-*.go, some gatetests .go file must NAME the
+# basename AND, in that same file, carry an `err == nil` fire assertion (or an
+# `UNFIREABLE(<basename>)` marker). fire-1 ships a presence-only fig-leaf synth
+# (names the gate, asserts only that it passed); pass-1 drives it to fail.
+# Scope-level finding (no want marker).
+rules:
+  - id: gate-synth-test-coverage
+    type: command
+    severity: error
+    scope:
+      include:
+        - "scripts/check-*.go"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          LD="freightworks/internal/gatetests"
+          { [ -d scripts ] && [ -d "$LD" ]; } || exit 0   # either missing -> skip
+          rc=0
+          for s in scripts/check-*.go; do
+            [ -f "$s" ] || continue
+            b="$(basename "$s")"
+            covered=0
+            for t in "$LD"/*.go; do
+              [ -f "$t" ] || continue
+              grep -qF "$b" "$t" || continue          # this synth names the gate
+              if grep -qF "err == nil" "$t" || grep -qF "UNFIREABLE($b)" "$t"; then
+                covered=1
+                break
+              fi
+            done
+            [ "$covered" -eq 1 ] || rc=1
+          done
+          exit $rc
+      expect:
+        exit: 0
+    cure: "Give every scripts/check-*.go a fire-on-violation synth in freightworks/internal/gatetests/ (run the gate against a KNOWN-BAD fixture and assert `err == nil` fails), or a named `// UNFIREABLE(check-X.go): <reason>` marker. A presence-only mention is a rejected fig-leaf (sweep-2 #G2)."
+    origin: scripts/check-gate-synth-test-coverage.sh

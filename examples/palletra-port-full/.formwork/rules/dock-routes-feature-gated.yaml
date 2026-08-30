@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-dock-routes-feature-gated.sh (#5873).
+# Every route registered through the capability registrar (rg.Capability /
+# rg.Exempt / rg.Role) whose PATH literal begins with /api/dock/ or
+# /api/qa/spot-checks/ must have its bound handler METHOD BODY reference the
+# dockfeature gate directly (a literal `dockfeature.` inside the func body). A
+# missing handler definition also fails. The Go gate — not Flutter visibility —
+# is the security boundary; a direct API call bypasses the hidden UI otherwise.
+#
+# COMMAND ESCAPE: this is a cross-file, cross-function resolution — parse a
+# register_*.go line, extract the handler method after the last `.`, then locate
+# that method's definition in a sibling non-test .go file and scan its body
+# (from `func (recv *T) Method(` to the next top-level `func `). No declarative
+# formwork type resolves a registrar path literal to a named handler's body in
+# another file. Running the real script over services/core-api is faithful;
+# verifies in CI, formwork lint enumerates it.
+rules:
+  - id: dock-routes-feature-gated
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-dock-routes-feature-gated.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-dock-routes-feature-gated.sh
+      expect:
+        exit: 0
+    cure: "Add as the first statement inside the handler's db.WithOrg closure: if err := dockfeature.Require(ctx, tx, claims.OrgId); err != nil { return err } — and map dockfeature.ErrDisabled to 403 capability_disabled (#5873)."
+    origin: scripts/check-dock-routes-feature-gated.sh

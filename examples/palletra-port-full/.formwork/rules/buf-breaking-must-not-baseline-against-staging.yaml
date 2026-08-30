@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-schema-breaking-baseline.sh — Tooth 1.
+# The buf-breaking gate is only as good as its baseline; it shipped pointed at
+# `staging` (~6,700 commits behind develop), so buf saw every PR's protos as
+# brand-new and the breaking check was structurally vacuous. Tooth 1 forbids
+# scripts/schema.go from baselining against branch=staging.
+#
+# Port note: the original .sh stripped full-line `#` comments before matching.
+# Raw is used here (the pattern is byte-identical to the shell port), so a Go
+# comment literally spelling `branch=staging` would false-fire — the real buf
+# flag token inside the exec'd baseline string is what the fixtures exercise.
+# Tooth 3 (a LIVE git merge-base tree check) needs git and is not portable to
+# a declarative rule.
+rules:
+  - id: buf-breaking-must-not-baseline-against-staging
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "scripts/schema.go"
+    params:
+      pattern: 'branch=staging'
+    cure: "Baseline buf breaking at $(git merge-base origin/develop HEAD), never against the stale `staging` branch (the breaking check goes vacuous there)."
+    origin: scripts/check-schema-breaking-baseline.sh

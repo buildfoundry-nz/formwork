@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-detection-runner-constructed-exactly-once.sh
+# (audit #6870) — Rule 1. detection.NewDetectionWorkerHandler( must be
+# constructed in EXACTLY ONE place (the newDetectionWorker helper); the
+# derived-detection auto-run and the Wave 11 runner are two CALLS to that helper,
+# never two inlined IdentificationRunnerConfig literals. Two construction sites == the
+# recurrence == FAIL. The .sh sums grep -c (matching lines) across non-test Go
+# under core-api, comment-stripped — exactly pattern-count over the de-commented
+# scope. _test.go excluded (route tests legitimately construct one).
+rules:
+  - id: detection-runner-constructed-exactly-once
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'detection\.NewDetectionWorkerHandler\('
+      op: exactly
+      n: 1
+    cure: "Construct detection.NewDetectionWorkerHandler exactly once, in the newDetectionWorker helper; both runners (#7138) are two calls to it, never re-inlined config literals (#6870)."
+    origin: scripts/check-detection-runner-constructed-exactly-once.sh

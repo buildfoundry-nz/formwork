@@ -1,0 +1,9 @@
+name: deploy
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1 # want: github-actions-version-floor
+      # - uses: google-github-actions/setup-gcloud@v2  (disabled, ignored because commented)
+      - uses: actions/checkout@v2

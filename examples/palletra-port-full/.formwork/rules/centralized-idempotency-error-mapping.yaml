@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-centralized-idempotency-error-mapping.sh
+# (#6722). The two idempotency.Execute sentinels (ErrChecksumMismatch → 409,
+# ErrNotYetReady → 425) map to status/envelope in exactly one place —
+# shared.WriteCommandError (routes/shared/pgerr.go), which every idempotent
+# handler already falls through to. A handler that names either sentinel has
+# re-inlined the duplicated mapping. Banned in non-test Go under
+# services/core-api/routes/ except routes/shared/. The .sh greps raw; preprocess
+# omitted for parity.
+rules:
+  - id: centralized-idempotency-error-mapping
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/routes/shared/**"
+    params:
+      pattern: 'idempotency\.(ErrChecksumMismatch|ErrNotYetReady)'
+    cure: "Drop the case and let the error fall through to shared.WriteCommandError (routes/shared/pgerr.go); do not re-inline the 409/425 pair (#6722)."
+    origin: scripts/check-centralized-idempotency-error-mapping.sh

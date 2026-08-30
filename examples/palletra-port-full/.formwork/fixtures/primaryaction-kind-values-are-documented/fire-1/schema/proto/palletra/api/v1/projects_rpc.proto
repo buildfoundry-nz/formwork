@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+// MainAction is the Measure footer discriminator.
+//
+// kind values (the discriminator):
+//   "approve"   — the section is complete and can be approved.
+message MainAction {
+  string kind = 1;
+}

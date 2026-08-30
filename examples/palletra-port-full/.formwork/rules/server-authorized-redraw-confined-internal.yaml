@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-server-authorized-redraw-confined-internal.sh
+# (#5327). The token AuthorizedServerRedraw — the K13 user-edit-lock bypass —
+# may appear ONLY under freightworks/services/core-api/internal/markupwrite/
+# (where it is defined, re-exported, and passed by the override-triggered redraw
+# seams). Anywhere else under freightworks is a leaked bypass; _test.go is
+# excluded (only a production path passing it unlocks a real edit).
+# KNOWN LIMIT: the .sh also exits 2 if the token is not DEFINED in
+# mutbase/mutbase.go (path-rot guard); a presence/absence premise check is not
+# expressible as a forbidden-pattern, so that anti-rot branch is not ported.
+rules:
+  - id: server-authorized-redraw-confined-internal
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/services/core-api/internal/markupwrite/**"
+        - "**/*_test.go"
+    preprocess: raw
+    params:
+      pattern: 'AuthorizedServerRedraw'
+    cure: "A route reaching the geometry seam is a ManualEdit (the K13 lock applies); a server-owned redraw that needs the bypass belongs UNDER markupwrite/, next to the existing redraws — not in a handler (#5327)."
+    origin: scripts/check-server-authorized-redraw-confined-internal.sh

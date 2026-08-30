@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-no-inline-inch-to-meter-constant.sh (sweep-2 #I5).
+# The inch->meter constant 0.0254 anchors the meters-per-pixel formula
+# mpx = (0.0254 / resolvedDpi) * drawingScale * calibration, which #I5 collapsed
+# onto the single canonical primitive internal/scalecalc.UnitsPerPixel. The
+# 0.0254 literal may appear in EXECUTABLE Go in exactly one file — scalecalc.go;
+# anywhere else it is a new open-coded mpx. Comments are stripped first
+# (decomment-go) so a doc comment spelling the formula does not trip. Tests are
+# exempt (they may pin the numeric value). Scope is runtime Go under freightworks.
+rules:
+  - id: no-inline-inch-to-meter-constant
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/internal/scalecalc/scalecalc.go"
+    preprocess: decomment-go
+    params:
+      pattern: '0\.0254'
+    cure: "Call internal/scalecalc.UnitsPerPixel(resolvedDpi, drawingScale, calibration) instead of open-coding (0.0254/dpi)*scale*calibration. The inch->meter constant lives only in scalecalc.go (sweep-2 #I5)."
+    origin: scripts/check-no-inline-inch-to-meter-constant.sh

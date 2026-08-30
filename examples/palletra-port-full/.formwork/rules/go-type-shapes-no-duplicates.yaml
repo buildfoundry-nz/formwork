@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-go-type-shapes-no-duplicates.sh — strict
+# type-integrity gate (HARD FAIL, no baseline / allowlist / grandfathering). It
+# wraps scripts/dev/find-go-type-shapes-no-duplicates.py --check, which scans Go
+# structs repo-wide and reports two phases: P1-GO duplicate struct field-sets
+# across files, and P2-GO rename-shadows (same field TYPES, different field
+# NAMES).
+#
+# ESCAPE (type: command). This is a whole-repo Go AST analysis that clusters
+# every struct by its field-set / field-type-vector and reports duplicates and
+# rename-shadows ACROSS files. That is a cross-file structural-equivalence
+# computation over parsed Go type declarations — no forbidden/required/pair/
+# set-relation/count declarative type expresses "these two structs in different
+# files have identical field shapes". The check is fundamentally an external
+# Python AST tool; the command escape runs the real gate, which verifies in CI.
+rules:
+  - id: go-type-shapes-no-duplicates
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-go-type-shapes-no-duplicates.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "**/*.go"
+    params:
+      cmd:
+        - "bash"
+        - "scripts/check-go-type-shapes-no-duplicates.sh"
+      expect:
+        exit: 0
+    cure: "Collapse the duplicate/rename-shadowed struct shapes to a single shared type (P1-GO duplicate field-set, or P2-GO same field types under different names). No baseline or allowlist — the duplicate must be removed."
+    origin: scripts/check-go-type-shapes-no-duplicates.sh

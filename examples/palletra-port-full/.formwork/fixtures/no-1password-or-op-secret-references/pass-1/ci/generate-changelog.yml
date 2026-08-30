@@ -1,0 +1,12 @@
+name: changelog-refresh
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: WIF auth — no static secret material
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1/locations/global/workloadIdentityPools/main/providers/github
+          service_account: runtime@example.iam.gserviceaccount.com
+      - name: regenerate
+        run: node tools/changelog.js

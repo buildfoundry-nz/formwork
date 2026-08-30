@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-session-membership-self-scoped.sh
+# (finding #4), MEMBERSHIPS arm. The org-switch handlers under routes/session/
+# run under db.AsSuperuser (BYPASSRLS as runtime_root_admin), so RLS is NOT the
+# tenant boundary — the ONLY thing binding a statement to the caller is a
+# hand-written, claims-bound `WHERE user_id = $n` predicate. Drop it and the
+# org-switch read/write is no longer confined to the caller. Every SQL statement
+# in a non-test .go file under routes/session/ that touches the `memberships`
+# table MUST carry a parameterised `user_id = $n` self-scope predicate (a
+# literal would not be claims-bound, so the `= $n` shape is required).
+#
+# Ported as sql/statement-predicate: the `table` regex selects any statement
+# naming memberships right after FROM/JOIN/UPDATE/INTO (the .sh's own
+# touches_table trigger, verb-independent); the single `require` pins the
+# parameterised predicate. formwork's sqltext reassembles Go string literals — a
+# lone double-quoted string, a backtick raw-string, and a compile-time
+# `+`-concat chain are all folded to one statement before matching.
+#
+# The MEMBERSHIPS and USERS arms are two rules because the required predicate
+# differs by table (see session-users-scoped-to-self.yaml for the sibling).
+#
+# DIVERGENCE (noted): the .sh also reconstructs a strings.Builder
+# `b.WriteString(...)` assembly; formwork's sqltext folds only constant
+# `+`-concat, so a purely strings.Builder-assembled statement is not
+# reconstructed here. The dominant shapes (raw-string, double-quoted,
+# `+`-concat) are caught identically.
+rules:
+  - id: session-memberships-scoped-to-self
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/session/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      table: '(FROM|JOIN|UPDATE|INTO)[[:space:]]+memberships'
+      require:
+        - 'user_id[[:space:]]*=[[:space:]]*\$[0-9]'
+    cure: "This statement runs under db.AsSuperuser (BYPASSRLS), so RLS does not scope it. Add a parameterised, claims-bound `WHERE user_id = $n` predicate (supplying claims.GetUserId()) — never read or write another user's membership from this surface (#4)."
+    origin: scripts/check-session-membership-self-scoped.sh

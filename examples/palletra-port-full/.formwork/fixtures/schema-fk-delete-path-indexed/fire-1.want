@@ -1,0 +1,2 @@
+# Scope-level: a request-path DELETE cascades into a child table whose FK column has no covering index.
+- [check-schema-fk-delete-path-indexed] FAIL — foreign key(s) referencing a table the request path deletes rows from, with no covering index on the referencing side:

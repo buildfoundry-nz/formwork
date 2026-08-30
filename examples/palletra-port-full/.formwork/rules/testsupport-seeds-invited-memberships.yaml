@@ -1,0 +1,33 @@
+# Ported from Palletra scripts/check-testsupport-seeds-invited-memberships.sh
+# (sweep-1 #12 + sweep-3 #6 + sweep-4 #9). The org-invite membership seed chain
+# was hand-rolled across invite-domain test files, producing the non-existent-
+# 'VIEWER' native_role drift. The cure is a single source of truth: the
+# testsupport.Seed* helpers (which validate the role against the enum). Any
+# *_test.go outside routes/testsupport/ that embeds a hand-rolled membership
+# INSERT is a violation.
+#
+# PORT MAPPING: sql/statement-predicate reassembles SQL from Go string literals,
+# selects statements whose text matches `table` (INSERT INTO memberships), and
+# forbids the hand-rolled invite-chain status literal 'invited' — the
+# MEMBERSHIP_INVITED_RE arm of the .sh, which fires repo-wide because a
+# status='invited' membership IS the invite chain wherever it appears. (The .sh
+# also carries a perl non-enum-role SHAPE arm and several invite-domain-scoped
+# arms; the 'invited'-literal arm is the cleanest single declarative expression
+# of the hand-rolled-seed shape.)
+rules:
+  - id: testsupport-seeds-invited-memberships
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*_test.go"
+      exclude:
+        - "**/routes/testsupport/**"
+        - "**/internal/gatetests/**"
+        - "**/migrations/**"
+    params:
+      table: '(?i)insert\s+into\s+memberships\b'
+      forbid:
+        - "(?i)'invited'"
+    cure: "Replace the hand-rolled invite/member seed with the testsupport seeders (SeedOrgAsAdmin / PrimeInvitePlaceholderUser / PrimeInvitedMembershipFor / PrimeActiveMembershipFor) — the membership seeders validate the native_role against the enum, preventing the non-existent-VIEWER drift (sweep-1 #12)."
+    origin: scripts/check-testsupport-seeds-invited-memberships.sh

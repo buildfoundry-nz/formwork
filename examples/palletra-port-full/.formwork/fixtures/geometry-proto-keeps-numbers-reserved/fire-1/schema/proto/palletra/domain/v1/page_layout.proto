@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package palletra.domain.v1;
+
+// The Phase-4 descope removed vectors/images. The number reservation was
+// present here — // reserved 11, 12; — but a refactor left it only in a
+// comment, so after decommenting the anchor is absent and the gate fires.
+message PageDimensions {
+  reserved "vectors", "images";
+  string page_id = 1;
+}

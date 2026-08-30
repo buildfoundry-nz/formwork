@@ -1,0 +1,33 @@
+# Ported from Palletra scripts/check-flutter-no-shelving-orientation-policy.sh
+# (Server-Owned-Logic, sweep-5 #4). "Which shelving types have a run direction" is
+# server taxonomy (ShelvingType.allowsOrientation); the FE must not reintroduce
+# the hardcoded decision. Bans, across all Dart lib source:
+#   (1) the identifier shelvingTypesWithOrientation,
+#   (2) a *AllowsOrientation* predicate name (approximated as [A-Za-z]+AllowsOrientation,
+#       capital S — deliberately NOT the allowed bare server field `allowsOrientation`),
+#   (3) an inline literal enumerating two shelving-type codes on one line.
+# RE2 has no negative-lookahead/distinct-count; the .sh's "match [Aa]llowsOrientation
+# then grep -v allowsOrientation" and "count >=2 DISTINCT codes" are approximated
+# by the capital-S predicate and a two-quoted-codes-on-one-line pattern — see notes.
+# The .sh strips Dart comments; formwork has no decomment-dart preprocessor, so raw text.
+rules:
+  - id: flutter-no-shelving-orientation-policy
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.gr.dart"
+        - "**/generated/**"
+        - "**/.dart_tool/**"
+    params:
+      pattern: 'shelvingTypesWithOrientation|[A-Za-z]+AllowsOrientation|[''"](steel_shelving|timber_deck|mesh_panel|wire_deck|laminate_deck|metal)[''"].*[''"](steel_shelving|timber_deck|mesh_panel|wire_deck|laminate_deck|metal)[''"]'
+    cure: "Read ShelvingType.allowsOrientation from the server taxonomy (shelvingTypesProvider / GET /api/shelving-types) instead of a FE-local set/predicate."
+    origin: scripts/check-flutter-no-shelving-orientation-policy.sh

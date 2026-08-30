@@ -1,0 +1,40 @@
+rules:
+  # #4357: every scripts/ci/*_test.go behavioral test must be INVOKED by a
+  # `go test ./scripts/ci/...` run step in a workflow whose top-level
+  # `on:` block triggers on pull_request — otherwise it gates nothing on a fresh
+  # PR (dead on disk, or wired only to workflow_dispatch/push/pull_request_target).
+  # The full gate has a YAML on-block parser + hash-comment strip; the essential
+  # wiring check (go-test invocation present AND a whole-token pull_request
+  # trigger in the invoking workflow) is reproduced here with the command escape
+  # hatch.
+  - id: ci-shell-tests-must-be-pr-wired
+    type: command
+    severity: error
+    scope:
+      include: ["scripts/ci/*_test.go"]
+    params:
+      cmd:
+        - bash
+        - -c
+        - |
+          set -u
+          ci=scripts/ci
+          wf=.github/workflows
+          shopt -s nullglob
+          fail=0
+          for t in "$ci"/*_test.go; do
+            base=${t##*/}
+            ok=0
+            for w in "$wf"/*.yml "$wf"/*.yaml; do
+              [ -f "$w" ] || continue
+              grep -qE "go[[:space:]]+test[[:space:]].*scripts/ci/" "$w" || continue
+              # whole-token pull_request (pull_request_target does NOT count)
+              if grep -qE '(^|[^[:alnum:]_])pull_request([^[:alnum:]_]|$)' "$w"; then
+                ok=1; break
+              fi
+            done
+            [ "$ok" -eq 1 ] || { echo "not PR-gating: scripts/ci/${base}" >&2; fail=1; }
+          done
+          exit $fail
+    cure: "Invoke each scripts/ci/*_test.go via a `go test ./scripts/ci/...` run step in an `on: pull_request` workflow (#4357)."
+    origin: scripts/check-ci-shell-tests-must-be-pr-wired.sh

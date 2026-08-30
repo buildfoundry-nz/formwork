@@ -1,0 +1,13 @@
+name: plt_core
+description: Base foundation package.
+publish_to: none
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter
+  plt_util:
+    path: ../plt_util
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

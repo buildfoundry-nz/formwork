@@ -1,0 +1,29 @@
+# Ported from Palletra scripts/check-annotation-writers-must-broadcast-change-event.sh
+# (#6722 HIGH-2, hardened per-handler #6928). PER-FUNC invariant: a routes/ func that
+# DIRECTLY writes annotation rows MUST also broadcast marker_changed in the SAME
+# func body, so SSE clients refetch. #6928 made the binding per-func precisely so a
+# second co-located handler cannot be covered by another handler's broadcast; a
+# FILE-scoped pair-consistency would reopen that gap, so this ports to the func-scoped
+# go/per-func-count-relation (per func: count(write) <= count(broadcast)).
+#
+# DIVERGENCE (noted): the .sh's 4th write shape — a literal
+# `DELETE FROM palletra.annotations` inside a SQL string — is not a Go call
+# expression and so is invisible to the AST call analyzer; it is omitted (the
+# annotationrestore.* seam still covers the delete-and-re-materialize restore path).
+# The three CALL write seams (markupwrite.LogAndUpdate*, annotationrestore.*,
+# annotationwrite.Replace*/Insert*) are ported faithfully, func-scoped.
+rules:
+  - id: annotation-writers-must-broadcast-change-event
+    type: go/per-func-count-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      left: 'markupwrite\.LogAndUpdate|annotationrestore\.|annotationwrite\.(Replace|Insert)'
+      right: 'publishAnnotationChangedEvent|projectfeed\.Write(MarkerChanged|Event)'
+      relation: "<="
+    cure: "After the mutation + recompute, call publishAnnotationChangedEvent(ctx, tx, claims, fresh) — or the typed projectfeed.WriteAnnotationUpdated/WriteEvent — inside the SAME handler so SSE clients refetch the page (#6722 HIGH-2)."
+    origin: scripts/check-annotation-writers-must-broadcast-change-event.sh

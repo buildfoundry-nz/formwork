@@ -1,0 +1,51 @@
+# Ported from Palletra scripts/check-todo-fixme-hack-comments.sh (annotation-marker
+# gate, #1138). HARD FAIL on a TODO / FIXME / HACK / XXX marker
+# (case-insensitive, whole-word with compound-glue boundary so `todo-list`,
+# `pkg/todo/x`, `wave-11-...-todo.md` are exempt) anywhere inside COMMENT TEXT of
+# non-test production .go / .dart / .sql — line and block comments, including
+# every continuation line. String/rune/raw-literal contents are explicitly NOT
+# comments and never fire.
+#
+# ESCAPE (type: command). Faithful matching requires per-language real
+# comment/string lexers (scripts/lib/comments-only-{go,dart,sql}.awk) that
+# project ONLY comment text — a line comment, every continuation line of a
+# multi-line block, a nested Dart block, an SQL `--`/`/* */`/dollar-quoted body —
+# while a marker sitting inside a string literal (`"// TODO"` as runtime prose)
+# must be invisible. formwork's line/multiline pattern matcher cannot distinguish
+# comment text from string data across three languages, so this maps to the
+# command escape. The real script is the faithful check; it verifies in CI. No
+# fixture; SKIPs locally (enumerated by lint).
+rules:
+  - id: todo-fixme-hack
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-todo-fixme-hack-comments.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/**/*.go"
+        - "freightworks/**/*.sql"
+        - "frontend/**/*.dart"
+        - "packages/**/*.dart"
+      exclude:
+        - "**/*_test.go"
+        - "**/*_test.dart"
+        - "**/*.freezed.dart"
+        - "**/*.g.dart"
+        - "**/*.pb*.dart"
+    params:
+      cmd:
+        - bash
+        - scripts/check-todo-fixme-hack-comments.sh
+      expect:
+        exit: 0
+    cure: "Implement the work, delete the marker (and any dead code it guards), or open an issue/decision-log entry and link it from plain non-marker prose. TODO/FIXME/HACK/XXX have no allowlist and no escape hatch."
+    origin: scripts/check-todo-fixme-hack-comments.sh

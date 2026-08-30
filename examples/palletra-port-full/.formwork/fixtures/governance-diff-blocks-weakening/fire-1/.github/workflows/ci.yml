@@ -1,0 +1,11 @@
+name: ci
+on:
+  pull_request:
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: run gates
+        continue-on-error: true
+        run: go run scripts/check-example.go

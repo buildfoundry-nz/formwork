@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-go-worker-auth-precedes-decode.sh
+# (sweep-2 #7). The worker's OIDC gate is the only thing between the public
+# Cloud Run URL and the job pipeline. Every HTTP job handler trampolines into
+# the one generic body (worker/dispatch.go handleTask), which must AUTHENTICATE
+# before it DECODES the request payload — otherwise unauthenticated bytes reach
+# the proto decoder. The .sh pins several clauses; its structural spine (clause
+# 2) is: inside handleTask the OIDC guard `if !w.authenticate(` must appear
+# BEFORE the first `parseJobProto(` call.
+#
+# Ported as an ordering rule over dispatch.go: before = the auth guard,
+# after = the payload decode. A decode that precedes the guard is the violation
+# (reported on the decode line). Comments are stripped via decomment-go, matching
+# the .sh's `sub(/\/\/.*/,"",line)` — a commented decode/guard can neither fire
+# nor satisfy the ordering.
+#
+# DIVERGENCE (noted): the .sh also enforces (3) handlers are decode-free
+# trampolines, (4) parseJobProto has exactly two call sites, and (5) every
+# /jobs/* mux mount resolves through w.authenticate — multi-file structural
+# clauses no single line-oriented type expresses; only the auth-before-decode
+# ordering is ported. ordering keys on the first guard/decode in the file; in
+# dispatch.go both live only inside handleTask, so file-order == body-order here.
+rules:
+  - id: go-worker-auth-precedes-decode
+    type: ordering
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/detectqueue/worker/dispatch.go"
+    preprocess: decomment-go
+    params:
+      before: 'if\s*!w\.authenticate\('
+      after: 'parseJobProto\('
+      within: file
+    cure: "In handleTask, run the `if !w.authenticate(rw, r)` OIDC guard BEFORE parseJobProto( — unauthenticated payload bytes must never reach the decoder (sweep-2 #7)."
+    origin: scripts/check-go-worker-auth-precedes-decode.sh

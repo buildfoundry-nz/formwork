@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-geometry-proto-keeps-numbers-reserved.sh (sweep-1 #4),
+# tooth 1a. The Phase-4 descope reserved PageDimensions fields 11/12; the numbers
+# must stay reserved so pre-descope stored blobs (which carry unknown-field bytes
+# at 11/12) never mis-decode. required-anchor: the `reserved 11, 12;` statement
+# must be present UNCOMMENTED, so a doc-comment naming it does not satisfy the
+# gate. The .sh strips proto // comments; ported with decomment-go (proto shares
+# Go // and /* */ comment + string syntax) as the decomment-proto approximation.
+rules:
+  - id: geometry-proto-keeps-numbers-reserved
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "schema/proto/palletra/domain/v1/page_layout.proto"
+    preprocess: decomment-go
+    params:
+      pattern: 'reserved\s+11\s*,\s*12\s*;'
+      mode: exists
+    cure: "PageDimensions must keep `reserved 11, 12;` — the descoped numbers stay reserved so pre-descope layout_payload blobs never mis-decode (sweep-1 #4)."
+    origin: scripts/check-geometry-proto-keeps-numbers-reserved.sh

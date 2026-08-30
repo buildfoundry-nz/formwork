@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-flutter-shortcut-actions-require-suppressible-callback.sh
+# (#6290 / #4867). A Measure shortcut wrapper — a file that builds BOTH a
+# `Shortcuts(` map and an `Actions(` map — must route every action through
+# GuardedCallbackAction, never a raw `CallbackAction<`. A raw CallbackAction
+# stays ENABLED while a text field is focused, so Shortcuts reports the key
+# HANDLED and steals it from the field ('Bay spacing' could not delete or type
+# '2'). The Shortcuts(+Actions( co-occurrence is what SELECTS a file for
+# scanning; the scan spans every packages/*/lib so re-homing a wrapper into a
+# base package cannot slip coverage.
+#
+# Mapping: a same-file trigger (Shortcuts( AND Actions()) ⇒ a forbidden token
+# (a raw CallbackAction<) is a cross-line co-occurrence, so this is a linear-RE2
+# forbidden-pattern — the line-anchored `\bCallbackAction<` trigger gated by
+# whole-file require_present of Shortcuts(/Actions(. The `\bCallbackAction<` word
+# boundary already excludes GuardedCallbackAction< (no boundary inside that
+# identifier), so the regexp2 `(?<!Suppressible)` belt-and-braces is dropped. The
+# finding anchors on the raw CallbackAction line.
+rules:
+  - id: shortcut-actions-require-suppressible-callback
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+    params:
+      # Origin: grep -q 'Shortcuts(' && grep -q 'Actions(' select the file, then
+      # `grep 'CallbackAction<' | grep -v 'GuardedCallbackAction<'` flags the raw
+      # action — a whole-file co-occurrence. `\bCallbackAction<` is the line-anchored
+      # trigger (anchors on the raw-action line = fixture want-marker); Shortcuts(/
+      # Actions( are whole-file require_present guards. Linear RE2 replaces the two
+      # variable-length `(?<=…[\s\S]*)` lookbehinds.
+      pattern: '\bCallbackAction<'
+      require_present:
+        - 'Shortcuts\('
+        - 'Actions\('
+    cure: "Use GuardedCallbackAction(suppressed: () => ...) so the action reports isEnabled=false while a text field is focused and Shortcuts yields the key to the field, instead of a raw CallbackAction that steals it (#6290)."
+    origin: scripts/check-flutter-shortcut-actions-require-suppressible-callback.sh

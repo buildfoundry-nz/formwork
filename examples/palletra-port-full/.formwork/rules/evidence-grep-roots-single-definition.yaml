@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-evidence-grep-roots-single-definition.sh
+# (#1975 meta-gate), check 1. evidence-grep's scan roots must be single-
+# sourced in one evidenceRoots slice in scripts/ci/evidence-grep.go (so the
+# M8/L3 deferral greps can see packages/, where all Flutter runtime lives).
+# The original .sh required `^EVIDENCE_ROOTS=(` be defined; exists-mode over
+# that one file is the faithful port of the definition check, now anchored on
+# the `var evidenceRoots = []string{` block.
+#
+# Port fidelity (noted): the .sh additionally awk-checked that packages/
+# appears INSIDE the EVIDENCE_ROOTS(...) block, that check-deferral-wording's
+# SRC_PATHS and L3_PATHS include packages/, and forbade `--glob !packages/`.
+# Those block-scoped / cross-file limbs need multiline or another file's
+# context and are not ported line-by-line here; the companion rule
+# evidence-grep-checks-roots-not-inlined ports the open-coded-root ban.
+rules:
+  - id: evidence-grep-roots-single-definition
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "scripts/ci/evidence-grep.go"
+    preprocess: raw
+    params:
+      pattern: '^var evidenceRoots = \[\]string\{'
+      mode: exists
+    cure: "scripts/ci/evidence-grep.go must define the single-source evidenceRoots slice (containing packages/) that every check consumes (#1975)."
+    origin: scripts/check-evidence-grep-roots-single-definition.sh

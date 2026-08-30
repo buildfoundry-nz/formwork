@@ -1,0 +1,49 @@
+# Ported from Palletra scripts/check-dart-sse-interface-forbids-consumer-cursor.sh
+# (#3724). CommonProjectActivitySource multiplexes ONE inner SSE connection per
+# project across N consumers, so the decorator cannot honour any per-consumer
+# knob (a Last-Event-ID resume cursor) passed through subscribe(). The SSE
+# event-source INTERFACE — the abstract declaration that makes the Liskov
+# substitutability promise — MUST declare subscribe() with NO named- ({…}) or
+# optional- ([…]) parameter block. The reconnect cursor is server-driven inside
+# autoReconnectSseStream, never a per-consumer interface argument.
+#
+# Mapped to a linear-RE2 forbidden-pattern: fire only when a file that declares
+# `abstract [interface] class …StreamSource` ALSO contains a subscribe whose
+# parameter list opens a named/optional block. The violation sub-pattern is the
+# .sh's VIOLATION_RE: an identifier-boundary `\b` (so unsubscribe(/resubscribe(
+# never trip it), an optional `<…>` (a generic subscribe<T> override is still
+# caught), and the block anchored to the `,`/`(` that INTRODUCES a parameter (a
+# function-type positional param cannot slip past).
+#
+# DIVERGENCE (noted): the .sh de-comments Dart and fails vacuously-closed if ZERO
+# StreamSource interfaces exist (marker-rot guard) — formwork has no dart
+# decomment preprocessor and a forbidden-pattern cannot assert presence, so those
+# two guards are not modelled; the primary substitutability violation is faithful.
+rules:
+  - id: dart-sse-interface-forbids-consumer-cursor
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/**/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+    params:
+      # Origin: enumerate files declaring `abstract [interface] class …StreamSource`
+      # (whole-file presence) then flag those whose subscribe() opens a named/optional
+      # param block (VIOLATION_RE) — two independent, order-independent rg scans. The
+      # interface-decl is the line-anchored trigger (anchors the finding on that line =
+      # fixture want-marker); the subscribe named/optional-param violation is a
+      # whole-file require_present guard. Order-independent co-occurrence is MORE
+      # faithful than the regexp2 (whose tempered `(?:(?!\bclass\b)[\s\S])*?` bound was
+      # never in the origin greps). `\b` replaces the `(?<![A-Za-z0-9_$])` identifier
+      # guard; the optional `<…>` still catches a generic subscribe<T> override.
+      pattern: 'abstract\s+(?:interface\s+)?class\s+[A-Za-z0-9_]*ActivitySource\b'
+      require_present:
+        - '\bsubscribe(?:<[^>]*>)?\([^;]*[,(]\s*[\{\[]'
+      prefilter: 'ActivitySource'
+    cure: "Remove the named/optional parameter from the SSE source interface's subscribe(). A per-consumer Last-Event-ID cursor cannot be honoured by the #2292 CommonProjectActivitySource multiplexer; the reconnect cursor is server-driven inside autoReconnectSseStream (#3724)."
+    origin: scripts/check-dart-sse-interface-forbids-consumer-cursor.sh

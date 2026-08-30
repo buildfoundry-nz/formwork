@@ -1,0 +1,31 @@
+# Ported from Palletra scripts/check-stop-hook-free-of-dead-js.sh (sweep-5 #8).
+# Guards .claude/hooks/stop.go against DEAD JS TOKENS: the tokens `vitest`,
+# `tsconfig.json`, or `coverage_gate_` are residue of the JS toolchain removed in
+# PR #6507 (zero-JS migration). Any live reference is dead code that can never
+# execute or apparatus gating on files that will never return — the theatrical-
+# gate rot sweep-5 named.
+#
+# Ported as a forbidden-pattern over the stop hook, banning the three retired
+# tokens. The hook itself is now a Go program; the banned tokens appear in it
+# only as exec.Command argv strings.
+#
+# DIVERGENCE (noted for fidelity): (1) the original .sh's OTHER arm — GHOST
+# SCRIPTS, a `check-*.sh` name referenced in the stop hook whose scripts/<name>
+# file is absent on disk — is a doc-path-exists-shaped existence join on a
+# DIFFERENT mechanism and is not folded into this one banned-token rule. (2) The
+# .sh stripped shell comment lines (`^\s*#`) before matching so a header-comment
+# mention of a token did not fire; the ban here runs raw, so a `//` comment
+# mention of a banned token would fire and the fixtures keep the banned tokens
+# out of comment lines. Line-level finding (fire line carries an inline
+# `// want:` marker).
+rules:
+  - id: stop-hook-free-of-dead-js
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - ".claude/hooks/stop.go"
+    params:
+      pattern: 'vitest|tsconfig\.json|coverage_gate_'
+    cure: "Remove the dead JS apparatus from .claude/hooks/stop.go — the JS toolchain (package.json, vitest, tsc) was removed in the zero-JS migration (PR #6507). The live Flutter gate is in .husky/pre-commit (sweep-5 #8)."
+    origin: scripts/check-stop-hook-free-of-dead-js.sh

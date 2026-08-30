@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-no-forced-migration-ledger-rewrite.sh (#6608),
+# Pattern 1 of 2. The boot migration runner must NEVER rewrite the migration
+# ledger. golang-migrate's .Force() rewrites the ledger version WITHOUT touching
+# the schema; on a shared DB that hands the next deploy a schema whose migrations
+# it re-runs (the #6608 52-minute dev outage). Comments are stripped first
+# (decomment-go) so the LEDGER INVARIANT prose in runner.go never trips.
+# _test.go is exempt — the refusal tests poison a ledger on purpose to prove the
+# runner leaves it untouched.
+#
+# The .sh's second arm (hand-rolled ledger DML in a string literal) is ported as
+# a sibling rule no-hand-rolled-dml-against-migration-ledger.yaml — it needs a different preprocessor
+# (strings-only-go), so it cannot share this rule.
+rules:
+  - id: no-forced-migration-ledger-rewrite
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\.Force\('
+    cure: "The boot runner must never rewrite the migration ledger. A .Force() rewrites history without touching the schema — on a shared DB the next deploy re-runs those migrations (#6608). Refuse with an actionable operator-intervention error instead."
+    origin: scripts/check-no-forced-migration-ledger-rewrite.sh

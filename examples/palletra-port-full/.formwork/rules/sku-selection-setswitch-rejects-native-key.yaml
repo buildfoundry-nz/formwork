@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-sku-selection-namespace-split.sh
+# (#5748 one-writer-per-store, design §D2/§D3). Native sku-selection keys
+# (sel:<slug>:<option>) and Kit K-code switch keys share ONE store
+# (palletra.project_transitions) but each namespace has exactly one writer:
+#   Rule A — pricing_stage_capture.go (SetToggle) must REJECT native sel: keys by
+#            calling selkeys.IsSourceKey(.
+#   Rule B — selections.go (Apply) must REJECT non-native K-code keys with a
+#            `return ... ErrNotLocalKey` line (the guard action, not merely the
+#            sentinel's var decl — so deleting the guard while keeping the var
+#            still trips).
+# Each reject is a distinct anchor in a distinct file, so this is the faithful
+# port of the .sh's two grep -q guards: two required-pattern (exists) rules.
+rules:
+  - id: sku-selection-setswitch-rejects-native-key
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/pricing/pricing_stage_capture.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'selkeys\.IsSourceKey\('
+      mode: exists
+    cure: "pricing_stage_capture.go (SetToggle) must call selkeys.IsSourceKey( to 400 a native sel: select_code — one writer per store (design §D3)."
+    origin: scripts/check-sku-selection-namespace-split.sh
+  - id: sku-selection-apply-rejects-nonnative-key
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/skuselections/selections.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'return\s+.*ErrNotLocalKey'
+      mode: exists
+    cure: "selections.go (Apply) must `return ... ErrNotLocalKey` when ParseSelectionKey reports a non-sel: (K-code) key — one writer per store (design §D3)."
+    origin: scripts/check-sku-selection-namespace-split.sh

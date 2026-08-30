@@ -1,0 +1,14 @@
+# Ported from Palletra scripts/check-dockerignore-build-context-excludes.sh
+# (#1484). See dockerignore-must-exclude-frontend for the shared rationale; this
+# limb pins the docs/ tree as an active .dockerignore exclude.
+rules:
+  - id: dockerignore-must-exclude-docs
+    type: required-pattern
+    scope:
+      include:
+        - ".dockerignore"
+    params:
+      pattern: '^[ \t]*docs/?[ \t]*(#.*)?$'
+      mode: exists
+    cure: "Add an active 'docs' (or 'docs/') line to the root .dockerignore (#1484)."
+    origin: scripts/check-dockerignore-build-context-excludes.sh

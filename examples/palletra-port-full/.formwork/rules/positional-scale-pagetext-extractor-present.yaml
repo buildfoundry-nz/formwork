@@ -1,0 +1,17 @@
+# Ported from scripts/check-positional-gauge-picker.sh, invariant 2a. pick.go
+# must declare func extractScaleFromPageContent( — the Tier-1 entry over page items
+# that keeps the geometry-aware vector-text scale path. (Invariant 1, pick.go
+# existence, is not expressible as a pattern — empty-scope exists-mode passes; that
+# is formwork lint's rot check.)
+rules:
+  - id: positional-scale-pagetext-extractor-present
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/detection/scale/pick.go'
+    params:
+      pattern: '^func\s+extractScaleFromPageContent\('
+      mode: exists
+    cure: 'pick.go must declare func extractScaleFromPageContent( — the Tier-1 vector-text scale entry.'
+    origin: scripts/check-positional-gauge-picker.sh

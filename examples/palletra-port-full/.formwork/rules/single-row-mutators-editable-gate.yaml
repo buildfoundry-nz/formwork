@@ -1,0 +1,28 @@
+# Ported from Palletra scripts/check-single-row-mutators-editable-gate.sh (#2862,
+# K13 write-path edit-lock). No file under internal/markupwrite/ may call the
+# RAW mutbase.LockAndFetchContext — only mutbase/mutbase.go (which composes it into
+# LockWritableContext) may. So a single-row mutator that locks a row for writing
+# cannot skip the editable assert: the only lock it can reach also asserts. Bans
+# LockAndFetchContext( in any *.go under internal/markupwrite/ EXCEPT
+# mutbase/mutbase.go and tests. The .sh greps raw source, so preprocess is omitted.
+#
+# DIVERGENCE (noted): the .sh also fails LOUD (exit 2) if the markupwrite
+# package or the `func LockWritableContext(` helper is missing (path/rename rot).
+# A forbidden-pattern cannot express that anti-vacuity existence guard; only the
+# raw-lock leak ban is ported.
+rules:
+  - id: single-row-mutators-editable-gate
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/markupwrite/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    except:
+      paths:
+        - "freightworks/services/core-api/internal/markupwrite/mutbase/mutbase.go"
+    params:
+      pattern: 'LockAndFetchContext\('
+    cure: "Use mutbase.LockWritableContext — it locks AND rejects a fully-approved row before any write (the K13 assert). Only mutbase/mutbase.go may reach the raw lock (#2862)."
+    origin: scripts/check-single-row-mutators-editable-gate.sh

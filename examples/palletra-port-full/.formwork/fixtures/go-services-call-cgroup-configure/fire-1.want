@@ -1,0 +1,3 @@
+# Scope-level finding: the command exits non-zero because a Dockerfile-built
+# main package omits runtimeenv.Configure().
+-

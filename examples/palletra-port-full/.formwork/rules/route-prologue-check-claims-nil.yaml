@@ -1,0 +1,36 @@
+# Ported from Palletra scripts/check-route-preamble-guards.sh — RULE 1 (#3189).
+# The core-api route layer hand-wrote the same handler preambles ~850x; three
+# shared guards collapse them. This rule is the RULE-1 half: a raw claims-nil
+# 401 preamble (`if claims == nil` immediately followed — within the next 3
+# lines — by a `shared.WriteErrorPayload(w, http.StatusUnauthorized,` 401). That two
+# line block is exactly what shared.ClaimsOrUnauthorized replaces. Requiring the 401
+# envelope nearby excludes the legitimate `if claims == nil { return nil }`
+# helpers that silently fall back instead of 401ing.
+#
+# The .sh keeps a 3-line lookahead window (awk j = i .. i+3). A multiline
+# linear-RE2 pattern expresses that window over whole-file content — pure
+# consuming bounded repetition, no lookaround:
+#   `if claims == nil`  then  0-3 full lines  then  the 401 WriteErrorPayload.
+# The match starts at the `if claims == nil` line — the line the .sh reports.
+#
+# Scope mirrors the .sh: routes/**/*.go, excluding *_test.go and routes/shared/
+# (the guards' own home).
+rules:
+  - id: route-prologue-check-claims-nil
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/routes/shared/**"
+    params:
+      # Pure consuming multiline pattern (no lookaround) — linear RE2. The bounded
+      # (?:[^\n]*\n){0,3} is the awk i..i+3 window; LocateLine anchors the finding on
+      # the `if claims == nil` start line (fixture want-marker).
+      pattern: 'if claims == nil(?:[^\n]*\n){0,3}[^\n]*shared\.WriteErrorPayload\(w, http\.StatusUnauthorized,'
+      prefilter: 'StatusUnauthorized'
+      multiline: true
+    cure: "Collapse the raw claims-nil 401 preamble into `claims, ok := shared.ClaimsOrUnauthorized(w, r)` — AssertCapability/AssertRole already 401 nil claims, so the per-handler re-check is pure duplication."
+    origin: scripts/check-route-preamble-guards.sh

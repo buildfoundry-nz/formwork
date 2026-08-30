@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-flutter-workflows-cache-flutter-pub.sh (#1484).
+# For every .github/workflows/*.yml, any top-level job whose steps run
+# `flutter pub get` MUST also contain, in the SAME job, an actions/cache step
+# referencing ~/.pub-cache that appears BEFORE the pub-get step (a restore after
+# pub get can't warm that run's download). Matching is over comment-stripped
+# ACTIVE YAML, and the per-job scoping is the point — a cache in job A cannot
+# cover a cold pub get in job B.
+#
+# Why the ESCAPE HATCH (type: command): the gate SPLITS each workflow into its
+# top-level jobs (awk on the jobs: map), strips YAML comments, and enforces an
+# intra-job ORDERING (first ~/.pub-cache line strictly before first pub-get
+# line) scoped per job. Per-job YAML decomposition plus a within-job ordering
+# constraint is not faithfully expressible in the file-level ordering/pattern
+# types (they cannot see job boundaries). This command runs the real gate;
+# formwork lint enumerates it and it verifies in CI.
+rules:
+  - id: workflows-cache-flutter-pub
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-flutter-workflows-cache-flutter-pub.sh —
+      the validating target's own gate script, which this corpus does not
+      carry and cannot: it is written in that tree's vocabulary, and this
+      repository tracks no shell scripts at all. In a fixture tree bash would
+      exit 127 in the fire tree and the pass tree alike, so the fire proof
+      would be satisfied by the detector NOT EXISTING and the pass proof would
+      report that same missing-detector exit as a finding. What the port
+      asserts here is the SCOPE and the CURE, both readable against the origin
+      script; the detection runs where the script does.
+    scope:
+      include:
+        - ".github/workflows/*.yml"
+        - ".github/workflows/*.yaml"
+    params:
+      cmd:
+        - "bash"
+        - "scripts/check-flutter-workflows-cache-flutter-pub.sh"
+      expect:
+        exit: 0
+    cure: "Add an actions/cache step for ~/.pub-cache (keyed on pubspec.lock) to every flutter-pub-get job, BEFORE its 'flutter pub get' step — mirror the flutter-analyze job (#1484)."
+    origin: scripts/check-flutter-workflows-cache-flutter-pub.sh

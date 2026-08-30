@@ -1,0 +1,63 @@
+# Ported from Palletra scripts/check-deploy-workflows-build-defines.sh (#1898).
+# For each of deploy-{dev,staging,production}.yml that EXISTS under
+# .github/workflows/, all four `--dart-define=<KEY>=` substrings must appear.
+# The .sh's "for every workflow that exists, every define present" is exactly
+# required-pattern mode: every-file over the three deploy-workflow files — a
+# workflow present but missing a define fails; a workflow that does not exist is
+# not in scope and is skipped (matching the .sh's per-file `[ -f ]` guard). Four
+# defines cannot share one pattern (they sit on separate continued lines and
+# RE2 has no all-of lookahead), so each define is its own every-file rule — the
+# same one-anchor-per-rule split the calibration-reference port uses.
+rules:
+  - id: deploy-workflows-require-environment-define
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/deploy-dev.yml"
+        - ".github/workflows/deploy-staging.yml"
+        - ".github/workflows/deploy-production.yml"
+    params:
+      pattern: '--dart-define=ENVIRONMENT='
+      mode: every-file
+    cure: "Add --dart-define=ENVIRONMENT=<value> to the workflow's 'flutter build web --release' step (#1898)."
+    origin: scripts/check-deploy-workflows-build-defines.sh
+  - id: deploy-workflows-require-api-base-url-define
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/deploy-dev.yml"
+        - ".github/workflows/deploy-staging.yml"
+        - ".github/workflows/deploy-production.yml"
+    params:
+      pattern: '--dart-define=API_BASE_URL='
+      mode: every-file
+    cure: "Add --dart-define=API_BASE_URL=<value> to the workflow's 'flutter build web --release' step (#1898)."
+    origin: scripts/check-deploy-workflows-build-defines.sh
+  - id: deploy-workflows-require-identity-project-id-define
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/deploy-dev.yml"
+        - ".github/workflows/deploy-staging.yml"
+        - ".github/workflows/deploy-production.yml"
+    params:
+      pattern: '--dart-define=GCIP_PROJECT_ID='
+      mode: every-file
+    cure: "Add --dart-define=GCIP_PROJECT_ID=<value> to the workflow's 'flutter build web --release' step (#1898)."
+    origin: scripts/check-deploy-workflows-build-defines.sh
+  - id: deploy-workflows-require-build-id-define
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/deploy-dev.yml"
+        - ".github/workflows/deploy-staging.yml"
+        - ".github/workflows/deploy-production.yml"
+    params:
+      pattern: '--dart-define=BUILD_ID='
+      mode: every-file
+    cure: "Add --dart-define=BUILD_ID=$GITHUB_SHA to the workflow's 'flutter build web --release' step so feedback reports carry the shipped SHA (#1898)."
+    origin: scripts/check-deploy-workflows-build-defines.sh

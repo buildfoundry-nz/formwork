@@ -1,0 +1,52 @@
+# Ported from Palletra scripts/check-dart-flutter-state-and-theme-rules.sh (forbidden-pattern).
+# Mechanically enforces the Flutter Hard Rules. The many single-line RE2 sub-bans
+# are grouped by scope into two forbidden-pattern rules:
+#
+#   * theme rule (non-theme files): T1 Color(0x), T3 EdgeInsets magic number,
+#     T4 SizedBox magic dimension, T5 BorderRadius.circular magic number,
+#     T6 TextStyle inline fontSize. packages/plt_theme/lib (+ legacy
+#     frontend/lib/theme) is the one legitimate home and is carved out by scope.
+#   * state/MD/JS rule (all files): T2 .withOpacity, S1 extends StateNotifier,
+#     S2 StateNotifierProvider, S3 .valueOrNull, S3b hasValue?..value:null,
+#     M1 cardTheme: CardTheme(, M2 dialogTheme: DialogTheme(, J1 package:js import.
+#
+# Not ported (see notes): S3c (multiline .asData->.value — needs cross-line/rg
+# matching), S4 (setState-mutated bool inside a riverpod-aware widget — needs a
+# two-phase import-gated scan), and T7 decodeCssColor (lib-only scope, distinct
+# from these file sets). The single quote in the package:js import is \x27.
+rules:
+  - id: dart-hardcoded-theme-values-banned
+    type: forbidden-pattern
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+        - "frontend/test/**/*.dart"
+        - "packages/*/test/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "packages/plt_theme/lib/**"
+        - "frontend/lib/theme/**"
+    params:
+      pattern: '\bColor\(0x|EdgeInsets\.(all|symmetric|fromLTRB|only)\([^)]*[0-9]|SizedBox\((width|height):\s*[0-9]|BorderRadius\.circular\([0-9]|TextStyle\([^)]*fontSize:\s*[0-9]'
+    cure: "No hardcoded colors/spacing/typography outside packages/plt_theme/lib. Read Theme.of(context).colorScheme.*, ShellSpacing.*, or textTheme.* instead."
+    origin: scripts/check-dart-flutter-state-and-theme-rules.sh
+
+  - id: flutter-hardrules-state-and-interop-banned
+    type: forbidden-pattern
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+        - "frontend/test/**/*.dart"
+        - "packages/*/test/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+    params:
+      pattern: '\.withOpacity\(|\bextends\s+StateNotifier\b|\bStateNotifierProvider\b|\.valueOrNull\b|\.hasValue\s*\?[^:]*\.value\s*:\s*null|cardTheme:\s*CardTheme\(|dialogTheme:\s*DialogTheme\(|^import\s+\x27package:js(_util)?/'
+    cure: "Riverpod 3.x posture: Notifier/AsyncNotifier not StateNotifier, asyncValue.value not valueOrNull; Sku 3 *ThemeData; no .withOpacity; no package:js."
+    origin: scripts/check-dart-flutter-state-and-theme-rules.sh

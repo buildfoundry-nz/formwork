@@ -1,0 +1,16 @@
+# Ported from Palletra scripts/check-pagefeed-cache-shared.sh (PR #2765 #8).
+# Dev-local must run ONE pagefeed.Cache: a composition-root wiring chain no
+# unit test can pin. This is link 1b (shared cache sized at the HTTP bound). Comment-stripped (decomment-go) so
+# prose can never satisfy the link. exists-mode over the exact file.
+rules:
+  - id: pagefeed-cache-size-matches-http-concurrency
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/extraction_dispatcher.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'sourcerouting\.NewCache\(localDependencies\.Signer,\s*pagefeed\.HTTPPooledConcurrency\)'
+      mode: exists
+    cure: "the shared cache must be sized at pagefeed.HTTPPooledConcurrency (its semaphore only bounds HTTP regens)."
+    origin: scripts/check-pagefeed-cache-shared.sh

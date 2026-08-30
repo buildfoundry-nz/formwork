@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-no-unrestricted-platform-api-write-policy.sh
+# (#1193). In the committed schema snapshot, every write-capable RLS policy
+# bound TO runtime_api whose USING or WITH CHECK predicate is the bare literal
+# `true` is a fig-leaf: it lets ANY tenant INSERT/UPDATE/DELETE ANY row with no
+# org gating. The #1193 audit found exactly one — field_key_definitions_write
+# (USING (true) WITH CHECK (true)) on a tenant-shared reference vocabulary. The
+# cure is to scope the policy; there is deliberately no allowlist.
+#
+# ALLOWED (not a violation): FOR SELECT … USING (true) — a global READ of a
+# country-neutral reference table (reads leak nothing writes don't); USING
+# (false) deny-all; and any genuinely-scoping predicate (current_setting GUC,
+# EXISTS(parent), any non-`true` expression).
+#
+# Ported as a sql/statement-predicate over the .sql snapshot (each CREATE POLICY
+# is one `;`-terminated statement):
+#   table   — selects runtime_api policies whose predicate IS a bare `(true)`
+#             (TO runtime_api … USING/WITH CHECK (true)). A scoped predicate
+#             (USING ((org_id = current_setting(...)))) or USING (false) never
+#             matches, so it is never selected.
+#   require — `FOR SELECT`: a selected (bare-true, runtime_api) statement that
+#             is NOT FOR SELECT is write-capable → the violation. FOR SELECT
+#             read policies satisfy the requirement and pass. This is the .sh's
+#             "write-capable = not FOR SELECT" test, inverted into a require.
+#
+# DIVERGENCE (noted): the .sh treats a policy with NO `FOR` clause as FOR ALL
+# (write-capable); this port keys on the presence of `FOR SELECT`, so a bare-true
+# runtime_api policy that omits the FOR clause entirely would also be selected
+# and (lacking FOR SELECT) flagged — same verdict. pg_dump emits an explicit
+# command clause, so the snapshot always carries one.
+rules:
+  - id: no-unrestricted-platform-api-write-policy
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+    params:
+      table: '(?is)CREATE POLICY.*\bTO\s+runtime_api\b.*(USING|WITH\s+CHECK)\s*\(\s*true\s*\)'
+      require:
+        - '(?i)FOR\s+SELECT'
+    cure: "An unclamped write policy lets any tenant INSERT/UPDATE/DELETE any row. Scope the predicate to the tenant (USING (org_id = current_setting('app.active_org_id', true)::uuid)), or DROP the write policy so runtime_api only READs the reference table. A bare USING (true) write policy is never acceptable (#1193)."
+    origin: scripts/check-no-unrestricted-platform-api-write-policy.sh

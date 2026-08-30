@@ -1,0 +1,120 @@
+# Ported from Palletra scripts/check-migrations-pair-rls-with-tenant-policy.sh (RLS-PAIR, #4489).
+# Every forward palletra migration (4-digit prefix >= 108) that CREATEs a table
+# MUST, in the SAME up.sql, for EACH created table: (a) ALTER TABLE <t> ENABLE
+# ROW LEVEL SECURITY, and (b) at least one CREATE POLICY ... ON <t> ... TO
+# runtime_api whose USING/WITH CHECK predicate actually scopes the row
+# (current_setting('app.active_org_id'|'app.active_user_id') or EXISTS(parent)).
+# A USING (true) fig-leaf does NOT satisfy the pairing. Deliberately-global
+# reference tables carry a NAMED `-- RLS-GLOBAL: <table> — <reason>` instead.
+# PARTITION OF child tables and TEMP tables are out of scope.
+#
+# ESCAPE HATCH (type: command). The pairing is CROSS-STATEMENT within a file —
+# for each CREATE TABLE there must exist a matching ENABLE-RLS and a scoping
+# CREATE POLICY elsewhere in the same file — which sql/statement-predicate
+# (per-statement) cannot express. Ported as a self-contained python3
+# reproduction; finding is scope-level. fire-1 creates a table with no RLS
+# pairing; pass-1 pairs ENABLE RLS + a tenant-scoped runtime_api policy.
+rules:
+  - id: migrations-pair-rls-with-tenant-policy
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/palletra/**/*.up.sql"
+    params:
+      cmd:
+        - python3
+        - -c
+        - |
+          import glob, os, re, sys
+          ANCHOR = 108
+
+          def drop_comments(text):
+              out = []
+              inblock = False
+              for line in text.split("\n"):
+                  buf = ""; i = 0
+                  while i < len(line):
+                      if inblock:
+                          idx = line.find("*/", i)
+                          if idx < 0:
+                              i = len(line); break
+                          i = idx + 2; inblock = False; continue
+                      two = line[i:i+2]
+                      if two == "/*":
+                          inblock = True; i += 2; continue
+                      if two == "--":
+                          break
+                      buf += line[i]; i += 1
+                  out.append(buf)
+              return "\n".join(out)
+
+          def norm(name):
+              name = name.replace('"', "")
+              return name.split(".")[-1].lower()
+
+          fail = 0
+          for f in sorted(glob.glob("**/*.up.sql", recursive=True)):
+              base = os.path.basename(f)
+              m = re.match(r'(\d+)_', base)
+              if not m or int(m.group(1)) < ANCHOR:
+                  continue
+              raw = open(f, encoding="utf-8").read()
+              body = drop_comments(raw)
+              tables = []; rls = set(); policy = set()
+              for stmt in body.split(";"):
+                  s = stmt.strip()
+                  up = s.upper()
+                  cm = re.match(r'CREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?(\S+)', s, re.I)
+                  if cm:
+                      after = s[cm.end():].lstrip()
+                      if after.upper().startswith("PARTITION OF") or re.match(r'\(?\s*PARTITION\s+OF', after, re.I):
+                          continue
+                      if re.search(r'\bTEMP(ORARY)?\b', up):
+                          continue
+                      tables.append(norm(cm.group(2)))
+                      continue
+                  if re.match(r'ALTER\s+TABLE\s', up) and re.search(r'ENABLE\s+ROW\s+LEVEL\s+SECURITY', up):
+                      am = re.match(r'ALTER\s+TABLE\s+(ONLY\s+)?(IF\s+EXISTS\s+)?(\S+)', s, re.I)
+                      if am:
+                          rls.add(norm(am.group(3)))
+                      continue
+                  if re.match(r'CREATE\s+POLICY\s', up):
+                      onm = re.search(r'\sON\s+(\S+)', s, re.I)
+                      if not onm:
+                          continue
+                      tname = norm(onm.group(1))
+                      if not re.search(r'\sTO\s+', up):
+                          continue
+                      roles = up.split(" TO ", 1)[1]
+                      roles = re.split(r'\s(USING|WITH)[\s(]', roles)[0]
+                      roles = roles.replace('"', "")
+                      if "RUNTIME_API" not in re.split(r'[\s,]+', roles):
+                          continue
+                      low = s.lower()
+                      if ("app.active_org_id" not in low and "app.active_user_id" not in low
+                              and not re.search(r'exists\s*\(', low)):
+                          continue
+                      policy.add(tname)
+              # RLS-GLOBAL named exemptions
+              exempt = set()
+              for line in raw.split("\n"):
+                  gm = re.match(r'^\s*--\s*RLS-GLOBAL:\s*(\S+)(.*)$', line)
+                  if gm and re.search(r'[A-Za-z0-9]', gm.group(2)):
+                      exempt.add(norm(gm.group(1)))
+              for t in tables:
+                  if t in exempt:
+                      continue
+                  missing = []
+                  if t not in rls:
+                      missing.append("ENABLE ROW LEVEL SECURITY")
+                  if t not in policy:
+                      missing.append("CREATE POLICY ... TO runtime_api with a tenant-scoping predicate")
+                  if missing:
+                      print(f"FAIL {f}: table '{t}' missing " + " + ".join(missing))
+                      fail = 1
+          sys.exit(1 if fail else 0)
+      expect:
+        exit: 0
+    cure: "In the SAME up.sql, after CREATE TABLE palletra.<t>, add `ALTER TABLE palletra.<t> ENABLE ROW LEVEL SECURITY;` and a `CREATE POLICY ... ON palletra.<t> ... TO runtime_api USING (org_id = current_setting('app.active_org_id', true)::uuid);`. A USING (true) policy is a fig-leaf (#4489). Deliberately-global reference table? Justify inline with `-- RLS-GLOBAL: <table> — <reason>`."
+    origin: scripts/check-migrations-pair-rls-with-tenant-policy.sh

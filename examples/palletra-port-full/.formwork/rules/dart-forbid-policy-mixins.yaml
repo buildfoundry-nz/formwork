@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-dart-forbid-policy-mixins.sh (Tier 6.3 /
+# FR-ARC-6). A Policy is a behavior an object DOES, not a kind of thing it
+# IS; mixing one into a widget State (`with FooPolicy`) couples the policy's
+# lifecycle to the widget. Bans `with AlignmentTool` and `with <Capitalized>Policy`
+# across all Dart library source (frontend/lib + packages/*/lib), carving out
+# the theme package (framework ThemeExtension/lerp mixins) and generated files.
+rules:
+  - id: dart-forbid-policy-mixins
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "packages/plt_theme/lib/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+    params:
+      pattern: '\bwith\s+(AlignmentTool\b|[A-Z][A-Za-z0-9_]*Policy\b)'
+    cure: "Replace 'with <Policy>' with composition — declare the policy as a constructor field on the State and delegate every call through it (the Policy-as-constructor-field shape FR-ARC-6 established)."
+    origin: scripts/check-dart-forbid-policy-mixins.sh

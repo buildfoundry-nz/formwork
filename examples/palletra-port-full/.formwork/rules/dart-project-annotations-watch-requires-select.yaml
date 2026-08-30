@@ -1,0 +1,30 @@
+# Ported from Palletra scripts/check-dart-project-annotations-watch-requires-select.sh
+# (audit #I3). projectCalloutsProvider holds identity-stable per-page slots;
+# a consumer that ref.watches the WHOLE AsyncValue re-emits on every
+# project-wide mutation, defeating slot stability. Bans an unguarded
+# `ref.watch(projectCalloutsProvider(...))` — one whose family call is NOT
+# immediately chained with `.select(` — inside any **/providers/** dir across
+# all Dart library source.
+#
+# APPROXIMATION: the .sh uses a pcre2 `-U` (multiline) negative lookahead
+# `(?!\s*\.select)`. formwork uses RE2 (no lookahead) and matches line-by-line,
+# so this pattern catches the single-line canonical form — the family call
+# passed straight into the watch (`...Provider(id))`, or continued with a
+# non-`.select` member read (`.value`, `.notifier`) — and does NOT catch a
+# `.select` chained on the FOLLOWING line. The whitespace-then-`.select` pass
+# form on one line is still correctly exempted.
+rules:
+  - id: dart-project-annotations-watch-requires-select
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/providers/**/*.dart"
+        - "packages/*/lib/**/providers/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+    params:
+      pattern: 'ref\.watch\(\s*projectCalloutsProvider\([^)]*\)(\s*\)|\.[^s])'
+    cure: "Chain .select onto the family call so the provider re-runs only when its slot changes — ref.watch(projectCalloutsProvider(projectId).select((a) => a.value.markerTalliesForPage(pageId) ?? const [])). A genuinely all-pages reader selects the pageGrouped map."
+    origin: scripts/check-dart-project-annotations-watch-requires-select.sh

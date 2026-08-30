@@ -1,0 +1,15 @@
+# Ported from Palletra scripts/check-dockerignore-build-context-excludes.sh
+# (#1484). See dockerignore-must-exclude-frontend for the shared rationale; this
+# limb pins the shared/generated/dart tree as an active .dockerignore exclude
+# (the Go images COPY only shared/generated/go, never the dart output).
+rules:
+  - id: dockerignore-must-exclude-generated-dart
+    type: required-pattern
+    scope:
+      include:
+        - ".dockerignore"
+    params:
+      pattern: '^[ \t]*shared/generated/dart/?[ \t]*(#.*)?$'
+      mode: exists
+    cure: "Add an active 'shared/generated/dart' line to the root .dockerignore (#1484)."
+    origin: scripts/check-dockerignore-build-context-excludes.sh

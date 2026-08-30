@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-dart-tests-must-import-production-code.sh (#3465).
+# Every *_test.dart under packages/*/test/** must contain at least one
+# first-party import — package:feature_*, package:plt_*, package:palletra_schema,
+# or a relative ./ or ../ import — so a vendor-only test cannot masquerade as
+# proving a production fix. The .sh enforces this PER FILE, which maps exactly to
+# required-pattern mode: every-file (every in-scope file must match). *.g.dart /
+# *.freezed.dart are excluded (the .sh skips them).
+rules:
+  - id: dart-tests-must-import-production-code
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/*/test/**/*_test.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+    params:
+      pattern: "^\\s*import\\s+['\"](package:feature_|package:plt_|package:palletra_schema|\\.\\./|\\./)"
+      mode: every-file
+    cure: "Import the production code the test claims to prove (package:feature_*, package:plt_*, package:palletra_schema, or a relative ./ or ../ import); a vendor-only test asserts framework behavior and is banned (#3465 / #5867)."
+    origin: scripts/check-dart-tests-must-import-production-code.sh

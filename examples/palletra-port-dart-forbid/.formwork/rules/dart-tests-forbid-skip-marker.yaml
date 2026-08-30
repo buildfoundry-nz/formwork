@@ -1,0 +1,28 @@
+rules:
+  - id: dart-tests-forbid-skip-marker
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/test/**/*_test.dart"
+        - "frontend/integration_test/**/*_test.dart"
+        - "packages/*/test/**/*_test.dart"
+        - "packages/*/integration_test/**/*_test.dart"
+      exclude:
+        # Generated Dart. The pattern is a bare `skip:` followed by a bool or a
+        # quote, which is ordinary CODEGEN output the moment any proto or
+        # json_serializable model carries a field named `skip` — the emitted
+        # constructor arg and toJson map both spell it `skip: `. Nobody can act
+        # on that finding: the fix is to edit a .proto, not the Dart. Dead in
+        # this slice, which carries hand-written tests only — preventative, not
+        # rot. See .formwork/lint.yaml.
+        - "**/*.g.dart"         # json_serializable / build_runner output
+        - "**/*.freezed.dart"   # freezed copyWith args spell every field name
+        - "**/*.pb.dart"        # protoc-dart message classes
+        - "**/*.pbenum.dart"    # protoc-dart enums
+        - "**/*.pbjson.dart"    # protoc-dart JSON descriptors
+        - "**/*.pbserver.dart"  # protoc-dart service stubs
+    params:
+      pattern: '(^|[^A-Za-z0-9_])skip:\s*(true|false|''|")'
+    cure: "Do not quarantine a test with skip:; fix the flake or DELETE the test. For platform-specific cases guard the body (if (kIsWeb) return;)."
+    origin: scripts/check-dart-tests-forbid-skip-marker.sh

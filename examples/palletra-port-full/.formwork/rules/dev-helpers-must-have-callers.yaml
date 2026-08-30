@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-dev-helpers-must-have-callers.sh (#4569).
+# check-gate-scripts-are-wired.sh carves scripts/dev/ out of its scan, so a
+# helper could sit unused forever. Every non-test file under scripts/dev/
+# (recursive; *_test.py / *_test.go excluded) MUST have at least one PATH-FORM
+# consumer — the literal string scripts/dev/<relpath> — outside the helper
+# itself, across scripts/, .github/workflows/, .husky/, AGENTS.md/CLAUDE.md, and
+# freightworks/internal/gatetests/. Self-hits, non-test peer hits under
+# scripts/dev/, and gate-self docs do NOT count.
+#
+# COMMAND ESCAPE: this joins a FILENAME set (the helper relpaths, derived from
+# the filesystem tree under scripts/dev/) against a CONTENT-reference set across
+# several consumer surfaces, with self-hit / peer / gate-self filtering. formwork
+# set-relation extracts both sides from file CONTENT via regex — it cannot make a
+# set element out of a file's own path, so "every helper filename appears as a
+# path-form reference elsewhere" is not expressible declaratively. Running the
+# real script is faithful; verifies in CI, formwork lint enumerates it.
+rules:
+  - id: dev-helpers-must-have-callers
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-dev-helpers-must-have-callers.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "scripts/dev/**"
+    params:
+      cmd:
+        - bash
+        - scripts/check-dev-helpers-must-have-callers.sh
+      expect:
+        exit: 0
+    cure: "Wire each scripts/dev/<name> helper as a path-form reference from a check-*.sh / workflow / husky / AGENTS.md / CLAUDE.md / gate synth, or delete it (#4569)."
+    origin: scripts/check-dev-helpers-must-have-callers.sh

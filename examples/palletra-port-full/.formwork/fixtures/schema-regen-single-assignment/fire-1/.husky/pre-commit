@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# The helper is consulted twice — a copy-paste duplication that lets the two
+# blocks drift out of sync.
+SCHEMA_SYNC_DECISION=$(go run scripts/dev/schema-regen-choice.go)
+SCHEMA_SYNC_DECISION=$(go run scripts/dev/schema-regen-choice.go)

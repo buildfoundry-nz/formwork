@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-no-bomless-page-recompute.sh (#5179).
+# shared.RecomputePageAggregatesWithoutBomEvalInTx re-aggregates one page but
+# SKIPS the live BOM re-price; it is correct only for the hidden-shelving batch
+# that re-prices once after its loop. Any other runtime caller renders a stale
+# priced BOM. Bans the qualified symbol (direct-call and value-capture forms both
+# reduce to the bare identifier) in non-test Go under freightworks/, with the two
+# sanctioned hidden-shelving files carved out. decomment-go strips comment
+# mentions so naming the helper in prose stays legal.
+rules:
+  - id: no-bomless-page-recompute
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'shared\.RecomputePageAggregatesWithoutBomEvalInTx'
+    except:
+      paths:
+        - "**/workflow_hidden_shelving.go"
+        - "**/workflow_hidden_shelving_regen.go"
+    cure: "A single-page mutation route must use shared.RecomputePageRollupsInTx (re-prices the BOM in the same call). The no-BOM variant is only for the hidden-shelving batch (#5179)."
+    origin: scripts/check-no-bomless-page-recompute.sh

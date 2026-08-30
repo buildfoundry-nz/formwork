@@ -1,0 +1,74 @@
+# Port of scripts/check-flutter-footer-single-busy-owner.sh.
+#
+# The Measure-footer single-busy-source contract, over content-anchored Dart
+# files (located by class/symbol, not path). This port reproduces the gate's
+# forbidden-construct half — the rules that make a private in-flight bool or a
+# detached future un-reintroducible:
+#   A — a footer render site (PlotPrimaryActionButton / PlotRailBulkActions
+#       / PlotSidebarFooterButton) constructs NO Sku or Async*Button
+#       (only PendingButton, whose `busy` comes from the owner);
+#   B — no `unawaited(` anywhere in the footer button family;
+#   D — FooterActionSlot.primary(/.bulk( appears only in the FooterActionSlot file
+#       (every other site must call mainActionKey/batchActionKey).
+# Content-anchored discovery + comment-stripped multi-file forbidden scans are
+# not expressible with the declarative analyzers, so this maps to the `command`
+# escape hatch. The count-relation (Rule C: one dispatch per handler) and the
+# busy-key comparison presence (Rules A2/E) are recorded in this batch's
+# skipped[] note as the un-ported remainder. Scope-level finding (no want
+# marker); fire-1 renders a FilledButton in a footer site, pass-1 uses only
+# PendingButton.
+rules:
+  - id: flutter-footer-busy-state-single-source
+    type: command
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/**/*.dart"
+        - "packages/plt_canvas_kit/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+    params:
+      cmd:
+        - bash
+        - -c
+        - |
+          set -uo pipefail
+          dirs="frontend/lib packages/feature_dimension/lib packages/plt_canvas_kit/lib"
+          present=""
+          for d in $dirs; do [ -d "$d" ] && present="$present $d"; done
+          [ -n "$present" ] || exit 0
+          find_anchor() {
+            grep -rlE "$1" $present --include='*.dart' \
+              --exclude='*.g.dart' --exclude='*.freezed.dart' --exclude='*.pb.dart' 2>/dev/null | head -1
+          }
+          primary="$(find_anchor 'class PlotPrimaryActionButton[[:space:]]+extends')"
+          bulk="$(find_anchor 'class PlotRailBulkActions[[:space:]]+extends')"
+          dispatch="$(find_anchor 'class PlotSidebarFooterButton[[:space:]]+extends')"
+          keys="$(find_anchor 'sealed class FooterActionSlot[[:space:]]+with')"
+          if [ -z "$primary" ] || [ -z "$bulk" ] || [ -z "$dispatch" ] || [ -z "$keys" ]; then
+            echo "content anchor missing (primary=$primary bulk=$bulk dispatch=$dispatch keys=$keys)"; exit 1
+          fi
+          fail=0
+          banned='(^|[^A-Za-z_])(FilledButton|OutlinedButton|TextButton|ElevatedButton|IconButton|BusyFilledButton|BusyOutlinedButton|BusyTextButton|BusyIconButton)[ ]*(\.icon)?[ ]*\('
+          # Rule A — footer render sites construct only PendingButton.
+          for f in "$primary" "$bulk" "$dispatch"; do
+            if grep -vE '^[[:space:]]*//' "$f" | grep -qE "$banned"; then
+              echo "Rule A: $f constructs a button that owns its own in-flight state (only PendingButton allowed)"; fail=1
+            fi
+          done
+          # Rule B — no unawaited( in the footer button family.
+          for f in "$primary" "$bulk" "$dispatch"; do
+            if grep -vE '^[[:space:]]*//' "$f" | grep -qE '(^|[^A-Za-z_])unawaited[ ]*\('; then
+              echo "Rule B: $f detaches a future with unawaited( (the pending key would clear before the server answers)"; fail=1
+            fi
+          done
+          # Rule D — FooterActionSlot.primary/.bulk only in the keys file.
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            [ "$f" = "$keys" ] && continue
+            echo "Rule D: $f builds a FooterActionSlot directly (call mainActionKey/batchActionKey instead)"; fail=1
+          done < <(grep -rlE 'FooterActionSlot[[:space:]]*\.[[:space:]]*(primary|bulk)[[:space:]]*\(' $present --include='*.dart' 2>/dev/null)
+          exit $fail
+      expect:
+        exit: 0
+    cure: "Render every Measure-footer button with PendingButton (owner-supplied busy), never a Sku/Async*Button; never unawaited( a footer future; derive keys with mainActionKey()/batchActionKey(), never FooterActionSlot.primary(/.bulk( directly."
+    origin: scripts/check-flutter-footer-single-busy-owner.sh

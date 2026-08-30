@@ -1,0 +1,36 @@
+# Ported from Palletra scripts/check-asadmin-list-org-scoped.sh (sweep-5 #7),
+# fact (b) — the request-derived-bind pin.
+#
+# members.List and invitations.TransitionHandler.List run under db.AsSuperuser
+# (BYPASSRLS), so RLS does NOT confine them to the caller's org. Their only
+# tenant boundary is the `org_id = $1` predicate bound to the FIRST positional
+# argument of tx.Query. That first bind MUST be `claims.GetTenantId()` — the
+# caller's OWN org from the signature-verified JWT claims. A refactor that
+# rebinds $1 to request-derived input (r.URL.Query().Get, r.FormValue,
+# chi.URLParam, a body getter, r.Body) or a literal re-points the BYPASSRLS
+# scope away from the caller's own org, which is the only boundary these
+# handlers have.
+#
+# PORT MAPPING: a multiline forbidden-pattern (regexp2). The gofmt-wrapped
+# tx.Query call spans lines, so the match runs over whole-file content. The
+# pattern anchors on `.Query(<ctx>, listClaimsQuery,` and FIRES via a negative
+# lookahead whenever the first data bind is anything other than claims.GetTenantId(.
+# preprocess: decomment-go strips `//` line comments so a commented-out bad bind
+# never trips it and a commented-out claims.GetTenantId() never masks a real one
+# (mirrors the .sh's drop_comments).
+rules:
+  - id: asadmin-list-claims-bound-first-param
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/members/members.go"
+        - "freightworks/services/core-api/routes/invitations/invitations_workflow.go"
+    preprocess: decomment-go
+    params:
+      multiline: true
+      syntax: regexp2
+      pattern: '\.Query\([^,)]+,\s*listClaimsQuery\s*,(?!\s*claims\.GetTenantId\()'
+      prefilter: 'listClaimsQuery'
+    cure: "Bind the AsSuperuser list query's first positional from claims.GetTenantId() — the verified tenant-claims org. Never a request-derived org id (r.URL.Query / r.FormValue / chi.URLParam / a body field) or a literal: the role flip bypasses RLS, so $1 is the ONLY tenant boundary (sweep-5 #7)."
+    origin: scripts/check-asadmin-list-org-scoped.sh

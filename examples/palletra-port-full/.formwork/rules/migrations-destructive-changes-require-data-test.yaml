@@ -1,0 +1,58 @@
+# Ported from Palletra scripts/check-migrations-destructive-changes-require-data-test.sh (#7059).
+# CI replays the migration chain against an EMPTY database, so a migration that
+# only fails in the PRESENCE of data (FK RESTRICT, SET NOT NULL, CHECK) sails
+# through CI and breaks the deploy-time db-bootstrap instead (how 20000305142000
+# / #4276 shipped). Rule: every NEW palletra migration (14-digit version strictly
+# above high-water 20000305142000) whose up.sql contains a destructive/rewriting
+# statement MUST have a sibling *_integration_test.go for that version exercising
+# it MID-CHAIN against SEEDED data — i.e. one that uses BOTH migratePalletraTo(
+# (step to the pre-migration state) AND INSERT INTO (seed dependent rows).
+#
+# Why the ESCAPE HATCH (type: command): the trigger (a destructive statement in a
+# versioned up.sql, scoped above a numeric high-water) and the companion (a
+# DIFFERENT sibling test file that co-references two independent tokens) form a
+# cross-file trigger⇒companion join keyed on a version prefix parsed from the
+# FILENAME — no declarative type expresses a filename-keyed cross-file join with
+# per-file two-token predicates. This command reproduces the gate on the tree
+# and self-verifies in CI. It self-skips (exit 0) when no palletra migrations dir
+# is present, so it is a no-op outside the app repo.
+rules:
+  - id: migrations-destructive-changes-require-data-test
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/palletra/**/*.up.sql"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          MIG="freightworks/services/core-api/migrations/palletra"
+          TST="freightworks/services/core-api/migrations"
+          [ -d "$MIG" ] || exit 0
+          HW=20000305142000
+          DESTRUCTIVE='DELETE[[:space:]]+FROM|TRUNCATE|DROP[[:space:]]+(COLUMN|TABLE|CONSTRAINT)|ALTER[[:space:]]+TYPE|SET[[:space:]]+NOT[[:space:]]+NULL|ADD[[:space:]]+CONSTRAINT'
+          rc=0
+          for up in "$MIG"/*.up.sql; do
+            [ -f "$up" ] || continue
+            grep -iqE "$DESTRUCTIVE" "$up" || continue
+            base="$(basename "$up")"; prefix="${base%%_*}"
+            case "$prefix" in ''|*[!0-9]*) continue ;; esac
+            [ "${#prefix}" -eq 14 ] || continue
+            [ "$((10#$prefix))" -gt "$HW" ] || continue
+            found=1
+            for tf in "$TST/${prefix}"_*integration_test.go; do
+              [ -f "$tf" ] || continue
+              if grep -q 'migratePalletraTo(' "$tf" && grep -q 'INSERT INTO' "$tf"; then found=0; break; fi
+            done
+            if [ "$found" -ne 0 ]; then
+              echo "$up: destructive migration without a seeded-data integration test (migratePalletraTo + INSERT INTO for version ${prefix})"
+              rc=1
+            fi
+          done
+          exit $rc
+      expect:
+        exit: 0
+    cure: "Add a *_integration_test.go for this version that migrates to the version BEFORE the migration (migratePalletraTo), seeds the dependent rows (INSERT INTO), then applies it and asserts it succeeds against data. CI replays on an empty DB, so without this a data-dependent failure only surfaces at deploy time (#4276/#7059)."
+    origin: scripts/check-migrations-destructive-changes-require-data-test.sh

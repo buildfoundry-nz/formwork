@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-local-accept-threshold-declared-once.sh (#3656).
+# The local page-type classifier is a SPEED optimisation over the trusted Gemini
+# authority; the standard is "broadly positive" — it may keep a page only when
+# nearly certain, else escalate. `const defaultLocalApproveThreshold` in
+# local_threshold.go must stay at/above the 0.90 floor and never drift toward the 0.65
+# review boundary. The gate reads the const from the COMMENT-STRIPPED source,
+# requires EXACTLY ONE live decl (a decoy `// = 0.99` comment or a second live
+# decl must not front-run the read), and fails when the value < 0.90.
+#
+# Why the ESCAPE HATCH (type: command): the invariant is a NUMERIC threshold
+# comparison (value < 0.90) plus a single-live-decl count on comment-stripped Go
+# — neither a regex (forbidden/required-pattern) nor a Go-AST analyzer expresses
+# a `< 0.90` float test. This command reproduces the gate exactly: strip //
+# comments, require exactly one const decl, extract the float, fail if below the
+# floor. fire-1 lowers the bar to 0.65; pass-1 keeps it at 0.95. Scope-level
+# finding (no want marker).
+rules:
+  - id: local-accept-threshold-declared-once
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/parsecompose/runner/local_threshold.go"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          f="freightworks/services/core-api/internal/parsecompose/runner/local_threshold.go"
+          [ -f "$f" ] || exit 0               # file absent -> skip, like the gate
+          stripped="$(sed 's,//.*,,' "$f")"
+          decls="$(grep -cE 'const[[:space:]]+defaultLocalApproveThreshold[[:space:]]*=' <<<"$stripped")"
+          [ "$decls" -eq 1 ] || exit 1        # a decoy const can front-run the read
+          val="$(grep -E 'const[[:space:]]+defaultLocalApproveThreshold[[:space:]]*=[[:space:]]*[0-9.]+' <<<"$stripped" | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+          [ -n "$val" ] || exit 1
+          # fail when val < 0.90 (the basically-positive floor)
+          awk -v v="$val" 'BEGIN { exit !(v < 0.90) }' && exit 1
+          exit 0
+      expect:
+        exit: 0
+    cure: "defaultLocalApproveThreshold must stay >= the basically-positive floor 0.90; the local rung defers to Gemini unless nearly certain. Raising the floor is a reviewed change, never a quiet lowering toward the 0.65 review boundary (#3656)."
+    origin: scripts/check-local-accept-threshold-declared-once.sh

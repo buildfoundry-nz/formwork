@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+message Quote {
+  // Legacy percentage total. Kept around indefinitely with no pointer to what
+  // writers should target instead — a permanent zombie wire surface.
+  string deprecated_total_pct = 1 [deprecated = true]; // want: proto-deprecated-field-has-anchor-comment
+}

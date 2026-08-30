@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-detection-dispatch-must-reference-claims-ledger.sh (#7315).
+# Every Go PACKAGE (directory) with a non-test call to
+# detectqueue.EnqueueIdentificationAtEpoch( must ALSO reference
+# internal/detectdispatch in its non-test sources — the dispatch claim the
+# input-edit force seam reads to decide whether a re-run is a refresh or an
+# illegal first run. The defining package internal/detectqueue is exempt;
+# finding zero callers at all is itself a failure (the helper was renamed).
+#
+# COMMAND ESCAPE: the invariant is PACKAGE-scoped, not file-scoped — the auto-run
+# engine enqueues in engine.go and claims in plan.go, two files in one package
+# reviewed as a unit. A same-file pair-consistency would FALSE-FIRE on engine.go
+# (has the enqueue, lacks the ledger ref). pair-consistency's `where: same-dir`
+# now expresses that directory-level trigger⇒companion join, but this rule also
+# needs the exempt-defining-package carve-out and the zero-callers anti-vacuity
+# failure, neither of which is declarative. Running the real script stays
+# faithful; verifies over freightworks/ in CI.
+rules:
+  - id: detection-dispatch-must-reference-claims-ledger
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-detection-dispatch-must-reference-claims-ledger.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-detection-dispatch-must-reference-claims-ledger.sh
+      expect:
+        exit: 0
+    cure: "Record the dispatch (detectdispatch.ForceHold) alongside the EnqueueIdentificationAtEpoch call — a dispatch that records no claim makes the ledger lie and the input-edit force seam reads it (#7315)."
+    origin: scripts/check-detection-dispatch-must-reference-claims-ledger.sh

@@ -1,0 +1,18 @@
+# Ported from Palletra scripts/check-flutter-out-of-bounds-badge-server-owned.sh
+# (#2229 / #2074 / #5661), Rule B2 (Tooltip half). The verbatim badge shows the
+# server copy inside a Tooltip. The .sh greps off_page_badge.dart for
+# `Tooltip(` independently of the message check; exists-mode over that one file
+# is the faithful port.
+rules:
+  - id: oob-badge-wrapped-in-tooltip
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/presentation/off_page_badge.dart"
+    preprocess: code-only-dart
+    params:
+      pattern: 'Tooltip\('
+      mode: exists
+    cure: "off_page_badge.dart must render the server out-of-bounds message inside a Tooltip( (#2074/#5661)."
+    origin: scripts/check-flutter-out-of-bounds-badge-server-owned.sh

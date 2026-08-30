@@ -1,0 +1,71 @@
+# Ported from Palletra scripts/check-migrations-new-files-must-be-timestamped.sh (sweep-8 #1).
+# golang-migrate tracks a single current version and applies only versions
+# strictly greater than it, so a NEW migration numbered at/below a live cluster's
+# floor NEVER runs there — silently stranded. This gate git-diffs ADDED migration
+# files vs a base ref (origin/develop, MIGRATION_DIFF_BASE overridable) and fails
+# two shapes: (1) a newly-added *.up/.down.sql whose numeric prefix is at/below the
+# frozen per-domain high-water (palletra 112, platform 32); (2) a newly-added
+# migration whose version is at/below the highest version already on the base
+# branch (the #6763 out-of-order monotonicity skip). Only a 14-digit UTC timestamp,
+# above every live floor by construction, passes.
+#
+# Why the ESCAPE HATCH (type: command): both shapes turn on ADDED-vs-base-ref
+# (git --diff-filter=A) and on git ls-tree of the base branch — GIT HISTORY, not a
+# self-contained fixture. This command reproduces the gate; it self-skips (exit 0)
+# when the base ref is unavailable, matching the real gate.
+rules:
+  - id: migrations-new-files-must-be-timestamped
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The input is git HISTORY: the detector asks which migration files are
+      ADDED against MIGRATION_DIFF_BASE and compares each new version against
+      the base branch's high-water mark, read with git ls-tree from that same
+      ref. Both halves are properties of a diff, not of a directory: with no
+      base ref resolvable the command exits 0 on its own no-base branch, so a
+      fixture tree can drive the self-skip and nothing else.
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.sql"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          BASE="${MIGRATION_DIFF_BASE:-origin/develop}"
+          PLT='freightworks/services/core-api/migrations/palletra'
+          PLAT='freightworks/services/core-api/migrations/platform'
+          PLT_HW=112; PLAT_HW=32
+          git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null 2>&1 || exit 0
+          added="$(git diff --diff-filter=A --name-only "$BASE" -- "$PLT" "$PLAT" 2>/dev/null || true)"
+          domain_high_water() {
+            git ls-tree -r --name-only "$BASE" -- "$1" 2>/dev/null \
+              | grep -E '\.(up|down)\.sql$' | sed -E 's#.*/##; s#_.*##' \
+              | grep -E '^[0-9]+$' | sort -n | tail -1 || true
+          }
+          plt_max="$(domain_high_water "$PLT")"; plat_max="$(domain_high_water "$PLAT")"
+          rc=0
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            case "$f" in *.up.sql|*.down.sql) ;; *) continue ;; esac
+            case "$f" in
+              */migrations/palletra/*) mark="$PLT_HW"; baseline_max="$plt_max" ;;
+              */migrations/platform/*)  mark="$PLAT_HW"; baseline_max="$plat_max" ;;
+              *) continue ;;
+            esac
+            prefix="$(basename "$f")"; prefix="${prefix%%_*}"
+            case "$prefix" in ''|*[!0-9]*) continue ;; esac
+            if [ "${#prefix}" -le 14 ] && [ "$((10#$prefix))" -le "$mark" ]; then
+              echo "$f: prefix '$prefix' is at/below the frozen high-water mark ($mark) but the file is NEW"
+              rc=1
+            fi
+            if [ -n "$baseline_max" ] && [ "$((10#$prefix))" -le "$((10#$baseline_max))" ]; then
+              echo "$f: version '$prefix' is at/below the base-branch max ($baseline_max) — golang-migrate skips it"
+              rc=1
+            fi
+          done <<< "$added"
+          exit $rc
+      expect:
+        exit: 0
+    cure: "Never hand-create a migration. Mint it with scripts/new-migration.sh <palletra|platform> <slug_name>, which stamps an above-frontier 14-digit UTC timestamp. If already created at a low/sequential number, restamp on rebase: scripts/new-migration.sh --restamp migrations/<domain>/<old>.up.sql (sweep-8 #1 / #6763)."
+    origin: scripts/check-migrations-new-files-must-be-timestamped.sh

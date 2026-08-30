@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+// ListClassificationRequest carries the list filter body; the Go handler decodes it.
+message ListClassificationRequest {
+  string prefix = 1;
+}
+
+// CreateTaxonomyRequest carries the create body; the Go handler decodes it.
+message CreateTaxonomyRequest {
+  string name = 1;
+}

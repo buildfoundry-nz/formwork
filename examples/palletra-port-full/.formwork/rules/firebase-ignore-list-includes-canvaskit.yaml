@@ -1,0 +1,28 @@
+# Ported from Palletra scripts/check-firebase-assets-cache-control-revalidate.sh (#4148 / #8274,
+# history #2937) — RULE 2 half. Every firebase*.json hosting target's `ignore[]`
+# MUST contain the exact element "canvaskit/**": the self-hosted CanvasKit build
+# output (~37MB) is never served (the app loads CanvasKit from Google's CDN by
+# default), so it must be excluded from deploy. The companion rule
+# firebase-assets-cache-control-revalidate covers RULE 1 (/assets/** Cache-Control).
+#
+# Ported as required-pattern (mode: every-file): the literal "canvaskit/**" must
+# appear in each firebase*.json; a config missing it fires a file-level finding.
+#
+# DIVERGENCE (noted for fidelity): the .sh is structural jq — it verifies EACH
+# hosting target (object OR multi-site array) independently carries the ignore
+# element. This text port asserts the token appears somewhere in the file, which
+# is faithful for the common single-target config; a multi-site array where only
+# one target lists canvaskit/** would pass here but fail the jq check. The core
+# "canvaskit/** must be ignored" invariant is ported.
+rules:
+  - id: firebase-ignore-list-includes-canvaskit
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "firebase*.json"
+    params:
+      pattern: '"canvaskit/\*\*"'
+      mode: every-file
+    cure: "Add \"canvaskit/**\" to every hosting target's ignore[] in firebase*.json — the self-hosted CanvasKit output is loaded from Google's CDN, never served, and must not be deployed (#4148)."
+    origin: scripts/check-firebase-assets-cache-control-revalidate.sh

@@ -1,0 +1,18 @@
+# Ported from Palletra scripts/check-slot-fold-metric-batching.sh (sweep-13 I6 /
+# #2054). Neither the fold (state_progress.go) nor the nav walk
+# (progress/gather.go) may reopen the per-page tie-family N+1: the single-
+# page `TieFamiliesOnPage(` and the deleted `GroupsByPageForSlots` helper
+# are both banned in these two hot files. The batched TieFamiliesForPages(
+# is longer, so the `\b...OnPage\(` boundary never matches it. Raw grep.
+rules:
+  - id: slot-completion-no-per-page-tie
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workflow/state/state_progress.go"
+        - "freightworks/services/core-api/internal/workflow/progress/gather.go"
+    params:
+      pattern: '\bTieFamiliesOnPage\(|\bGroupsByPageForSlots\b'
+    cure: "Read tie families from the LoadProgressInputs precompute (batched TieFamiliesForPages once); never the per-page TieFamiliesOnPage or GroupsByPageForSlots in the fold/walk (sweep-13 I6)."
+    origin: scripts/check-slot-fold-metric-batching.sh

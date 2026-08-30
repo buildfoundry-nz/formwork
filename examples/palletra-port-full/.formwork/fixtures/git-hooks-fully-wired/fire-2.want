@@ -1,0 +1,1 @@
+- .husky/pre-commit shebang is not a POSIX-sh-family interpreter

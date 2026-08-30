@@ -1,0 +1,102 @@
+# Ported from Palletra scripts/check-write-routes-require-idempotency.sh
+# (Phase 5 re-audit WI-4 + T0.2 + WI-102).
+#
+# Contract: a handler MUST wrap its mutation in idempotency.Execute iff its
+# request proto carries a origin_request_id field. The proto field IS the opt-in
+# signal — adding it to a write-request message is the explicit commitment that
+# the handler must honour idempotency. Without this gate a proto update that
+# surfaces the field without wiring the handler ships a half-finished contract
+# the FE blindly trusts. Part A (proto-driven coverage): enumerate every api/v1
+# `message *Request` carrying origin_request_id, then for every non-test handler
+# under routes/** whose body references an in-scope apiv1.XRequest, require
+# idempotency.Execute in that body. Part B (WI-102): forbid bare-body /
+# []byte RequestPayload — the fingerprint must be a canonically encoded proto.
+#
+# PORT MAPPING: this is a cross-file, proto-driven scope (a Go handler's obligation
+# derived from a field in a .proto message) plus a per-handler body predicate — no
+# declarative per-file type expresses "func referencing type X, whose scope is set
+# by another file, must contain call Y". So it uses the ESCAPE HATCH: a command
+# rule reproducing both parts over the fixture tree (mirroring the .sh's awk
+# handler walk + proto scan). Scope-level finding (no want marker); fire-1 has a
+# handler consuming a origin_request_id-bearing proto without idempotency.Execute,
+# pass-1 wires it.
+rules:
+  - id: write-routes-require-idempotency
+    type: command
+    severity: error
+    scope:
+      include:
+        - "schema/proto/palletra/api/v1/**"
+        - "freightworks/services/core-api/routes/**"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import os, re, sys
+          PROTO_DIR = "schema/proto/palletra/api/v1"
+          ROUTES_DIR = "freightworks/services/core-api/routes"
+          # Step 1 — proto Request messages carrying origin_request_id are in scope.
+          in_scope = set()
+          if os.path.isdir(PROTO_DIR):
+              for fn in sorted(os.listdir(PROTO_DIR)):
+                  if not fn.endswith(".proto"):
+                      continue
+                  name = None
+                  has = False
+                  for line in open(os.path.join(PROTO_DIR, fn)):
+                      m = re.match(r'^message ([A-Za-z0-9_]+Request) \{', line)
+                      if m:
+                          name, has = m.group(1), False
+                          continue
+                      if name and line.startswith('}'):
+                          if has:
+                              in_scope.add(name)
+                          name, has = None, False
+                          continue
+                      if name and 'origin_request_id' in line:
+                          has = True
+          if not in_scope:
+              # No opted-in proto — scope is empty, nothing to enforce.
+              sys.exit(0)
+          scope_re = re.compile(r'apiv1\.(' + '|'.join(sorted(in_scope)) + r')(?![A-Za-z0-9_])')
+          rc = 0
+
+          def routes_go():
+              for dp, _, fns in os.walk(ROUTES_DIR):
+                  for fn in sorted(fns):
+                      if fn.endswith('.go') and not fn.endswith('_test.go'):
+                          yield os.path.join(dp, fn)
+
+          # Step 2 (Part A) — a handler referencing an in-scope request must
+          # call idempotency.Execute in its own body.
+          for f in routes_go():
+              in_handler = False
+              name = ''
+              uses = found = False
+              for line in open(f).read().splitlines():
+                  if re.match(r'^func \(.*Handler\) [A-Z][A-Za-z0-9_]*\(w http\.ResponseWriter', line):
+                      in_handler, name, uses, found = True, line.strip(), False, False
+                      continue
+                  if in_handler and line.startswith('}'):
+                      if uses and not found:
+                          sys.stderr.write("%s: handler references a origin_request_id proto but does not call idempotency.Execute: %s\n" % (f, name))
+                          rc = 1
+                      in_handler, uses, found = False, False, False
+                      continue
+                  if in_handler and scope_re.search(line):
+                      uses = True
+                  if in_handler and 'idempotency.Execute' in line:
+                      found = True
+
+          # Step 3 (Part B, WI-102) — forbid bare-body / []byte RequestPayload.
+          for f in routes_go():
+              for i, line in enumerate(open(f).read().splitlines(), 1):
+                  if re.search(r'RequestPayload:\s*body\b', line) or re.search(r'RequestPayload:\s*\[\]byte\(', line):
+                      sys.stderr.write("%s:%d bare-body RequestPayload — must be idempotency.MustCanonicalMarshal(req) (WI-102)\n" % (f, i))
+                      rc = 1
+          sys.exit(rc)
+      expect:
+        exit: 0
+    cure: "Wrap the mutation closure in idempotency.Execute (freightworks/services/core-api/internal/idempotency/idempotency.go): the proto already carries origin_request_id, so the FE sends a UUID and expects cached replay. RequestPayload MUST come from idempotency.MustCanonicalMarshal(req), never the bare wire body — whitespace/field-order differences would leak into the fingerprint and trip ErrChecksumMismatch on a semantically identical replay."
+    origin: scripts/check-write-routes-require-idempotency.sh

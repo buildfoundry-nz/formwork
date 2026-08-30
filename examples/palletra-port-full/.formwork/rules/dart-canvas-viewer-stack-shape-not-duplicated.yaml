@@ -1,0 +1,36 @@
+# Ported from Palletra scripts/check-dart-canvas-viewer-stack-shape-not-duplicated.sh
+# (audit Tier 2.1 / FR-ARC-1 / DD-13). The shell fires when a single Dart file
+# under the lib scan (frontend/lib + packages/*/lib) contains BOTH
+# `InteractiveViewer(` AND `Stack(` — the InteractiveViewer-wrapping-a-Stack
+# canvas SHAPE — anywhere except the canonical home
+# packages/plt_widgets/lib/canvas/**. Either token alone is fine.
+#
+# The .sh does two `grep -q` probes over the whole file (a same-file
+# CO-OCCURRENCE, order-independent), so this is a multiline forbidden-pattern
+# with two order-independent lookaheads over the whole file content. `(?s)` lets
+# the scan cross newlines; each `[\s\S]*` finds its token anywhere. The match is
+# zero-width at file start, so the finding is reported on line 1.
+rules:
+  - id: dart-canvas-viewer-stack-shape-not-duplicated
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/plt_widgets/lib/canvas/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+    params:
+      # Whole-file co-occurrence (origin: grep -q InteractiveViewer && grep -q Stack).
+      # Linear RE2 all_of — was a regexp2 (?=[\s\S]*A)(?=[\s\S]*B) lookahead conjunction
+      # that backtracked ~14ms/file over 1356 dart files (19s). Fixture want-marker is
+      # on line 1, so the all_of line-1 anchor is faithful.
+      all_of:
+        - 'InteractiveViewer\('
+        - 'Stack\('
+      prefilter: 'InteractiveViewer'
+    cure: "Reuse the shared widget at packages/plt_widgets/lib/canvas/zoomable_page_stack.dart instead of copy-pasting an InteractiveViewer-wrapped Stack canvas into a feature module."
+    origin: scripts/check-dart-canvas-viewer-stack-shape-not-duplicated.sh

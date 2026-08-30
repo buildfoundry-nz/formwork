@@ -1,0 +1,51 @@
+# Ported from Palletra scripts/check-no-unused-api-response-messages.sh (#7800).
+# Mirror of the Request gate: the #5649 sweep removed dead bodyless *Request
+# messages but left 15 orphan *Response partners whose whole flow was already
+# dead. Every `message *Response` declared under schema/proto/palletra/api/v1/
+# MUST be referenced by a non-generated code line — a hand-written Go/Dart
+# consumer that builds or reads it — else it is dead by construction and must be
+# deleted or wired to the handler that emits it.
+#
+# Ported as a set-relation SUBSET: side A = every `*Response` message declared in
+# the api/v1 protos; side B = every `*Response` symbol REFERENCED in hand-written
+# Go/Dart code (generated *.pb.* excluded). A ⊆ B means every declared Response
+# is referenced; an element of A missing from B is a dead orphan.
+#
+# DIVERGENCE (noted): (1) the .sh also keeps a Response alive via another proto's
+# `returns (X)` / field type; side B scans only Go/Dart, so a Response kept alive
+# solely by another proto would read as orphan. (2) The .sh strips comment-line
+# hits; this extraction does not decomment, so a `//`-commented mention would
+# satisfy side B (mirrors b-08). The primary defect — a declared Response no code
+# builds or reads — is caught identically. Scope-level finding (fire-1.want).
+rules:
+  - id: no-unused-api-response-messages
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "schema/proto/palletra/api/v1/**/*.proto"
+        - "freightworks/**/*.go"
+        - "packages/**/*.dart"
+        - "frontend/**/*.dart"
+      exclude:
+        - "**/*.pb.go"
+        - "**/*.pb.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbserver.dart"
+    params:
+      a:
+        files:
+          - "schema/proto/palletra/api/v1/**/*.proto"
+        pattern: '^message ([A-Za-z0-9_]+Response) \{'
+        group: 1
+      b:
+        files:
+          - "freightworks/**/*.go"
+          - "packages/**/*.dart"
+          - "frontend/**/*.dart"
+        pattern: '[A-Za-z0-9_]+Response'
+        group: 0
+      relation: subset
+    cure: "A Response nothing constructs or reads is dead. Delete the message (and regenerate shared/generated), or wire it to the handler that emits it (#7800)."
+    origin: scripts/check-no-unused-api-response-messages.sh

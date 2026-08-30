@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-environment-gate-fail-closed.sh (#6608),
+# pattern 1: the string literal "ENVIRONMENT" may appear only in the single
+# sanctioned reader internal/env/environment.go. ENVIRONMENT is set on no Cloud
+# Run service, so every other reader silently resolves "" — env decisions must
+# go through env.IsDevEnvironment(), which is fail-closed by construction.
+# strings-only-go isolates string-literal interiors, so a comment or identifier
+# named ENVIRONMENT is exempt; only a genuine literal trips it. Non-test Go only.
+rules:
+  - id: environment-literal-banned-outside-reader
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/internal/env/environment.go"
+    preprocess: strings-only-go
+    params:
+      pattern: 'ENVIRONMENT'
+    cure: "Read the environment only via internal/env (env.IsDevEnvironment()); ENVIRONMENT is unset on every Cloud Run service, so a raw read resolves \"\" and re-litigates the fail-closed default."
+    origin: scripts/check-environment-gate-fail-closed.sh

@@ -1,0 +1,54 @@
+# Ported from Palletra scripts/check-file-size-guardrails.sh (#4336), its
+# --full-repo mode: a hard 750-line cap over every *.go/*.sh/*.sql, with the
+# stricter per-path Go caps (single-sourced in scripts/lib/file-size-caps.sh)
+# taking precedence. The override table mirrors go_limit_for_file in that lib,
+# in the same first-match-wins order:
+#   *_test.go                      -> 400
+#   */routes/*.go                  -> 500
+#   .../core-api/main.go           -> 200 (bootstrap-only)
+#   freightworks/internal/**        -> 600 (Go internal packages)
+#   .../services/*/internal/**     -> 600
+#   */services/*.go                -> 600
+# The prune/exclude set (generated, snapshots, vendor, build) is carried as
+# scope.exclude.
+#
+# NOTE (fidelity): the .sh's OTHER modes — diff-based "new files <= cap" and
+# "existing over-cap file must not grow" — require git history and are not
+# expressible in the declarative file-size type. This ports the stable
+# per-file cap invariant (the full-repo mode), which is exactly file-size's
+# purpose; the growth ratchet is out of scope for this type.
+rules:
+  - id: file-size-guardrails
+    type: file-size
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+        - "**/*.sh"
+        - "**/*.sql"
+      exclude:
+        - "shared/generated/**"
+        - "schema/out/**"
+        - "**/schema.snapshot.sql"
+        - "**/schema.data-snapshot.sql"
+        - "vendor/**"
+        - "node_modules/**"
+        - "**/build/**"
+        - "**/.dart_tool/**"
+    params:
+      hard_cap: 750
+      overrides:
+        - glob: "**/*_test.go"
+          cap: 400
+        - glob: "**/routes/**/*.go"
+          cap: 500
+        - glob: "freightworks/services/core-api/main.go"
+          cap: 200
+        - glob: "freightworks/internal/**/*.go"
+          cap: 600
+        - glob: "freightworks/services/*/internal/**/*.go"
+          cap: 600
+        - glob: "**/services/**/*.go"
+          cap: 600
+    cure: "Split the oversized file. New files must be at or below their per-path cap; the absolute ceiling is 750 lines. Never widen the cap — the table is single-sourced in scripts/lib/file-size-caps.sh."
+    origin: scripts/check-file-size-guardrails.sh

@@ -1,0 +1,46 @@
+# Ported from Palletra scripts/check-measure-repository-integration-test-coverage.sh (audit #19
+# / #6479/#6255). The Measure wire repositories ship under
+# packages/feature_dimension/lib/data/. Every "live-verified" claim rested on
+# one-sided coverage with NO real-backend Measure integration test, so a
+# repository whose protojson<->proto round-trip + ImpactedPage patch contract is
+# never exercised against the live core-api can silently drift and every unit
+# test stays green. RULE: for EVERY *_repository.dart under
+# packages/feature_dimension/lib/data/, at least one *measure*.dart under
+# frontend/integration_test/ must name that repository's public class symbol
+# (per-repository coverage — #6479: one covered repo must not greenlight an
+# uncovered sibling).
+#
+# Ported as a set-relation SUBSET: side A = every public `class *Repository`
+# declared in the measure data dir; side B = every `*Repository` symbol
+# referenced in a *measure* integration test. A ⊆ B means every measure
+# repository is named by some integration test; a repo missing from B fires
+# (scope-level — fire-1.want carries `-`).
+#
+# DIVERGENCE (noted): the .sh additionally requires the naming test to assert the
+# round-trip contract (`impactedPage` or `HttpException`) and extracts the FIRST
+# public class per file; a set relation cannot couple the per-file assertion, so
+# that quality refinement is not modeled. The primary defect — a measure
+# repository with no integration test naming it at all (#6479) — is caught
+# identically.
+rules:
+  - id: measure-repository-integration-test-coverage
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/data/**/*_repository.dart"
+        - "frontend/integration_test/**/*measure*.dart"
+    params:
+      a:
+        files:
+          - "packages/feature_dimension/lib/data/**/*_repository.dart"
+        pattern: 'class\s+([A-Z][A-Za-z0-9_]*Repository)\b'
+        group: 1
+      b:
+        files:
+          - "frontend/integration_test/**/*measure*.dart"
+        pattern: '[A-Z][A-Za-z0-9_]*Repository'
+        group: 0
+      relation: subset
+    cure: "Add frontend/integration_test/measure_*_test.dart that names EACH measure repository class and asserts an ImpactedPage round-trip (or a typed HttpException). Coverage is per-repository (#6479)."
+    origin: scripts/check-measure-repository-integration-test-coverage.sh

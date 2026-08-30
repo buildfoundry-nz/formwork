@@ -1,0 +1,31 @@
+# Ported from Palletra scripts/check-no-labelToKind-catchall.sh (audit 2026-05-23
+# Phase 3+5). Detector wrappers under core-api/internal/detection/ MUST NOT silently
+# relabel an unknown Visionkit class to a default annotation_type. The canonical
+# anti-pattern is a catch-all init:  partitionType := "internal_partitions"  — every unknown
+# class then persists as a valid-looking row, corrupting downstream metric/quote/
+# audit trails with no operator signal. The cure: return "" for unknown classes and
+# drop the prediction with a structured WARN. This ports Pattern 1 (the single-line
+# catch-all init of partitionType/annotationType/markerType/partitionKind to a snake_case
+# literal) as a forbidden-pattern over comment-stripped Go, so a commented-out
+# mention or a `//`-string cannot false-fire.
+#
+# DIVERGENCE (noted): (1) the .sh skips lines carrying a trailing `// allowed:` opt-
+# out marker; decomment-go strips that comment before matching, so an allowed line
+# would still fire — fixtures use no allowed markers. (2) Pattern 2 of the .sh — a
+# `default: return "<code>"` arm inside a *LabelToKind*-named function — is a multi-
+# line, function-scoped brace-walk that a per-line RE2 forbidden-pattern cannot
+# express; it is omitted. Pattern 1 is ported faithfully.
+rules:
+  - id: no-catchall-default-for-class-to-type
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/detection/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '(partitionType|annotationType|markerType|partitionKind)\s*:?=\s*"[a-z][a-z0-9_]*"'
+    cure: "LabelToKind returns \"\" for unknown classes; the caller drops the prediction with slog.WarnContext. Never init a partition-/annotation-typed variable to a default snake_case code as a catch-all."
+    origin: scripts/check-no-labelToKind-catchall.sh

@@ -1,0 +1,9 @@
+name: generate-changelog
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: load secret out of band
+        env:
+          GEMINI_API_KEY: op://stockroom/ci/gemini  # want: no-1password-or-op-secret-references
+        run: node changelog.js

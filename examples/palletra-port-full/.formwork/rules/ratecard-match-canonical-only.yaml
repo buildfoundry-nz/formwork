@@ -1,0 +1,21 @@
+# Ported from scripts/check-ratecard-match-canonical-only.sh (#8054, Rule 2).
+# Neither internal/ratecardmatch nor internal/skusidebar may reference
+# canonical_key or normalized_description (the two non-canonical text regimes of the
+# #6018 two-canonicalisation-regimes trap); the match/read paths join on
+# canonical_label alone. decomment-go so a doc comment naming a banned token
+# does not trip. NOTE: the .sh's Rule 1 (both package DIRECTORIES exist) is a
+# structural check with no forbidden/required-pattern equivalent and is not
+# ported here.
+rules:
+  - id: ratecard-match-canonical-only
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/ratecardmatch/**/*.go'
+        - 'freightworks/services/core-api/internal/skusidebar/**/*.go'
+    preprocess: decomment-go
+    params:
+      pattern: 'canonical_key|normalized_description'
+    cure: 'Canonicalise both sides with skucanon.ReferenceDescriptor (stored as canonical_label) and join on that; never canonical_key / normalized_description (#8054).'
+    origin: scripts/check-ratecard-match-canonical-only.sh

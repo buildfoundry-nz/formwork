@@ -1,0 +1,47 @@
+# Ported from Palletra scripts/check-proto-response-tuple-uses-shared-helper.sh
+# (#1948 / #3012). The raw response-tuple tail
+#   return <status>, "application/json", <ident>, nil
+# was promoted into routes/shared/ (shared.WireResponse / SuccessProtoResponse);
+# nothing must re-hand-roll it. The ban is NAME-BLIND — it matches the
+# return-tuple SHAPE, not the variable name. Non-test Go under routes/ must not
+# carry the tail; routes/shared/ (the helper's own home) is exempt. Files are
+# decommented first so a commented-out tail does not fire.
+#
+# FALSE-POSITIVE FIX: the .sh carries a reviewed, shrink-only allowlist
+# (scripts/proto-response-tuple-allowlist.tsv) of the sites that genuinely CANNOT
+# fold — the `delta-cache` sites (body marshalled before resp.CompletionDiff is
+# set; folding would cache the delta, #7662) and the `json-envelope` sites (a
+# hand-built {"metric":<protojson>} envelope, not a proto.Message). On clean
+# develop those files still carry the tail but the gate is silent because they
+# are allowlisted; the original port dropped the allowlist and fired on all ten
+# (a false positive on legitimately-exempt code). The ten allowlisted paths are
+# excluded from scope here — reproducing the gate's develop-silent behavior
+# while STILL catching the recurrence: a NEW hand-rolled tail in any other
+# non-test, non-shared routes file is not excluded and fires.
+rules:
+  - id: proto-response-tuple-uses-shared-helper
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/routes/shared/**"
+        # scripts/proto-response-tuple-allowlist.tsv — reviewed, shrink-only
+        # sites that cannot fold (delta-cache #7662 / json-envelope).
+        - "freightworks/services/core-api/routes/marker_batch/remove_by_ids.go"
+        - "freightworks/services/core-api/routes/marker_batch/reinstate_by_ids.go"
+        - "freightworks/services/core-api/routes/annotation_gauges/annotation_gauges_approval.go"
+        - "freightworks/services/core-api/routes/annotation_gauges/annotation_gauges_partition_height.go"
+        - "freightworks/services/core-api/routes/annotation_gauges/annotation_gauges_label.go"
+        - "freightworks/services/core-api/routes/annotations/markers_delete_by_type.go"
+        - "freightworks/services/core-api/routes/annotations/markers_restore_by_section.go"
+        - "freightworks/services/core-api/routes/calibration/calibration.go"
+        - "freightworks/services/core-api/routes/page_gauges/page_gauges_approval.go"
+        - "freightworks/services/core-api/routes/page_gauges/page_gauges.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'return\s+[^,]+,\s*"application/json",\s*[A-Za-z_][A-Za-z0-9_.]*,\s*nil'
+    cure: "Fold onto the shared helper instead of re-hand-rolling the tail: return shared.SuccessProtoResponse(resp) / shared.WireResponse(status, resp) (routes/shared/wire_response.go, #5032)."
+    origin: scripts/check-proto-response-tuple-uses-shared-helper.sh

@@ -1,0 +1,34 @@
+# Ported from Palletra scripts/check-priced-item-bind-checks-tenant-ownership.sh (sweep-7 #2).
+# The bom_template_items / bom_line_items write handlers bound a caller-supplied
+# rated_item id (default_priced_line_id / rated_item_id) straight into the row
+# from the request. The FK to platform.priced_lines runs as table owner and
+# BYPASSES RLS, so an id belonging to another org was accepted and persisted. The
+# cure is a tenant-scoped existence check before the bind: under db.WithOrg,
+# `SELECT 1 FROM platform.priced_lines WHERE id = $1` is RLS-filtered to the
+# caller's org, so a foreign/malformed id is rejected — the canonical helper
+# bomdoc.AssertPricedItemOwned(ctx, tx, id). The invariant: every non-test Go
+# file under routes/ that BINDS a rated_item from a request field (references
+# `req.<X>RatedItemId`) MUST also call the ownership check.
+#
+# Ported as a same-file pair-consistency: the trigger `req\.[A-Za-z]*RatedItemId`
+# (a request-sourced bind) obliges the companion `[Aa]ssertPricedItemOwned\(` in
+# the same file. The case-insensitive leading letter accepts both the shared
+# bomdoc.AssertPricedItemOwned( helper and a package-local assertPricedItemOwned(
+# (routes/extraction keeps its own copy). A new handler that copies the bind
+# pattern without the ownership check fires. Keyed on request-sourced ids only:
+# the classify / stockroom paths key the column off a query-sourced id and write the
+# RLS-scoped priced_lines table itself, so they are correctly out of scope.
+rules:
+  - id: priced-item-bind-checks-tenant-ownership
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      trigger: 'req\.[A-Za-z]*RatedItemId\b'
+      requires: '[Aa]ssertPricedItemOwned\('
+    cure: "Call bomdoc.AssertPricedItemOwned(ctx, tx, req.<X>RatedItemId) inside the tenant tx before the INSERT/UPDATE, and map bomdoc.ErrExternalPricedItem to 400 invalid_rate_line. The FK alone runs as table owner and does not apply RLS, so an out-of-org id would otherwise persist (sweep-7 #2)."
+    origin: scripts/check-priced-item-bind-checks-tenant-ownership.sh

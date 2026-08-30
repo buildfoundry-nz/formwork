@@ -1,0 +1,1 @@
+- RULE A: rule 'email' DRIFTED — go:[^[^@\s]+@[^@\s]+\.[^@\s]+$] dart:[^.+@.+$]

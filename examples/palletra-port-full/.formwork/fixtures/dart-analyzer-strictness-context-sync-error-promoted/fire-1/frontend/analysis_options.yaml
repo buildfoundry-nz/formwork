@@ -1,0 +1,11 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  errors:
+    # BUG: use_build_context_synchronously is left at warning, not promoted
+    # to error, so async-gap BuildContext misuse ships (audit L5 / #2816).
+    use_build_context_synchronously: warning

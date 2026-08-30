@@ -1,0 +1,8 @@
+{
+  "switches": [
+    {"id": "41.5", "kit": [{"code": "A"}, {"code": "B"}]},
+    {"id": "41.9", "kit": [{"code": "C"}]}
+  ],
+  "measures": [],
+  "meta": {"counts": {"switches": 2, "edges": 99}}
+}

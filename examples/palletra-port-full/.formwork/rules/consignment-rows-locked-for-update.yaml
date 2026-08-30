@@ -1,0 +1,33 @@
+# Palletra's consignment writer takes an exclusive row lock on the parent
+# before touching its lines, so two dispatch runs cannot interleave. The
+# hazard this guards is not ordering — sql/locking-select-order covers that —
+# it is STRENGTH on a specific relation: an exclusive lock on a consignment row
+# deadlocks against a run holding a line row at a weaker strength however well
+# ordered the two statements are.
+#
+# Written as sql/locking-target rather than a pattern because `FOR UPDATE OF c`
+# names an ALIAS, not a relation. A regex banning the two tokens' co-occurrence
+# fires on every statement that locks something else in a query that merely
+# mentions consignments; this rule resolves the alias against the statement's
+# FROM bindings and judges the relation it actually resolves to.
+#
+# `schema` is named deliberately. Palletra's reporting replica carries a
+# read-only `analytics.consignments` view that the analytics readers do lock at
+# `share` strength, and that is fine — an absent `schema` would guard every
+# schema and fire on it.
+rules:
+  - id: consignment-rows-locked-for-update
+    type: sql/locking-target
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      schema: '^ops$'
+      table: '^consignments$'
+      strength:
+        - update
+        - no-key-update
+    cure: "Take the consignment lock through ops.LockConsignmentForDispatch, which locks the parent at `FOR SHARE` and lets the line writer hold `FOR UPDATE`. An exclusive lock on ops.consignments here deadlocks against a dispatch run holding a consignment_lines row."

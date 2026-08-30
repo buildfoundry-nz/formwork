@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-sku-line-gates-guarded.sh (PH-5 #8147),
+# RULE A (authored gate / detect half). Each enumerated sku-line-creating
+# gate MUST reference BOTH DetectSkuLineConflict and ResolveSkuLineConflict
+# so it detects the cross-gate conflict AND enforces the estimator's resolution.
+# Exists-mode enforces one anchor over one file at a time, so each gate x each
+# needle is a separate rule (the calibration-port precedent). This is the
+# authored gate (#8229, CreateOriginated) referencing the detector.
+rules:
+  - id: sku-line-authored-gate-detects
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/skuspromote/authored.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'DetectSkuLineConflict'
+      mode: exists
+    cure: "The authored sku-line gate must call DetectSkuLineConflict — detect the cross-gate conflict before creating a line (PH-5 #8147)."
+    origin: scripts/check-sku-line-gates-guarded.sh

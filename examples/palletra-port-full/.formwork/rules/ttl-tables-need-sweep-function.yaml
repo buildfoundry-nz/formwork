@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-ttl-tables-need-sweep-function.sh (WI-106
+# gate). Any *.up.sql migration whose comments document a concrete TTL
+# (`TTL: N hour` / `TTL of N day`, etc.) MUST have a matching SQL function
+# <schema>.sweep_<table>(...) somewhere in the migrations tree, where
+# <schema>.<table> is extracted from that migration's own CREATE TABLE (or
+# ALTER TABLE) target. A documented-but-unswept TTL grew idempotency_keys to
+# 14 GB in prod before anyone noticed.
+#
+# ESCAPE (type: command). The trigger (a TTL doc-comment) and the companion
+# (the sweeper function) are correlated by a DYNAMIC key — the table name
+# harvested per-migration from CREATE/ALTER TABLE — and the companion may live
+# in ANY migration file, tree-wide. pair-consistency is same-file only and its
+# `requires` regex cannot be keyed to a captured table name; set-relation cannot
+# condition its extraction on the TTL comment being present. The real script
+# (rg-based) is the faithful check and verifies in CI; it SKIPs in the local
+# fixture harness (enumerated by lint). No fixture.
+rules:
+  - id: ttl-tables-need-sweep-function
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-ttl-tables-need-sweep-function.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.up.sql"
+    params:
+      cmd:
+        - bash
+        - scripts/check-ttl-tables-need-sweep-function.sh
+      expect:
+        exit: 0
+    cure: "For every migration that documents a TTL, add a SECURITY DEFINER SQL function <schema>.sweep_<table>() that deletes expired rows and returns the deleted count, then wire it via an admin route + Cloud Run Job (or pg_cron). WI-106 in audit-idempotency drove this."
+    origin: scripts/check-ttl-tables-need-sweep-function.sh

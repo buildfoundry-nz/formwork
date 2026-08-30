@@ -1,0 +1,32 @@
+# Ported from Palletra
+# scripts/check-derived-rollups-stay-synced-on-metric-writes.sh
+# (#6955 / sweep-9b #1 / sweep-9c #1). A non-test .go under
+# routes/{annotation_gauges,annotations,marker_batch,detection} that performs a
+# section-completion mutation MUST also reference SyncDerivedGaugeApproval( so the
+# cascade-only derived page-metric rollups are re-synced in the same tx. This is a
+# FILE-scoped trigger->companion shape (the .sh is a whole-file grep:
+# --files-with-matches to find the mutation shapes, then a file-level
+# SyncDerivedGaugeApproval( grep) -> pair-consistency.
+#
+# DIVERGENCE (noted): the .sh's status-UPDATE arm (UPDATE palletra.annotation_gauges
+# ... SET ... status = ... bounded BEFORE the first WHERE) is a multi-line,
+# negative-lookahead match that per-line RE2 cannot express; it is omitted. The three
+# single-line mutation shapes — DELETE FROM annotation_gauges, DELETE FROM annotations,
+# and ReinstateFromPredictions( — are ported faithfully.
+rules:
+  - id: derived-rollups-stay-synced-on-metric-writes
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/annotation_gauges/**/*.go"
+        - "freightworks/services/core-api/routes/annotations/**/*.go"
+        - "freightworks/services/core-api/routes/marker_batch/**/*.go"
+        - "freightworks/services/core-api/routes/detection/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      trigger: 'DELETE\s+FROM\s+palletra\.annotation_gauges\b|DELETE\s+FROM\s+palletra\.annotations\b|ReinstateFromPredictions\('
+      requires: '(^|[^A-Za-z0-9_])SyncDerivedGaugeApproval\('
+    cure: "After the recompute, call shared.SyncDerivedGaugeApproval(ctx, tx, sheetID, markerTypeCode, ...) inside the mutation's transaction so cascade-only derived rollups are re-synced, never stranded at 'unreviewed' or 'approved' (#6955)."
+    origin: scripts/check-derived-rollups-stay-synced-on-metric-writes.sh

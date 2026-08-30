@@ -1,0 +1,47 @@
+# Ported from Palletra scripts/check-calibration-suggestion-single-source.sh
+# (#5921). ONE fact must be rendered/decided in exactly one place. Two
+# forbidden-pattern rules capture the gate's two invariants (Rule A + Rule B).
+# The .sh decomments Dart `//` comments before matching (prose about a banned
+# symbol is not a use of it); decomment-go strips the same `//` + `/* */`
+# comment syntax Dart shares, so it is the faithful preprocessor.
+#
+# DIVERGENCE (noted): the .sh ALSO hard-fails if suggested_calibration_line.dart
+# is missing (a rename must move the gate, not silence it). A forbidden-pattern
+# passes vacuously on an absent file, so that file-existence guard is not ported
+# here — it is an anti-vacuity concern, not a pattern ban.
+rules:
+  # RULE A — one predicate. suggestedCalibrationProvider may be referenced only
+  # by its owning composition file and by tests; every other consumer must
+  # derive from suggestedCalibrationLine.
+  - id: single-consumer-calibration-suggestion-provider
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/**/*.dart"
+        - "frontend/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/test/**"
+    except:
+      paths:
+        - "packages/plt_canvas_kit/lib/measure/providers/plot_calibration_suggestion_providers.dart"
+    preprocess: decomment-go
+    params:
+      pattern: 'suggestedCalibrationProvider'
+    cure: "Read suggestedCalibrationLine, not the raw suggestion provider — the proposal's existence is ONE predicate. Owner: packages/plt_canvas_kit/lib/measure/providers/plot_calibration_suggestion_providers.dart (#5921)."
+    origin: scripts/check-calibration-suggestion-single-source.sh
+  # RULE B — one color. The proposal's visuals (single file) may not name a raw
+  # Color(0x…) literal or a colorScheme. role; they resolve
+  # baseColors.adjustmentProposal / .onScaleSuggestion.
+  - id: calibration-proposal-single-color
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/plt_canvas_kit/lib/measure/presentation/suggested_calibration_line.dart"
+    preprocess: decomment-go
+    params:
+      pattern: 'Color\(0x|colorScheme\.'
+    cure: "The line, dimension box and button swatch resolve ONE token — baseColors.adjustmentProposal / .onScaleSuggestion — never a raw Color(0x…) or colorScheme. role (#5921)."
+    origin: scripts/check-calibration-suggestion-single-source.sh

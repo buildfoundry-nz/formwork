@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-sse-payload-proto-marshaled.sh (audit-#18 /
+# #7225). Non-test Go under internal/projectfeed/ must never hand-key a
+# structpb payload: `structpb.Struct{ Fields...` (hand-keyed field map) or
+# `structpb.New<T>Value(` (hand-keyed values) are banned. A bare
+# `&structpb.Struct{}` decode target has no Fields key and no New*Value call, so
+# it never matches. The .sh greps line-oriented after excluding comment lines;
+# decomment-go is the faithful port.
+rules:
+  - id: sse-payload-proto-marshaled
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/projectfeed/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'structpb\.Struct\{[[:space:]]*Fields|structpb\.New[A-Za-z]+Value\('
+    cure: "Construct the typed api/v1 *Payload proto (see internal/projectfeed/payloads.go); a bare &structpb.Struct{} decode target is fine (audit-#18)."
+    origin: scripts/check-sse-payload-proto-marshaled.sh

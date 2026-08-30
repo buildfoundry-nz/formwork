@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-slots-under-construction-mask-lacks-page-metric.sh
+# (sweep-1 #8). A slot mask marked MaskPending renders an inert "Under
+# Construction" badge — the operator is told "no data here yet". That is a LIE
+# when the mask actually has a live page-metric aggregate (tier_area / canopy_area
+# / spanrail_total / gantry_length were mislabeled UC while their values were being
+# computed the whole time). sweep-1 #8 retagged them to MaskTally so they render.
+#
+# Ported as a set-relation DISJOINT join between two derived code sets:
+#   A = every Under-Construction mask code (the quoted keys of the pendingMaskCodes map
+#       in masks.go).
+#   B = every live PageTallyKey in the canonical registry (page_tally_rules.go).
+# A ∩ B != empty means a UC mask shadows a live page metric -> fail.
+#
+# DIVERGENCE (noted for fidelity): (1) the .sh ALSO catches three code->key
+# aliases (canopy_area->canopy_area_plan, spanrail_total->spanrails_total,
+# gantry_length->gantry_total_length) so a renamed-key regression is caught; a
+# set-relation join has no rename table, so only DIRECT code==key collisions are
+# ported (the primary sweep-1 #8 shape). (2) The .sh exits 2 when either source
+# file is missing (anti-vacuity); formwork lint owns empty-scope rot. Scope-level
+# finding (fire-1.want carries `-`).
+rules:
+  - id: slots-under-construction-mask-lacks-page-metric
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workflow/slots/masks.go"
+        - "freightworks/services/core-api/internal/metrics/page/page_tally_rules.go"
+    params:
+      a:
+        files:
+          - "freightworks/services/core-api/internal/workflow/slots/masks.go"
+        pattern: '"([a-z_]+)":\s*\{\}'
+        group: 1
+      b:
+        files:
+          - "freightworks/services/core-api/internal/metrics/page/page_tally_rules.go"
+        pattern: 'PageTallyKey:\s*"([a-z_]+)"'
+        group: 1
+      relation: disjoint
+    cure: "A MaskPending mask must not shadow a live PageTallyKey. Retag the mask MaskTally wired to that key so it renders the value instead of an inert Under Construction badge (sweep-1 #8)."
+    origin: scripts/check-slots-under-construction-mask-lacks-page-metric.sh

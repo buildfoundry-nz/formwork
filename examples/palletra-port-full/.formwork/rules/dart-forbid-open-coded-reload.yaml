@@ -1,0 +1,32 @@
+rules:
+  # Port of scripts/check-dart-forbid-open-coded-reload.sh (audit #8 / sweep-5 #4).
+  # An in-place "reload" — re-fetch the whole state then swap it data->data with
+  # NO AsyncLoading frame — has ONE home: RefetchInPlace
+  # (packages/plt_core/lib/refetch_in_place.dart), which folds in the generation
+  # guard and the disposed-Ref guard. Hand-rolling it re-opens both races.
+  #
+  # Scope note: the .sh flags four shapes; three (bare-await-var, ctor-wrapped,
+  # factory-of-var) need intra-method data-flow (track a var assigned from an
+  # await, then see it wrapped later). formwork has no dataflow analyzer, so
+  # this port carries the one shape that is purely lexical and self-contained:
+  # the .sh's rule (A) inline-await form `state = AsyncData(await ...)`. The
+  # regexp2 leading negative lookahead reproduces the .sh's `line !~
+  # /_reload\.latest/` carve-out so the sanctioned `state = AsyncData(await
+  # _reload.latest(...))` path is not flagged.
+  - id: dart-forbid-open-coded-reload
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+    params:
+      syntax: regexp2
+      pattern: '^(?!.*_reload\.latest).*state\s*=\s*AsyncData(<[^>]*>)?\(\s*await\s'
+    cure: "Delete the open-coded state = AsyncData(await ...) reload and route the re-fetch through RefetchInPlace (packages/plt_core/lib/refetch_in_place.dart), which drops a stale fetch and never writes state on a disposed Ref."
+    origin: scripts/check-dart-forbid-open-coded-reload.sh

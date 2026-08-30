@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-grouping-pass-excluded-from-page-lock-packages.sh
+# (#2413 PH-4). There are TWO advisory locks in the sku pipeline that must
+# never nest: the PAGE-scoped extraction lock (pg_advisory_xact_lock(hashtext(
+# $sheetID)), held by skuextract / skureuse) and the PROJECT-scoped
+# grouping lock (pg_advisory_xact_lock(hashtext('sku-group:' || projectID)),
+# held by skuentity.Group). Nesting them deadlocks two pages of one project
+# under concurrency — a lock-order inversion no single-page test reproduces.
+#
+# The .sh's Rule A is its "more simply" core (its own header): the grouping pass
+# must not be reachable from the extraction WRITE packages AT ALL — the page-lock
+# packages (skuextract, skureuse) may neither import
+# internal/skuentity nor name the project grouping-lock string
+# 'sku-group:'. That is exactly a forbidden-pattern scoped to those two
+# packages, banning either token.
+#
+# DIVERGENCE (noted): the .sh's Rule B (no single Go file may contain BOTH
+# 'sku-group:' AND a page-scoped pg_advisory_xact_lock(hashtext($N)) — a
+# mutual-exclusion of two co-present tokens in one file) is NOT expressible as a
+# single line-oriented forbidden-pattern and is omitted; Rule A (the stronger,
+# scope-level ban that keeps the grouping pass out of the write packages) is
+# ported faithfully.
+rules:
+  - id: grouping-pass-excluded-from-page-lock-packages
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/skuextract/**/*.go"
+        - "freightworks/services/core-api/internal/skureuse/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: 'internal/skuentity|sku-group:'
+    cure: "Keep the grouping pass out of the page-lock packages: do not import internal/skuentity nor take the 'sku-group:' project lock from skuextract/ or skureuse/. Run the grouping pass in its OWN tx from skujob's post-commit seam, after the page's persist tx has committed (#2413 PH-4)."
+    origin: scripts/check-grouping-pass-excluded-from-page-lock-packages.sh

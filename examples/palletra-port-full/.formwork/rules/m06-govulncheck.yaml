@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-go-vulnerability-scan.sh (#8146 gate).
+#
+# Installs a pinned govulncheck (v1.6.0), runs `govulncheck ./...` against
+# freightworks, and maps its exit STRICTLY three ways: 0 → gate pass; 3
+# (reachable vuln) → gate fail (exit 1); anything else (load/config/network/
+# vuln-DB-unreachable) → BROKEN gate (exit 2, never a false all-clear). The
+# reachability analysis (not a plain version audit) means only a vuln the code
+# can actually call trips the gate.
+#
+# This fundamentally runs the govulncheck binary against a compiling module and
+# queries the online vuln DB — an EXTERNAL TOOL + NETWORK dependency that cannot
+# be reproduced in a self-contained fixture — so it maps to the `command`
+# escape hatch. params.cmd is the real gate; expect.exit 0.
+rules:
+  - id: m06-govulncheck
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-go-vulnerability-scan.sh — the validating
+      target's own gate script, which this corpus does not carry and cannot:
+      it is written in that tree's vocabulary, and this repository tracks no
+      shell scripts at all. In a fixture tree bash would exit 127 in the fire
+      tree and the pass tree alike, so the fire proof would be satisfied by
+      the detector NOT EXISTING and the pass proof would report that same
+      missing-detector exit as a finding. What the port asserts here is the
+      SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-go-vulnerability-scan.sh
+      expect:
+        exit: 0
+    cure: "govulncheck found a KNOWN, REACHABLE vulnerability — bump the affected dependency to its fixed version. A false all-clear on a security gate is worse than a red build, so a toolchain/DB-unreachable error fails as a BROKEN gate (exit 2), never clean."
+    origin: scripts/check-go-vulnerability-scan.sh

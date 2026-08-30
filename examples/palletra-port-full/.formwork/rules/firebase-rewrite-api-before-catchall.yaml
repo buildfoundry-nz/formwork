@@ -1,0 +1,27 @@
+# Ported from Palletra scripts/check-firebase-rewrite-api-before-catchall.sh (FE perf plan
+# gate). Firebase evaluates hosting rewrites in array order, so the
+# `/api/**` rewrite MUST appear BEFORE the `**` -> /index.html SPA catch-all;
+# a catch-all placed first swallows API traffic and silently returns
+# index.html to every backend request. The .sh is a line-based grep (not jq):
+# it finds the first line matching `"/api/**"` and the first matching
+# `"source": "**"` and fails when the /api line is at or after the catch-all
+# line. `ordering` is the exact declarative shape — before must precede after,
+# within a file.
+#
+# NOTE (fidelity): the .sh also fails when EITHER entry is missing entirely.
+# `ordering` only fires on a genuine misorder (both present, after first); a
+# config missing one entry is not flagged here. The core ordering invariant
+# is faithfully ported.
+rules:
+  - id: firebase-rewrite-api-before-catchall
+    type: ordering
+    severity: error
+    scope:
+      include:
+        - "firebase*.json"
+    params:
+      before: '"/api/\*\*"'
+      after: '"source"\s*:\s*"\*\*"'
+      within: file
+    cure: "Place the /api/** rewrite BEFORE the \"**\" -> /index.html SPA catch-all in the hosting rewrites array; Firebase matches in array order."
+    origin: scripts/check-firebase-rewrite-api-before-catchall.sh

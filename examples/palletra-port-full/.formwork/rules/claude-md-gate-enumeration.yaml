@@ -1,0 +1,35 @@
+rules:
+  # sweep-17 #20: every scripts/check-*.go basename must be textually named in
+  # CLAUDE.md OR docs/gate-enumeration.md (documentation-completeness only —
+  # NOT wiring), so a human can find every gate. The gate itself is carved
+  # out; no CLAUDE.md => pass. Reproduced with the command escape hatch: it
+  # concatenates the two docs and asserts each check-*.go name appears, exactly
+  # as the original gate did over the .sh gates.
+  - id: claude-md-gate-enumeration
+    type: command
+    severity: error
+    scope:
+      include: ["scripts/check-*.go"]
+    params:
+      cmd:
+        - bash
+        - -c
+        - |
+          set -u
+          [ -f CLAUDE.md ] || exit 0
+          listing=$(cat CLAUDE.md 2>/dev/null)
+          if [ -f docs/gate-enumeration.md ]; then
+            listing="${listing}
+          $(cat docs/gate-enumeration.md 2>/dev/null)"
+          fi
+          fail=0
+          shopt -s nullglob
+          for s in scripts/check-*.go; do
+            name=${s##*/}
+            [ "$name" = check-claude-md-gate-enumeration.go ] && continue
+            printf '%s' "$listing" | grep -qF "$name" \
+              || { echo "not enumerated in CLAUDE.md/docs/gate-enumeration.md: $name" >&2; fail=1; }
+          done
+          exit $fail
+    cure: "Name every scripts/check-*.go in CLAUDE.md or docs/gate-enumeration.md (sweep-17 #20)."
+    origin: scripts/check-claude-md-gate-enumeration.sh

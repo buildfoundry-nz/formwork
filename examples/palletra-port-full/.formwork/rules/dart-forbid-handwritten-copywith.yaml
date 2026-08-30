@@ -1,0 +1,70 @@
+# Ported from Palletra scripts/check-dart-no-handwritten-state-code.sh (forbidden-pattern).
+# The Flutter app standardises on codegen (@freezed / @riverpod); hand-rolled
+# equivalents are banned. The four line-anchored rules keep their distinct scopes:
+# rules 1 (copyWith definitions) and 4 (== / hashCode definitions) carve out
+# packages/plt_theme/lib (ThemeExtension must keep hand-written copyWith + lerp +
+# equality); rules 2 (hand-constructed *Provider) and 3 (hand-rolled Notifier
+# class) scan all non-generated library source. All four patterns are RE2-clean
+# (no backrefs/lookaround).
+rules:
+  - id: dart-forbid-handwritten-copywith
+    type: forbidden-pattern
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "packages/plt_theme/lib/**"
+    params:
+      pattern: '^\s*[A-Z][A-Za-z0-9_]*(\s*<[A-Za-z0-9_<>,\s]*>)?\s+copyWith\s*\('
+    cure: "Hand-written copyWith definitions are banned; value objects use @freezed. (.copyWith() calls are fine; only definitions match.)"
+    origin: scripts/check-dart-no-handwritten-state-code.sh
+
+  - id: dart-codegen-only-no-handwritten-provider
+    type: forbidden-pattern
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+    params:
+      pattern: '=\s*((Notifier|AsyncNotifier|StateNotifier|ChangeNotifier)?Provider|Provider|FutureProvider|StreamProvider|StateProvider)([.<(])|^\s*((Notifier|AsyncNotifier|StateNotifier|ChangeNotifier)?Provider|Provider|FutureProvider|StreamProvider|StateProvider)([.<(])'
+    cure: "Hand-constructed providers are banned; declare providers with @riverpod (riverpod_generator)."
+    origin: scripts/check-dart-no-handwritten-state-code.sh
+
+  - id: dart-codegen-only-no-handwritten-notifier
+    type: forbidden-pattern
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+    params:
+      pattern: 'extends\s+(AutoDispose)?(Async)?(Family)?Notifier[<\s]|extends\s+StateNotifier[<\s]'
+    cure: "Hand-rolled Notifier classes are banned; use @riverpod class X extends _$X (the generated base)."
+    origin: scripts/check-dart-no-handwritten-state-code.sh
+
+  - id: dart-codegen-only-no-handwritten-equality
+    type: forbidden-pattern
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "packages/plt_theme/lib/**"
+    params:
+      pattern: '^\s*bool\s+operator\s*==\s*\(|^\s*int\s+get\s+hashCode\b'
+    cure: "Hand-written == / hashCode is banned; value objects derive equality from @freezed."
+    origin: scripts/check-dart-no-handwritten-state-code.sh

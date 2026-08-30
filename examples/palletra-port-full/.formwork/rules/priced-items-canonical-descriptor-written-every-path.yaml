@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-priced-items-canonical-descriptor-written-every-path.sh
+# (#1990 PH-5 RS-2). platform.priced_lines.canonical_label is the write-time
+# mirror of the canonical form the plan side stores; the read-time ratecard
+# matcher joins an extracted sku to a ratecard row by comparing the two
+# canonicals, so a priced_lines row committed with a NULL — or STALE — canonical
+# can never match anything: the product is silently mis-priceable and nothing
+# reports the gap. The whole point of the column is that EVERY write path keeps it
+# in sync. RULE A: every `INSERT INTO platform.priced_lines` in non-test Go must
+# name `canonical_label` in its column list.
+#
+# Ported as a sql/statement-predicate: it selects each SQL statement (reassembled
+# from Go string literals) whose text is an INSERT INTO platform.priced_lines and
+# requires the token `canonical_label`. A statement that omits it yields one
+# finding on the string literal's line. Tests are excluded (a test may seed a
+# partial NULL-canonical row on purpose to prove the reader's lazy heal),
+# matching the .sh's *_test.go skip.
+#
+# DIVERGENCE (noted): (1) the .sh scopes the token to the column list between the
+# table and the first VALUES/SELECT; the predicate requires it anywhere in the
+# selected INSERT — both catch the primary defect (a new INSERT omitting the
+# column entirely) identically. (2) The .sh also carries RULE B (an UPDATE that
+# SETs `description` must SET `canonical_label` too); a single statement
+# predicate selects on one table shape, and the conditional-UPDATE rule needs a
+# different selector, so it is not carried here — RULE A, every write path naming
+# the column, is the load-bearing half this port encodes.
+rules:
+  - id: priced-items-canonical-descriptor-written-every-path
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      table: 'INSERT\s+INTO\s+platform\.priced_lines'
+      require:
+        - 'canonical_label'
+    cure: "Name the `canonical_label` column in the INSERT INTO platform.priced_lines column list and bind skucanon.ReferenceDescriptorForPriceSource(description) — a NULL/stale canonical can never match an extracted sku, so the row is silently mis-priceable (#1990 PH-5 RS-2)."
+    origin: scripts/check-priced-items-canonical-descriptor-written-every-path.sh

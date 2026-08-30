@@ -1,0 +1,47 @@
+# Ported from Palletra scripts/check-partman-retention-registry-complete.sh
+# (#6717 / PH-8 gate).
+#
+# Every range-partitioned parent in schema.snapshot.sql MUST be declared exactly
+# once in migrations/partman-retention.tsv, with a reason, and every keep-forever
+# row must carry the recoverable (detach) disposition:
+#   R1 UNDECLARED — a snapshot partition parent with no registry row.
+#   R2 STALE      — a registry row naming a non-partitioned parent.
+#   R3 DUPLICATE  — one parent declared twice.
+#   R4 UNSAFE-KEEP — a keep-forever row (retention '-') with retain_table = f.
+#   R5 NO-REASON  — an empty reason column (MALFORMED = fewer than 4 columns).
+#
+# PORT MAPPING: COMMAND ESCAPE. R1+R2 is a set-EQUALITY between two files, but
+# the snapshot side identifies a partition parent by CORRELATING two lines —
+# `CREATE TABLE x.y (` sets the current table, a later `PARTITION BY RANGE` line
+# confirms it — which set-relation's single-line-per-value extractor cannot do.
+# R3 is cross-line duplicate detection, and R4/R5/MALFORMED are per-row TSV
+# soundness (tab-column count, empty-reason, retention/retain_table coupling); no
+# single declarative type expresses that combined predicate faithfully. This is
+# the sanctioned escape: params.cmd runs the real check, which verifies in CI.
+# No fixture (formwork lint enumerates it).
+rules:
+  - id: partman-retention-registry-complete
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-partman-retention-registry-complete.sh —
+      the validating target's own gate script, which this corpus does not
+      carry and cannot: it is written in that tree's vocabulary, and this
+      repository tracks no shell scripts at all. In a fixture tree bash would
+      exit 127 in the fire tree and the pass tree alike, so the fire proof
+      would be satisfied by the detector NOT EXISTING and the pass proof would
+      report that same missing-detector exit as a finding. What the port
+      asserts here is the SCOPE and the CURE, both readable against the origin
+      script; the detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+        - "freightworks/services/core-api/migrations/partman-retention.tsv"
+    params:
+      cmd:
+        - bash
+        - scripts/check-partman-retention-registry-complete.sh
+      expect:
+        exit: 0
+    cure: "Declare every range-partitioned parent exactly once in freightworks/services/core-api/migrations/partman-retention.tsv as keep-forever ('-' + retain_table t) or a window ('12 months' + t/f), WITH a reason. If in doubt the answer is keep-forever: deleting live data is irreversible, growing a table is not (#6717 / PH-8)."
+    origin: scripts/check-partman-retention-registry-complete.sh

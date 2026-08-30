@@ -1,0 +1,49 @@
+# The shape this rule must never touch: the 68-file idiom, carrying an actual
+# reason. Both spellings the corpora use, plus the one a blank line separates
+# from its key — the case a naive "header line then anything" pattern reports
+# and this one does not.
+rules:
+  - id: dart-format-clean
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector shells out to a formatter on a pinned SDK, and a formatter
+      is not a regex: no self-contained fixture tree can drive it. What the
+      port asserts here is the scope and the cure.
+    scope:
+      include: ["packages/**/*.dart"]
+    params:
+      cmd: ["dart", "format", "--output=none", "."]
+    cure: "Run the formatter on the pinned SDK until the tree is clean."
+  - id: commits-build
+    type: command
+    severity: error
+    fixture_exempt: >-
+
+      Separated from its key by a blank line, which YAML folds away and a
+      reader barely notices. There is a reason here, so there is no finding.
+    scope:
+      include: ["**/*.go"]
+    params:
+      cmd: ["go", "build", "./..."]
+    cure: "Every commit in the range must build."
+  - id: govulncheck-clean
+    type: command
+    severity: error
+    fixture_exempt: "The detector is govulncheck, which needs the module graph and the network."
+    scope:
+      include: ["**/*.go"]
+    params:
+      cmd: ["govulncheck", "./..."]
+    cure: "Upgrade past the advisory."
+  - id: terraform-fmt
+    type: command
+    severity: error
+    fixture_exempt: >-
+      # A body whose only content is a comment character is still content to
+      # YAML, and this rule agrees with YAML rather than second-guessing it.
+    scope:
+      include: ["**/*.tf"]
+    params:
+      cmd: ["terraform", "fmt", "-check"]
+    cure: "Run terraform fmt."

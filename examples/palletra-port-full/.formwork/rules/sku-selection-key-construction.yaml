@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-sku-selection-key-construction.sh
+# (#1436). The native sku-selection key vk:<slug>:<opt> has ONE sanctioned
+# construction site: skuselections.FormatChoiceKey. No non-test Go file
+# outside internal/skuselections/ may contain a double- or single-quoted
+# `vk:` string literal ("vk: or 'vk:). Pure comment lines are stripped
+# (decomment-go); *_test.go, the canonical package, and generated code are
+# excluded. The exclude is anchored to the EXACT canonical path so a same-named
+# split-brain twin elsewhere cannot self-exempt.
+rules:
+  - id: sku-selection-key-construction
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/services/core-api/internal/skuselections/**"
+        - "**/shared/generated/**"
+    preprocess: decomment-go
+    params:
+      pattern: '["'']vk:'
+    cure: "Call skuselections.FormatChoiceKey / ComposeVariantMap instead of open-coding a vk: key literal (#1436 §D2)."
+    origin: scripts/check-sku-selection-key-construction.sh

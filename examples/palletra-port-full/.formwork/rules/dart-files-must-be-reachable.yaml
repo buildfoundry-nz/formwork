@@ -1,0 +1,122 @@
+# Ported from Palletra scripts/check-dart-files-must-be-reachable.sh (#1330).
+#
+# `flutter analyze` discovers files by filesystem glob, not by import-reachability
+# from a live entry point — a syntactically clean, NEVER-IMPORTED hand-written
+# .dart file produces zero diagnostics and is invisible to every other gate. This
+# gate computes FILE-LEVEL import/export/part reachability over the whole Flutter
+# pub workspace and fails when a hand-written packages/*/lib file is reached by
+# nothing live. LIVE ROOTS: the app shell (frontend/lib/**), every test entry
+# point (test/ integration_test/ test_driver/), and each package's canonical
+# barrel (packages/<pkg>/lib/<pkg>.dart). Generated files are graph NODES but
+# never CANDIDATES. This is a whole-tree graph-reachability FIXPOINT — no
+# declarative formwork type expresses a cross-file BFS — so it is the `command`
+# ESCAPE HATCH as a SELF-CONTAINED python reproduction of the .sh's reachability
+# engine over the fixture tree. Scope-level finding; fire-1 has an orphan lib
+# file, pass-1 has every file reachable.
+rules:
+  - id: dart-files-must-be-reachable
+    type: command
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import glob, os, re, sys
+
+          dart = []
+          for base in ('frontend', 'packages'):
+              for path in glob.glob(base + '/**/*.dart', recursive=True):
+                  dart.append(path.replace(os.sep, '/'))
+          dart = sorted(set(dart))
+          if not dart:
+              sys.exit(0)
+          nodes = set(dart)
+
+          # package name -> lib dir (keyed on pubspec name:)
+          pkglib = {}
+          for ps in glob.glob('frontend/pubspec.yaml') + glob.glob('packages/*/pubspec.yaml'):
+              m = re.search(r'(?m)^name:\s*([A-Za-z0-9_]+)', open(ps).read())
+              if m:
+                  pkglib[m.group(1)] = os.path.dirname(ps).replace(os.sep, '/') + '/lib'
+
+          def norm(p):
+              out = []
+              for seg in p.split('/'):
+                  if seg in ('', '.'):
+                      continue
+                  if seg == '..':
+                      if out:
+                          out.pop()
+                      continue
+                  out.append(seg)
+              return '/'.join(out)
+
+          GENERATED = re.compile(r'\.(g|freezed|gr|pb|pbenum|pbjson|pbserver)\.dart$|/lib/generated/')
+          DIRECTIVE = re.compile(r"^\s*(?:import|export|part)\s")
+          URI = re.compile(r"'([^']+\.dart)'")
+
+          edges = {}
+          for f in dart:
+              try:
+                  src = open(f, errors='replace').read()
+              except OSError:
+                  continue
+              for line in src.splitlines():
+                  if not DIRECTIVE.match(line):
+                      continue
+                  for uri in URI.findall(line):
+                      if uri.startswith('package:'):
+                          rest = uri[len('package:'):]
+                          if '/' not in rest:
+                              continue
+                          pkg, sub = rest.split('/', 1)
+                          if pkg not in pkglib:
+                              continue
+                          tgt = pkglib[pkg] + '/' + sub
+                      else:
+                          tgt = norm(os.path.dirname(f) + '/' + uri)
+                      edges.setdefault(f, []).append(tgt)
+
+          roots = set()
+          for f in dart:
+              p = f.split('/')
+              if f.startswith('frontend/lib/'):
+                  roots.add(f)
+              elif re.match(r'^(frontend|packages/[^/]+)/(test|integration_test|test_driver)/', f):
+                  roots.add(f)
+              elif len(p) == 4 and p[0] == 'packages' and p[2] == 'lib' and p[3] == p[1] + '.dart':
+                  roots.add(f)
+
+          seen = set(roots)
+          queue = list(roots)
+          while queue:
+              cur = queue.pop()
+              for t in edges.get(cur, ()):
+                  if t in seen:
+                      continue
+                  seen.add(t)
+                  if t in nodes:
+                      queue.append(t)
+
+          dead = []
+          for n in sorted(nodes):
+              if n in seen:
+                  continue
+              if not re.match(r'^packages/[^/]+/lib/', n):
+                  continue
+              if GENERATED.search(n):
+                  continue
+              dead.append(n)
+
+          for d in dead:
+              sys.stderr.write('unreachable (no import/export/part chain reaches it): %s\n' % d)
+          sys.exit(1 if dead else 0)
+      expect:
+        exit: 0
+    cure: "DELETE the file if it is a refactor leftover, or IMPORT/EXPORT it from a live file (a consumer or the package barrel) if it is real API. Reachability is the sole criterion — no allowlist (#1330)."
+    origin: scripts/check-dart-files-must-be-reachable.sh

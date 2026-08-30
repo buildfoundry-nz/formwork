@@ -1,0 +1,18 @@
+# Ported from scripts/check-drawingquality-no-false-blockers.sh (#6430), Rule A
+# (forbidden half). The scale gate SKIPS detection on tally-surface-free pages;
+# it must not persist scale.StatusUnset (a 'examined, no scale' verdict) which
+# drawingquality raises as a blocker telling the operator to calibrate a title page.
+# Go comments are stripped (decomment-go) so the doc comment explaining the rule
+# never trips it.
+rules:
+  - id: drawingquality-scale-gate-no-status-none
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/internal/workerharness/scalewire/scale_verify_gate.go'
+    preprocess: decomment-go
+    params:
+      pattern: 'scale\.StatusUnset\b'
+    cure: 'The gate-skip path must persist scale.StatusExempt, not scale.StatusUnset (#6430 Rule A).'
+    origin: scripts/check-drawingquality-no-false-blockers.sh

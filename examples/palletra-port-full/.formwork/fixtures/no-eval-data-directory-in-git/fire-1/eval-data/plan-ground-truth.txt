@@ -1,0 +1,5 @@
+# Ground-truth tally for a real customer plan — this file must NEVER be committed.
+plan: 7-sample-lane.pdf
+skus:
+  - id: m1, qty: 128, unit: lm
+  - id: m2, qty: 6, unit: ea

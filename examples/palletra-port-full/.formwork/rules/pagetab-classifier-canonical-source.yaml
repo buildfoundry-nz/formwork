@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-pagetab-classifier-canonical-source.sh (#3986).
+# The page_kind -> workflow-tab classifier lives ONCE on internal/pagetabid.For.
+# Bans reintroducing the deleted private mirror: a func declaration named
+# pageGroupKeyForPageType / isLayoutPage / isCanopyPage / isCrossSectionPage /
+# isAnchorPage / isProfilePage in non-test freightworks Go. The names are
+# unique to the copy (pagetabid's own helpers have no "Page" suffix).
+rules:
+  - id: pagetab-classifier-canonical-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: '\bfunc\s+(?:pageGroupKeyForPageType|isLayoutPage|isCanopyPage|isCrossSectionPage|isAnchorPage|isProfilePage)\s*\('
+    cure: "The page_kind -> tab classifier lives once on internal/pagetabid.For; call it (and map the Tab), do not re-hardcode the classifier."
+    origin: scripts/check-pagetab-classifier-canonical-source.sh

@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-flutter-breadcrumb-carries-template-not-resolved.sh
+# (C4/B2, #4695). The nav breadcrumb must forward go_router's fullPath TEMPLATE
+# (`:param` placeholders), never a RESOLVED location that carries substituted
+# projectId/pageId over the wire. This ports the FORBIDDEN limb: nav_breadcrumbs
+# .dart must not read matchedLocation, `.uri`, or `state.fullPath // resolved`.
+# The .sh's positive anchor (fullPath must be present) is a required-pattern limb
+# that a single forbidden-pattern rule cannot also express — see notes.
+# The .sh strips Dart comments first; formwork has no decomment-dart preprocessor
+# so this scans raw text (a comment naming a resolved accessor would also fire).
+rules:
+  - id: flutter-breadcrumb-carries-template-not-resolved
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/routing/nav_breadcrumbs.dart"
+    params:
+      pattern: 'matchedLocation|\.uri\b|state\.fullPath[[:space:]]*//[[:space:]]*resolved'
+    cure: "Carry the route TEMPLATE only: read state.fullPath, never matchedLocation / state.uri (they ship resolved ids)."
+    origin: scripts/check-flutter-breadcrumb-carries-template-not-resolved.sh

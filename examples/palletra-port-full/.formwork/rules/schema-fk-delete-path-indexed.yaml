@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-schema-fk-delete-path-indexed.sh
+# (#8259). Postgres runs a referential-integrity trigger FOR EACH ROW deleted
+# from a referenced table, probing the referencing side; Postgres does NOT
+# create an index for a FK's referencing column, so an uncovered probe is a
+# sequential scan and deleting N rows costs N full scans of every child table.
+# #8259 measured a single unindexed FK turning a 1.2ms delete into 1934ms.
+#
+# The gate does NOT require an index on every FK (200+ reference org_id/facility_id,
+# deleted only by cron batch services). It DERIVES the scope from the code:
+# seed with every table named by `DELETE FROM palletra./platform.` in the
+# request-serving service + shared libs (excluding _test.go and files whose
+# build constraint requires the integration tag), close that set transitively
+# over ON DELETE CASCADE, and require a covering (btree, leading-column,
+# non-partial or `col IS NOT NULL`) index on every FK whose PARENT is in the
+# closure.
+#
+# PORT MAPPING: this fundamentally RUNS a cross-artifact analysis — parse the
+# committed schema snapshot for FKs + indexes, glob the request-path Go for
+# DELETE FROM, transitively close the cascade graph, then match partial-index
+# predicates — none of which any per-file declarative analyzer models. It uses
+# the ESCAPE HATCH: a command rule invoking the .sh's OWN analyzer, ported to
+# Go (checks/check.go, faithfully ported, ROOT-argv) against the fixture tree.
+# The finding is scope-level (no want marker). fire-1's request path deletes
+# from a table whose child FK has no covering index; pass-1 adds the btree
+# index that covers the RI probe.
+rules:
+  - id: schema-fk-delete-path-indexed
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+    params:
+      cmd:
+        - go
+        - run
+        - checks/check.go
+        - "."
+      expect:
+        exit: 0
+    cure: "Every FK whose parent is in the request-path DELETE cascade closure needs a covering index on the referencing side: `CREATE INDEX IF NOT EXISTS idx_<abbrev>_<col> ON <child> (<fk cols>);` in a migration, then regenerate the snapshot. For a nullable FK column use a partial index `WHERE <col> IS NOT NULL` (#8259)."
+    origin: scripts/check-schema-fk-delete-path-indexed.sh

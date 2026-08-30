@@ -1,0 +1,1 @@
+- awaitFooterActionResolved out of order (write=4 settle=6 clear=5) — must be AFTER await action() and BEFORE state = null

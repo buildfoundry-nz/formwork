@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-no-third-party-buf-setup-action.sh (#5375).
+# The archived bufbuild/buf-setup-action calls api.github.com for its release
+# manifest and hard-fails during GitHub API degradation. Forbid it on any active
+# `uses:` line under .github/workflows/** and .github/actions/**; comment-only
+# mentions (documenting the anti-pattern) stay legal. There is no decomment-yaml
+# preprocessor, so the pattern is anchored to a line-leading `uses:` (optionally
+# a `- uses:` step) which a `# uses:` comment line cannot satisfy.
+rules:
+  - id: no-third-party-buf-setup-action
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/**/*.yml"
+        - ".github/workflows/**/*.yaml"
+        - ".github/actions/**/*.yml"
+        - ".github/actions/**/*.yaml"
+    params:
+      pattern: '^\s*(-\s+)?uses:\s*bufbuild/buf-setup-action'
+    cure: "Use the in-repo composite ./.github/actions/install-buf (direct release-asset download + retry + ELF check)."
+    origin: scripts/check-no-third-party-buf-setup-action.sh

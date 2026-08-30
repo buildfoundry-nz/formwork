@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-inbound-trace-extraction.sh (#5098 /
+# SV-ARC-10). The core-api per-request server span (middleware/tracing.go) must
+# continue an inbound W3C traceparent: the request context has to flow through
+# otel...Extract(...) before it reaches tracer.Start, or the FE->BE trace
+# correlation is severed into a fresh root. The .sh pins this by requiring the
+# sole `r.Context()` in the file to be the direct argument to `Extract(`.
+#
+# Ported as a forbidden-pattern (regexp2 lookbehind): forbid any `r.Context()`
+# that is NOT immediately preceded by `Extract(` (with optional whitespace).
+# This makes a bare `tracer.Start(r.Context(), ...)` or a rename-launder
+# (`base := r.Context(); Start(base, ...)`) — the two severing shapes the header
+# calls out — physically impossible, since the only permitted use site is the
+# Extract argument.
+#
+# FP FIX: the .sh strips `//` line comments (`sed 's://.*$::'`) BEFORE it scans,
+# so the file's own doc comment ("This is the ONLY use of r.Context() in this
+# file: it MUST flow through Extract...") does not inflate the count or get
+# scanned. The port had no preprocessor, so that comment's bare `r.Context()`
+# (not preceded by `Extract(`) matched the forbidden pattern on clean develop
+# (tracing.go:73). preprocess: decomment-go strips those comments exactly like
+# the gate's sed, leaving only the real `Extract(r.Context())` call — which the
+# lookbehind correctly exempts.
+#
+# DIVERGENCE (noted): the .sh also asserts EXACTLY ONE r.Context() after
+# comment-stripping (an anti-inflation belt-and-braces); a forbidden lookbehind
+# instead forbids EVERY un-extracted occurrence, which is the load-bearing
+# invariant (no bare context can reach Start).
+rules:
+  - id: inbound-trace-extraction
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/middleware/tracing.go"
+    preprocess: decomment-go
+    params:
+      syntax: regexp2
+      pattern: '(?<!Extract\(\s*)r\.Context\(\)'
+    cure: "Route the request context through the propagator before the span: ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header)); then tracer.Start(ctx, ...). A bare tracer.Start(r.Context(), ...) or a rename-launder severs the inbound traceparent (#5098, SV-ARC-10)."
+    origin: scripts/check-inbound-trace-extraction.sh

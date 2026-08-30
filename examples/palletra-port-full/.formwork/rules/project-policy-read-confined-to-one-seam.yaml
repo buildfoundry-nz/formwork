@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-project-policy-read-confined-to-one-seam.sh
+# (#5169, sweep-4) — RULE 1 only.
+#
+# The predecessor policed the project-policy LOCK MODE by regexing SQL text and
+# was bypassed ~20 times (greedy sub, backtick desync, JOIN blindness, an SQL
+# comment forging the mode). The fix moved the ONLY copies of the policy-read SQL
+# into internal/projectguard and took the lock mode as a typed Go argument. Rule
+# 1 is what remains: NO non-test Go file OUTSIDE the seam may carry a SQL literal
+# naming palletra.projects together with BOTH policy columns (country AND
+# facility_type). There is no allowlist — legitimate files pass structurally
+# because the predicate only asks "is a policy read written here?".
+#
+# Ported as sql/statement-predicate over Go string literals (sqltext reassembles
+# backtick/concatenated SQL from the AST, so the seam's concat-split bypass —
+# `SELECT country, facility_type::text FROM palletra.projects` in a const with
+# ` FOR UPDATE` split off — is still one literal and still caught). The seam
+# directory is excluded from scope, so it is structurally the only allowed home.
+#   table   — selects a statement that names palletra.projects together with
+#             BOTH country and facility_type (either order, projects either side).
+#   forbid  — `palletra\.projects` (always present in a selected statement), so
+#             every open-coded policy read outside the seam fires. RE2 has no
+#             lookahead, so the AND of the three tokens lives in `table`.
+#
+# DIVERGENCE (noted): RULE 2 (every seam caller pinned to an EXACT Lock* mode
+# multiset) is a cross-file pin table with typed-Go-argument multiset equality —
+# not expressible as a per-statement text predicate — and is omitted. Rule 1, the
+# "seam is the only home for policy-read SQL" invariant, is ported faithfully.
+rules:
+  - id: project-policy-read-confined-to-one-seam
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/projectguard/**"
+    params:
+      table: '(?is)(palletra\.projects.*(country.*facility_type|facility_type.*country)|(country.*facility_type|facility_type.*country).*palletra\.projects)'
+      forbid:
+        - 'palletra\.projects'
+    cure: "Move the project-policy read into internal/projectguard and call projectguard.Read(ctx, tx, projectID, mode), passing the typed Lock* mode your path needs — no non-test Go file outside that seam may hold a SQL literal naming palletra.projects with both country and facility_type (#5169)."
+    origin: scripts/check-project-policy-read-confined-to-one-seam.sh

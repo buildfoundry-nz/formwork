@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-vision-warnings-preserved.sh (sweep-3 #8).
+# optical_extract.go must always return the assembled *ParsedSheet on the no-error
+# path (carrying merged ParseNotices), never `return nil, nil` — that regression
+# dropped every warning when Rows was empty. The .sh greps the single file with
+# rg `^\s*return\s+nil\s*,\s*nil\b`; formwork forbidden-pattern matches per line,
+# a faithful port of that anchored line shape.
+rules:
+  - id: vision-warnings-preserved
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/stockroom/optical_extract.go"
+    params:
+      pattern: '^\s*return\s+nil\s*,\s*nil\b'
+    cure: "Return the assembled *ParsedSheet on the no-error path so accumulated ParseNotices reach the dispatch layer; the dispatch layer reads len(table.Rows)==0 as the fallback signal."
+    origin: scripts/check-vision-warnings-preserved.sh

@@ -1,0 +1,37 @@
+# Ported from Palletra scripts/check-members-list-query-requires-limit.sh (sweep-3 #11 /
+# sweep-4 #8 / sweep-6 #3). GET /api/members listed an org's active members with
+# `ORDER BY u.name` and NO LIMIT — a 500-seat org pulled every member per render.
+# The fix is keyset pagination: the members-list query orders by (created_at
+# DESC, id DESC) and is bounded by LIMIT. RULE: any members-list query in
+# routes/members/ that reads `(FROM|JOIN) memberships … ORDER BY` MUST also carry
+# a LIMIT.
+#
+# Ported as a sql/statement-predicate: it selects each SQL statement (reassembled
+# from Go string literals) whose text matches `(FROM|JOIN) memberships … ORDER
+# BY` and requires a `LIMIT` token. A members-list statement with no LIMIT yields
+# one finding on the string literal's line. The single-row Get query (no ORDER
+# BY) and the capability-overrides query (no `FROM memberships`) lack the
+# co-occurrence and are never selected — exactly the .sh's list-shape anchor.
+# Scope: non-test Go under routes/members/.
+#
+# DIVERGENCE (noted): the .sh reconstructs a query split across two Go string
+# literals joined by `+` over a SEPARATE base const (`crewQuery + \` ORDER BY
+# …\``) via const-substitution; sql/statement-predicate only folds `+`-chains of
+# adjacent string literals, not references to a base const declared elsewhere, so
+# it catches the inline single-literal list shape (the sweep-4 #8 form) but not
+# the split-across-consts assembly.
+rules:
+  - id: members-list-query-requires-limit
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/members/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      table: '(?i)(FROM|JOIN)\s+memberships\b[\s\S]*?ORDER\s+BY'
+      require:
+        - '(?i)\bLIMIT\b'
+    cure: "Bound the members-list query with LIMIT (keyset pagination: ORDER BY (created_at DESC, id DESC) LIMIT pageSize+1 on an opaque cursor) so a large org does not pull every member per render (sweep-3 #11)."
+    origin: scripts/check-members-list-query-requires-limit.sh

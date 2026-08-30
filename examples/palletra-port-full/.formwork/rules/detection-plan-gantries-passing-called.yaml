@@ -1,0 +1,21 @@
+# Ported from Palletra scripts/check-detection-plan-zone-gantry-approval.sh (#6386) — Rule D.
+# composeDispatchPlan's gantries arm must actually CALL gantryPairsPassingApproval — not
+# merely declare it — so gantry dispatch is filtered by the page-scoped approval gate.
+#
+# Port note (as Rule C): the assignment-call shape `= gantryPairsPassingApproval(`
+# (real form `pairs = gantryPairsPassingApproval(...)`) is the anchor, which the
+# column-0 `func` declaration cannot satisfy — the RE2-friendly stand-in for the
+# .sh's drop-the-declaration-line call check.
+rules:
+  - id: detection-plan-gantries-passing-called
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/autodetect/plan.go"
+    preprocess: decomment-go
+    params:
+      pattern: '=\s*gantryPairsPassingApproval\('
+      mode: exists
+    cure: "composeDispatchPlan's gantries arm must call gantryPairsPassingApproval(...) (not merely declare it) so dispatch is page-scoped (#6386)."
+    origin: scripts/check-detection-plan-zone-gantry-approval.sh

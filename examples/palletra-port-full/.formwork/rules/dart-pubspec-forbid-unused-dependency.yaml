@@ -1,0 +1,129 @@
+# Ported from Palletra scripts/check-dart-pubspec-forbid-unused-dependency.sh (#2317).
+#
+# Every dependency declared in a workspace pubspec.yaml must actually be used
+# by that package. The .sh parses each pubspec's dependencies/dev_dependencies,
+# then HARD-FAILS any external dep that is neither `package:<dep>/`-imported in
+# the package's dart (incl. generated), nor a recognized implicit dep
+# (flutter/flutter_test/flutter_lints/path/sdk), nor a generator whose consumer
+# annotation is present (freezed/riverpod_generator/json_serializable/
+# go_router_builder/build_runner). This is per-package cross-file join logic
+# with a keep/prune decision tree — no declarative formwork type expresses it,
+# so it maps to the command escape hatch: a self-contained python that
+# reproduces the pubspec parse + usage scan + keep rules on the tree it runs
+# in. Scope-level finding; fire-1 has an unused dep, pass-1 uses every dep.
+rules:
+  - id: dart-pubspec-forbid-unused-dependency
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/pubspec.yaml"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import os, re, glob, sys
+          always = {"flutter", "flutter_test", "flutter_lints"}
+          generators = {"freezed", "riverpod_generator", "json_serializable", "go_router_builder"}
+          skip_dirs = {".dart_tool", "build", "node_modules", ".git"}
+          src_roots = {"lib", "test", "integration_test", "test_driver", "web"}
+          viol = []
+          for cfg in sorted(glob.glob("**/pubspec.yaml", recursive=True)):
+              if any(p in skip_dirs for p in cfg.split(os.sep)):
+                  continue
+              pkgdir = os.path.dirname(cfg) or "."
+              blob = ""
+              dartnames = []
+              for root, dirs, files in os.walk(pkgdir):
+                  dirs[:] = [d for d in dirs if d not in skip_dirs]
+                  rel = os.path.relpath(root, pkgdir)
+                  top = rel.split(os.sep)[0]
+                  if rel != "." and top not in src_roots:
+                      continue
+                  for fn in files:
+                      if fn.endswith(".dart"):
+                          dartnames.append(fn)
+                          try:
+                              blob += open(os.path.join(root, fn), errors="ignore").read()
+                          except OSError:
+                              pass
+              cfgblob = ""
+              for extra in ("build.yaml", "analysis_options.yaml"):
+                  p = os.path.join(pkgdir, extra)
+                  if os.path.exists(p):
+                      cfgblob += open(p, errors="ignore").read()
+              has_generated = any(n.endswith(".g.dart") or n.endswith(".freezed.dart") for n in dartnames)
+              has_freezed = bool(re.search(r"@freezed|@Freezed|@unfreezed", blob)) or any(n.endswith(".freezed.dart") for n in dartnames)
+              has_riverpod = bool(re.search(r"@riverpod|@Riverpod", blob))
+              has_json = bool(re.search(r"@JsonSerializable|@JsonEnum", blob))
+              has_typedroute = "TypedGoRoute" in blob
+              # parse deps
+              section = None
+              cur = None
+              haspath = hassdk = False
+              parsed = []
+              def flush():
+                  global cur, haspath, hassdk
+                  if cur:
+                      kind = "path" if haspath else "sdk" if hassdk else "external"
+                      parsed.append((cur, kind))
+                  cur = None
+                  haspath = hassdk = False
+              for raw in open(cfg):
+                  l = raw.rstrip("\n")
+                  if re.match(r"^[^\s#]", l):
+                      flush()
+                      if l.startswith("dependencies:"):
+                          section = "dep"
+                      elif l.startswith("dev_dependencies:"):
+                          section = "dep"
+                      else:
+                          section = None
+                      continue
+                  if section != "dep":
+                      continue
+                  m = re.match(r"^  ([A-Za-z0-9_]+):", l)
+                  if m:
+                      flush()
+                      cur = m.group(1)
+                      continue
+                  if re.match(r"^    ", l):
+                      if re.search(r"(^|\s)path:", l):
+                          haspath = True
+                      if re.search(r"(^|\s)sdk:", l):
+                          hassdk = True
+              flush()
+              for dep, kind in parsed:
+                  if kind in ("path", "sdk"):
+                      continue
+                  if dep in always:
+                      continue
+                  if dep in generators:
+                      keep = ((dep == "freezed" and has_freezed) or
+                              (dep == "riverpod_generator" and has_riverpod) or
+                              (dep == "json_serializable" and has_json) or
+                              (dep == "go_router_builder" and has_typedroute))
+                      if not keep:
+                          viol.append("%s: generator dep '%s' has no consumer" % (cfg, dep))
+                      continue
+                  if dep == "build_runner":
+                      if not has_generated:
+                          viol.append("%s: 'build_runner' but no generated code" % cfg)
+                      continue
+                  if ("package:%s/" % dep) in blob:
+                      continue
+                  if re.search(r"\b%s\b" % re.escape(dep), cfgblob):
+                      continue
+                  if os.path.exists(os.path.join(pkgdir, dep + ".yaml")):
+                      continue
+                  viol.append("%s: dependency '%s' declared but never imported" % (cfg, dep))
+          if viol:
+              for v in viol:
+                  sys.stderr.write(v + "\n")
+              sys.exit(1)
+          sys.exit(0)
+      expect:
+        exit: 0
+    cure: "Delete the unused dependency line from the pubspec. If the dep IS used via a mechanism this gate can't see (asset bundle, native plugin, a bare-name build.yaml reference), record it in the ALWAYS_KEEP allowlist with a comment explaining why."
+    origin: scripts/check-dart-pubspec-forbid-unused-dependency.sh

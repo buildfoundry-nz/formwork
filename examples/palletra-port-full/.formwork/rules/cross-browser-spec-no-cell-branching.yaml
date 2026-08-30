@@ -1,0 +1,19 @@
+rules:
+  # Port of check-cross-browser-spec-matrix.sh check B ("Specs must not branch on the
+  # cell"). Top-level integration specs may not READ the matrix cell — the
+  # harness owns it. The shell's code_grep() strips comment-only lines first
+  # (grep -vE '^[[:space:]]*//') so a prose mention of CELL_ENGINE in a doc
+  # comment is fine; that "code only" exclusion is a PCRE2 negative lookahead,
+  # hence syntax: regexp2. Scope is the top-level specs only (find -maxdepth 1),
+  # so a single '*' segment, not '**'.
+  - id: cross-browser-spec-no-cell-branching
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/integration_test/*_test.dart"
+    params:
+      pattern: '^(?!\s*//).*(DeviceMatrixCell|BrowserEngine\.|fromEnvironment\([''"]CELL_)'
+      syntax: regexp2
+    cure: "Only the harness (RenderHarness / DeviceMatrixCell.fromEnvironment) may read the matrix cell; run the shared spec across the matrix instead of branching on the engine/viewport."
+    origin: scripts/check-cross-browser-spec-matrix.sh

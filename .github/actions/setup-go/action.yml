@@ -1,0 +1,81 @@
+name: Set up Go
+description: >
+  Installs the Go version go.mod's `toolchain` directive names, then turns on
+  setup-go's module and build cache. Every CI job configures Go through here,
+  and Go is installed here by exactly one step.
+  internal/repoproof/ci_workflow_test.go judges both halves, and judges them by
+  what an action DOES rather than by who publishes it: a workflow job that
+  reaches any setup-go action directly fails, and so does a second setup-go
+  step added to this file, whatever vendor it comes from.
+
+# WHY THIS IS NOT `go-version-file: go.mod` (#282). setup-go@v5 reads the `go`
+# directive out of go.mod and ignores `toolchain`. This repo declares
+# `go 1.25.0` and `toolchain go1.26.4`, so setup-go installed 1.25.0 — and its
+# next act is `go env GOMODCACHE` from inside the checkout, which makes that
+# 1.25.0 honour the toolchain directive and download go1.26.4 into GOMODCACHE.
+# The cache restore then untars a cache holding those same
+# golang.org/toolchain@... paths over the copy written a second before it:
+#
+#   go: downloading go1.26.4 (linux/amd64)
+#   [command] .../go env GOMODCACHE
+#   Cache hit for: setup-go-Linux-x64-ubuntu24-go-1.26.4-67c79a5a...
+#   [command]/usr/bin/tar -xf .../cache.tzst -P -C .../formwork
+#   /usr/bin/tar: ../../../go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.4.linux-amd64/...: Cannot open: File exists
+#   ##[warning]Failed to restore: "/usr/bin/tar" failed ... exit code 2
+#   Cache is not found
+#
+# 11,534 collisions in each of the three jobs of run 32909467430 — a fully
+# GREEN run — counted per job. WHAT IT DOES NOT COST, stated first because the
+# warning reads worse than it is: every one of those paths is inside
+# `golang.org/toolchain@`, and the only `go: downloading` line anywhere in that
+# run is the toolchain itself, so tar skips the collisions, extracts the rest,
+# and the dependency cache does land warm. What it does cost is that setup-go
+# concludes "Cache is not found", so at post-job every job re-tars the whole
+# module and build cache and is then refused — "Failed to save: Unable to
+# reserve cache with key ..., another job may be creating this cache" — plus a
+# standing warning that teaches readers to ignore cache warnings, over a tar
+# that exits 2 and would lose any future overlap outside the toolchain subtree
+# in the same breath.
+#
+# #183 attributed that restore failure to a degraded GitHub-hosted machine and
+# moved linux to Blacksmith over it. The failure moved with it, because the
+# cause is this configuration and no runner can avoid it: on attempt 1 of the
+# run #183 cites, all three jobs failed the restore identically across three
+# runner vendors — Namespace, GitHub-hosted macOS, GitHub-hosted ubuntu. The
+# other symptom #183 cites is real, machine-specific, and is why the move
+# stands: sqlparse FAILed at 749.270s on the GitHub-hosted ubuntu job against
+# 21.389s on macos-latest in that same run, and takes 13.460s on Blacksmith.
+#
+# Installing the toolchain version instead means `go env` has nothing to
+# download and GOMODCACHE is untouched when the restore runs. Verified against
+# both toolchains with a throwaway GOMODCACHE and GOPROXY=off:
+#
+#   go1.25.13 + `toolchain go1.26.4` -> "go: downloading go1.26.4 (darwin/arm64)"
+#   go1.26.4  + `toolchain go1.26.4` -> prints the path, downloads nothing
+
+runs:
+  using: composite
+  steps:
+    # DERIVED, never a literal: a hardcoded version here would drift from
+    # go.mod silently, and the drift reads as a cache warning rather than as an
+    # error. The `go` directive is the fallback for a go.mod with no toolchain
+    # line, which is exactly the case where the collision cannot happen.
+    - id: version
+      name: resolve the Go version go.mod asks for
+      shell: bash
+      run: |
+        set -euo pipefail
+        v="$(sed -n 's/^toolchain[[:space:]][[:space:]]*go//p' go.mod | head -n 1)"
+        if [ -z "$v" ]; then
+          v="$(sed -n 's/^go[[:space:]][[:space:]]*//p' go.mod | head -n 1)"
+        fi
+        if [ -z "$v" ]; then
+          echo "::error::go.mod names neither a toolchain nor a go directive" >&2
+          exit 1
+        fi
+        echo "go-version=$v" >> "$GITHUB_OUTPUT"
+        echo "go.mod asks for Go $v"
+    - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      with:
+        go-version: ${{ steps.version.outputs.go-version }}
+        cache: true

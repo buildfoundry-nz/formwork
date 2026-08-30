@@ -1,0 +1,31 @@
+# Ported from Palletra scripts/check-frontend-module-boundaries.sh — the
+# feature->feature REGULAR-dependency half of the melos layering gate.
+#
+# Features are siblings: no packages/feature_* may declare another feature_*
+# package in its `dependencies:` section (shared code belongs in a base plt_*
+# package). feature->feature edges in `dev_dependencies:` remain ALLOWED (a
+# test-coupling that fans out only within the feature layer, forming no hub),
+# so the ban is scoped to the regular `dependencies:` block only.
+#
+# Ported as a multiline forbidden-pattern in linear RE2. The tempered
+# `(?!dev_dependencies:)` lookahead is replaced STRUCTURALLY: from the
+# `\ndependencies:` key, consume only INDENTED child lines `(?:\n[ \t][^\n]*)*?`,
+# which naturally STOP at the next top-level key (dev_dependencies: begins at
+# column 0, so an indented-line repetition can never cross it), then require an
+# indented `feature_` key. Anchoring on `\ndependencies:` (a real leading
+# newline, not the `dependencies:` substring inside `dev_dependencies:`) is what
+# keeps a feature_ dev-dep from false-firing. The reported line is the marker
+# line placed immediately above `dependencies:`.
+rules:
+  - id: m06-frontend-feature-no-feature-dep
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_*/pubspec.yaml"
+    params:
+      pattern: '\ndependencies:(?:\n[ \t][^\n]*)*?\n[ \t]+feature_[A-Za-z0-9_]*:'
+      prefilter: 'dev_dependencies'
+      multiline: true
+    cure: "A feature_* package must not depend on another feature package in its regular dependencies: (features are siblings — move shared code into a base plt_* package). A feature->feature dev_dependencies edge is allowed."
+    origin: scripts/check-frontend-module-boundaries.sh

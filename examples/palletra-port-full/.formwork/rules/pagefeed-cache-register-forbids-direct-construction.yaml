@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-pagefeed-cache-shared.sh (PR #2765 #8).
+# mount_app.go must NOT construct a pagefeed cache directly — construction
+# lives behind resolvePageFeedCache (the consult-or-construct choice stays unit-
+# pinned). Bans files.NewPageFeedCache( / sourcerouting.NewCache( in
+# mount_app.go. Comment-stripped (decomment-go).
+rules:
+  - id: pagefeed-cache-register-forbids-direct-construction
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/mount_app.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'files\.NewPageFeedCache\(|sourcerouting\.NewCache\('
+    cure: "mount_app.go must resolve the cache via resolvePageFeedCache, never construct one directly."
+    origin: scripts/check-pagefeed-cache-shared.sh

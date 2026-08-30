@@ -1,0 +1,16 @@
+rules:
+  - id: dart-forbid-build-context-lint-suppression
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+        - "frontend/test/**/*.dart"
+        - "packages/*/test/**/*.dart"
+        - "frontend/integration_test/**/*.dart"
+        - "frontend/test_driver/**/*.dart"
+    params:
+      pattern: '//\s*ignore(_for_file)?:[^/]*use_build_context_synchronously'
+    cure: "Remove the suppression and guard the post-await context use with if (!mounted) return; before touching context (Navigator, ScaffoldMessenger, Theme.of). For ConsumerWidget, use ref.mounted or pass WidgetRef into a Riverpod-aware helper."
+    origin: scripts/check-dart-forbid-build-context-lint-suppression.sh

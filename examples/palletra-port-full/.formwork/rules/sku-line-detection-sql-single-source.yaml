@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-sku-line-doors-guarded.sh (PH-5 #8147),
+# RULE B (single detector, no drift). The cross-door template-representation probe
+# SQL `source = 'template' AND bli.rated_item_id` must live ONLY in the shared
+# detector guard.go; any other non-test Go carrying it is a hand-rolled,
+# driftable copy where detection could diverge from what the sidebar displays.
+# The .sh greps raw (no comment strip), so no preprocessor.
+rules:
+  - id: sku-line-detection-sql-single-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/skuspromote/guard.go"
+    params:
+      pattern: 'source = ''template'' AND bli\.rated_item_id'
+    cure: "Route cross-door detection through skuspromote.DetectSkuLineConflict — one detector, no drift (PH-5 #8147)."
+    origin: scripts/check-sku-line-doors-guarded.sh

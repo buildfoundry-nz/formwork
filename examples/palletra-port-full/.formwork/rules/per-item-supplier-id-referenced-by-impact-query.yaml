@@ -1,0 +1,16 @@
+# Ported from scripts/check-per-item-vendor-id-wired.sh (sweep-3 #2), reader
+# half anchor 3. stockroom_supplier_impact.go's impact priced_lines subselect must
+# reference pi.vendor_id or delete/merge impact counts miscount per-item-linked
+# rows.
+rules:
+  - id: per-item-supplier-id-referenced-by-impact-query
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - 'freightworks/services/core-api/routes/stockroom/suppliers/stockroom_supplier_impact.go'
+    params:
+      pattern: 'pi\.vendor_id'
+      mode: exists
+    cure: 'stockroom_supplier_impact.go must keep referencing pi.vendor_id or impact counts miscount items linked via the per-item supplier FK (sweep-3 #2 reader half).'
+    origin: scripts/check-per-item-vendor-id-wired.sh

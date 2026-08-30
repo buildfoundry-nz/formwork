@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-fragment-single-copy-limit.sh (#8997 PR2a).
+# A manifest-driven single-copy sweep: a load-bearing geometry/format fragment
+# (point-in-polygon, point-to-segment distance, shelving-type const, ...) may
+# exist in AT MOST ONE Dart library file — a second occurrence is a pasted copy
+# that will drift. The .sh counts the *.dart files under dart_walk_dirs matching
+# each manifest row's fragment and fails when count > max.
+#
+# This port carries ONE representative row — the point-to-segment-distance helper
+# — as a pattern-count AT-MOST 1 over the Dart library scope. pattern-count sums
+# matching LINES across scope; the fixtures keep the fragment to a single line per
+# file, so the line count equals the file count the .sh measures.
+#
+# DIVERGENCE (noted for fidelity): (1) the .sh's manifest is N rows resolved in
+# one dir-walk; formwork expresses one fragment per rule, so this is a single
+# representative row rather than the whole TSV. (2) The .sh ALSO fails on
+# count == 0 (a stale fragment whose canonical copy moved/renamed) — a lower-bound
+# anti-staleness guard pattern-count's single at-most op cannot also express;
+# formwork lint owns empty-scope rot. (3) generated *.dart are excluded via scope,
+# matching the row's exclude_derived=1 flag. Scope-level finding (fire-1.want
+# carries `-`).
+rules:
+  - id: fragment-single-copy-limit
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+    params:
+      pattern: 'double _pointToSegmentDistance\(Offset p, Offset a, Offset b\)'
+      op: at-most
+      n: 1
+    cure: "This geometry fragment is load-bearing and must have exactly one copy across the Dart library tree. Extract it to a single shared helper and import it; delete the pasted copy (#8997 PR2a)."
+    origin: scripts/check-fragment-single-copy-limit.sh

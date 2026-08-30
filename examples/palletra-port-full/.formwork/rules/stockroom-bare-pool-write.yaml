@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-stockroom-bare-pool-write.sh (sweep-2 #4).
+# No non-test routes/stockroom_*.go file may call h.db.Exec / h.db.Query /
+# h.db.QueryRow directly against the bare *pgxpool.Pool — that runs with no
+# tenant GUC and bypasses RLS. Passing h.db as an ARGUMENT to
+# db.WithOrg(..., h.db, ...) is fine: the pattern targets a METHOD CALL on
+# the pool (h.db. followed by Exec/Query/QueryRow), not the bare reference.
+rules:
+  - id: stockroom-bare-pool-write
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/stockroom_*.go"
+        - "freightworks/services/core-api/routes/**/stockroom_*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: 'h\.db\.(Exec|Query|QueryRow)\b'
+    cure: "Route the statement through a pgx.Tx from db.WithOrg(ctx, h.db, claims, func(tx pgx.Tx) error { ... }) so PostgreSQL RLS scopes it to the caller's org; a detached goroutine must capture claims first."
+    origin: scripts/check-stockroom-bare-pool-write.sh

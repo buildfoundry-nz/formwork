@@ -1,0 +1,28 @@
+# Ported from Palletra scripts/check-migration-tests-use-shared-structural-helper.sh (#7157).
+# The structural (SQL-shape) migration tests must not re-fork the read-the-.sql
+# preamble: os.ReadFile( may appear on NO uncommented line of
+# migrations/*_test.go EXCEPT the shared harness (shared_harness_test.go)
+# and the *_integration_test.go files (which read fixtures for applied-state
+# assertions, not the structural read preamble). decomment-go strips comments
+# first so a commented os.ReadFile mention does not false-fire — the formwork
+# equivalent of the .sh's comment filter.
+#
+# NOTE (partial port): the .sh additionally FAILS closed if the harness file is
+# missing or no longer declares `func openMigration(`. That "the anchor must
+# exist" tooth is a required-pattern concern and is not expressible in this one
+# forbidden-pattern rule; only the os.ReadFile-fork ban is ported here.
+rules:
+  - id: migration-tests-use-shared-structural-helper
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*_test.go"
+      exclude:
+        - "**/shared_harness_test.go"
+        - "**/*_integration_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'os\.ReadFile\('
+    cure: "Call openMigration(t, path) for raw SQL text or normCase(t, path) for the case-insensitive form (both in migrations/shared_harness_test.go); never re-paste the os.ReadFile preamble."
+    origin: scripts/check-migration-tests-use-shared-structural-helper.sh

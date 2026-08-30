@@ -1,0 +1,23 @@
+rules:
+- id: go-signatures-ban-bare-any
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include:
+    - '**/*.go'
+    exclude:
+    - '**/node_modules/**'
+    - '**/.worktrees/**'
+    - '**/.claude/worktrees/**'
+    - '**/vendor/**'
+    - '**/gen/**'
+    - '**/generated/**'
+    - '**/internal/proto/**'
+    - '**/*_pb.go'
+    - '**/zz_generated_*.go'
+    - '**/*_generated.go'
+    - scripts/**
+  params:
+    pattern: (func\s+([A-Za-z_][A-Za-z0-9_]*\s*)?\([^)]*\s(\.\.\.)?(any|interface\{\s*\})\b)|(\bchan\s+(any|interface\{\s*\})\b)|(\[[A-Z][A-Za-z0-9_]*\s+interface\{\s*\}[],\s])|(^\s*type\s+[A-Z][A-Za-z0-9_]*\s*=\s*(any|interface\{\s*\})\b)|(^\s*type\s+[A-Z][A-Za-z0-9_]*\s+interface\s*\{\s*\})
+  cure: Name a real interface listing the method set you need, use the proto-generated type, or decode at the boundary into a typed struct. Write [T any] for unconstrained generics, never [T interface{}].
+  origin: scripts/check-go-weak-type-bans.sh

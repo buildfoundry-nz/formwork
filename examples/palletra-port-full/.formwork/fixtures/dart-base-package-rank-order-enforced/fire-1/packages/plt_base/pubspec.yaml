@@ -1,0 +1,13 @@
+name: plt_base
+description: Lowest-layer base package (rank 0).
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  meta: ^1.15.0
+  # REVERSE EDGE: rank-0 plt_base depends UP into rank-2 plt_canvas_kit,
+  # re-coupling the split monolith. This is the violation.
+  plt_canvas_kit:
+    path: ../plt_canvas_kit

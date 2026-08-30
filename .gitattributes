@@ -1,0 +1,7 @@
+# The generated git-hook shims are tracked (#146 D4), so for the first time
+# formwork's own executable output routes through git's end-of-line machinery.
+# Under core.autocrlf=true a checkout would rewrite them to CRLF, and a shell
+# script whose shebang line ends in CR cannot be executed at all — the CR becomes
+# part of the interpreter name. Pin LF so an operator who never touched the file
+# does not get a broken hook from a plain clone.
+.formwork/hooks/* text eol=lf

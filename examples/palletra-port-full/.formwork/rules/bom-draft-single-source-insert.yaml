@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-bom-draft-single-source.sh (#2960) — Rule B.
+# The draft-creation `INSERT INTO palletra.boms` is single-sourced: it may appear
+# only in internal/bomdraft/bomdraft.go, which owns the recomputed-totals + draft CTE
+# guarantees. Every other non-test, non-testsupport Go file is banned. The only other
+# boms STOREs are test/seeder ones (*_test.go and //go:build integration
+# testsupport), both carved out, so the ban is exact.
+rules:
+  - id: bom-draft-single-source-insert
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/services/core-api/internal/bomdraft/bomdraft.go"
+        - "**/testsupport/**"
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'INSERT INTO palletra\.boms\b'
+    cure: "Call bomdraft.EnsureActiveDraftBom(ctx, tx, projectID, draftedBy) instead of inlining INSERT INTO palletra.boms (#2960)."
+    origin: scripts/check-bom-draft-single-source.sh

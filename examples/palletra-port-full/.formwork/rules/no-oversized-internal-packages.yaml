@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-no-oversized-internal-packages.sh (SV-ARC-2).
+#
+# Every directory holding a non-test *.go file under an `internal/` segment OR
+# under services/core-api/routes/ is scored in isolation at its own depth and
+# fails when it exceeds caps: internal/ >30 files or >2000 LOC; routes/ >30
+# files or >3500 LOC — with a frozen shrink-only baseline for the route packages
+# already over the routes cap when it landed (workflow, pricing).
+#
+# PORT MAPPING: COMMAND ESCAPE. This is a per-DIRECTORY aggregate LOC + file-
+# count cap. formwork's file-size type is strictly PER-FILE; there is no
+# declarative type that sums LOC across a package directory at its own depth, nor
+# one that carries the Option-A frozen per-package baseline. The .sh does its own
+# `find … | wc -l` aggregation grouped by owning directory and applies the
+# ROUTE_BASELINE ratchet. Not expressible declaratively, so this is the spec's
+# sanctioned escape: params.cmd runs the real check, which verifies in CI. No
+# fixture (formwork lint enumerates it).
+rules:
+  - id: no-oversized-internal-packages
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-no-oversized-internal-packages.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/**/internal/**/*.go"
+        - "freightworks/services/core-api/routes/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-no-oversized-internal-packages.sh
+      expect:
+        exit: 0
+    cure: "Split the package into sub-directories per natural domain boundary (see the canonical pre-SV-ARC-2 worked splits: internal/scan/<domain>/, internal/metrics/<role>/, routes/stockroom/<domain>/). Never raise the caps; split baseline packages off the ratchet list, never grow them (SV-ARC-2)."
+    origin: scripts/check-no-oversized-internal-packages.sh

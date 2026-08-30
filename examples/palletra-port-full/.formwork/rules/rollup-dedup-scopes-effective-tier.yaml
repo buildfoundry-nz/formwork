@@ -1,0 +1,93 @@
+# Ported from Palletra scripts/check-rollup-tier-key-written.sh (Q5-2 / A6).
+# The pricing rollup dedup folds racking/floor pages by a per-page footprint
+# scope key (tier_level) so different tiers sum instead of collapsing into
+# one. The gate pins four things across four files with whole-word grep (plain
+# grep, no comment stripping -> preprocess: raw here). Removing any one re-opens
+# the silent multi-tier under-count. Each whole-word anchor is its own
+# required-pattern exists rule (an OR rule would pass with only one present —
+# weaker than the gate, which fails if ANY is missing).
+rules:
+  - id: rollup-dedup-scopes-effective-tier
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/calceval/rollupdedup/dedup.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\bEffectiveTier\b'
+      mode: exists
+    cure: "dedup.go must scope the fold by EffectiveTier (the tier axis); scoping only by facility_unit_id is the NULL no-op that collapses multi-tier pages into one."
+    origin: scripts/check-rollup-tier-key-written.sh
+  - id: rollup-resolve-tier-func-present
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/scan/project/project_gauges.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\bfunc ResolveTier\b'
+      mode: exists
+    cure: "project_gauges.go must declare func ResolveTier — EffectiveTier must stay backed by the tier resolver, not a renamed weaker identifier."
+    origin: scripts/check-rollup-tier-key-written.sh
+  - id: rollup-resolve-tier-floorlevel-fallback
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/scan/project/project_gauges.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\btierLevel\b'
+      mode: exists
+    cure: "ResolveTier must fall back to the extraction-written tierLevel when no manual override is set, else the scope key keys on a NULL-only manual column."
+    origin: scripts/check-rollup-tier-key-written.sh
+  - id: rollup-persist-resolves-tier-level
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/parsecompose/persist.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\bresolveTierLevels\b'
+      mode: exists
+    cure: "persist.go must resolve floor levels cross-page via resolveTierLevels (Tier v2, #7591), else the rollup scope key is never populated."
+    origin: scripts/check-rollup-tier-key-written.sh
+  - id: rollup-persist-writes-tier-level
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/parsecompose/persist.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\btier_level\b'
+      mode: exists
+    cure: "persist.go must write tier_level on every extracted page — the scope key must be a column extraction populates, not a NULL no-op."
+    origin: scripts/check-rollup-tier-key-written.sh
+  - id: rollup-multitier-sum-test-present
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/calceval/consolidate_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\bTestDedupCrossPageRollupRows_MultiTier_NullUnit_SumsAcrossFloorLevels\b'
+      mode: exists
+    cure: "consolidate_test.go must keep the production-shape multi-tier SUM test (NULL facility_unit, different tier_levels must sum) — the WI-12 regression."
+    origin: scripts/check-rollup-tier-key-written.sh
+  - id: rollup-tier-probes-test-present
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/calceval/consolidate_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\bTestDedup_EndToEnd_TierProbes\b'
+      mode: exists
+    cure: "consolidate_test.go must keep the four end-to-end tier probes (standard/lower-upper/mixed/empty regression set)."
+    origin: scripts/check-rollup-tier-key-written.sh

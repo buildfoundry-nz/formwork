@@ -1,0 +1,46 @@
+# Ported from Palletra scripts/check-core-terraform-deploy-image-vars-must-match.sh (#3918 / #1893 /
+# #7183). Every *_image variable on the shared palletra/{env}/core Terraform
+# root defaults to gcr.io/cloudrun/placeholder, so any apply that OMITS a
+# service's image silently resets that service to the placeholder. The deployers
+# compensate by reading every sibling's live image through on apply. This gate
+# makes that read-through mechanical and BIDIRECTIONAL over the canonical
+# CORE_IMAGE_VARS set: every workflow that applies the `core` root (a
+# working-directory line ending in /core, NOT /core-api) must pass EXACTLY the
+# declared image vars — a deployer omitting a declared var fails (missing
+# read-through → placeholder reset), and a deployer passing an undeclared
+# *_image var fails (manifest drift). Full-line comments are stripped first so an
+# illustrative `# -var=...` neither satisfies nor trips a check.
+#
+# Why the ESCAPE HATCH (type: command): the invariant is an EXACT bidirectional
+# set-equality between the vars a triggered file passes and a manifest embedded
+# in the gate (CORE_IMAGE_VARS), where the trigger itself is a content predicate
+# (a /core working-directory line) rather than a path glob. A same-file
+# trigger⇒companion rule checks presence of one companion, not exact set equality
+# in both directions against an in-script manifest, so pair-consistency cannot
+# express the "no undeclared var" reverse half. It runs the real check.
+rules:
+  - id: core-terraform-deploy-image-vars-must-match
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-core-terraform-deploy-image-vars-must-match.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - ".github/workflows/**/*.yml"
+    params:
+      cmd:
+        - bash
+        - scripts/check-core-terraform-deploy-image-vars-must-match.sh
+      expect:
+        exit: 0
+    cure: "In every workflow that applies the shared `core` Terraform root, pass exactly the declared CORE_IMAGE_VARS as `-var=\"<x>_image=...\"` — add any omitted var (an omitted var resets that service to gcr.io/cloudrun/placeholder, #1893) and add any newly-passed var to CORE_IMAGE_VARS to mirror core/variables.tf (#3918)."
+    origin: scripts/check-core-terraform-deploy-image-vars-must-match.sh

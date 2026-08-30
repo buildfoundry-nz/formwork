@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-partition-width-no-hardcoded-vocab.sh rule 3 (#6149).
+# The FE (feature_dimension presentation/ + providers/, files named partition_width_*.dart)
+# must never hardcode the jurisdiction allow-set: no `_kPartitionWidthOptionsMm` const,
+# no non-empty typed int list `<int>[90...`, no literal fed to `toleranceMm:`. The
+# picker's options MUST come from partitionWidthPolicyProvider (server-owned). The
+# empty `<int>[]` unconstrained default is fine (pattern requires a digit after
+# the bracket). One of four coupled sub-rules split from the .sh.
+rules:
+  - id: partition-width-fe-no-hardcoded-vocab
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/presentation/**/partition_width_*.dart"
+        - "packages/feature_dimension/lib/providers/**/partition_width_*.dart"
+    params:
+      pattern: '_kPartitionWidthOptionsMm|<int>\[\s*[0-9]|toleranceMm:\s*(const\s*)?(<int>\s*)?\[\s*[0-9]'
+    cure: "Read the partition-width allow-set from partitionWidthPolicyProvider (server-owned, #6149); never hardcode the list in the FE."
+    origin: scripts/check-partition-width-no-hardcoded-vocab.sh

@@ -1,0 +1,32 @@
+rules:
+  # Port of scripts/check-dart-sse-consumers-require-reconnect-loop.sh (#1644).
+  # #5957 built the canonical self-healing SSE reconnect loop
+  # (autoReconnectSseStream). A consumer that hand-rolls its own
+  # `while (true) { await for (...) {...} return; }` loop silently DIES on the
+  # first clean server close. The .sh enumerates SSE consumers STRUCTURALLY —
+  # any lib source that appends the SSE Accept header 'text/event-stream' — and
+  # for EACH requires a reference to autoReconnectSseStream.
+  #
+  # This is exactly a same-file pair-consistency: the trigger (the header
+  # literal) obliges the companion (autoReconnectSseStream) in the same file.
+  # Scope note: the .sh also bans .activeBearer in the same consumers; that
+  # secondary tooth is a second pair and is not carried here — a rule expresses
+  # one trigger/requires pair, and the load-bearing invariant of this gate is
+  # "delegate to the canonical reconnect loop".
+  - id: dart-sse-consumers-require-reconnect-loop
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+    params:
+      trigger: "'text/event-stream'"
+      requires: 'autoReconnectSseStream'
+    cure: "Delete the hand-rolled while-loop and delegate to autoReconnectSseStream (packages/plt_core/lib/sse/sse_retry.dart); the reconnect cursor is server-driven inside the loop, never a per-consumer subscribe() arg."
+    origin: scripts/check-dart-sse-consumers-require-reconnect-loop.sh

@@ -1,0 +1,51 @@
+# Ported from Palletra scripts/check-cross-browser-spec-matrix.sh (forbidden-pattern).
+# Protects the one-spec-N-targets cross-browser visual-regression architecture.
+# Sub-rule B (specs must not read the matrix cell) and sub-rule D (no hand-rolled
+# 'xbrowser:' checkpoint names) are line-shaped forbidden patterns over the
+# TOP-LEVEL integration specs (frontend/integration_test/*_test.dart — the single
+# `*` glob is the maxdepth-1 the .sh enforces; the support/ subtree is out of
+# scope). Sub-rule C (the extended driver must keep routing screenshots) is a
+# required anchor over the driver file. Single quotes in the cell/checkpoint
+# literals are written as \x27 so the RE2 pattern needs no YAML escaping.
+#
+# Divergence note: the .sh strips comment-only lines (code_grep) before matching.
+# The two rules below strip differently, and deliberately.
+#
+# Sub-rules B and D stay on RAW source, which is STRICTER than the .sh (a prose
+# mention of DeviceMatrixCell in a // comment fires here and not there). The
+# reason is the pattern, not a missing preprocessor: two of its four alternatives
+# — `fromEnvironment("CELL_` and `"xbrowser:` — match INSIDE a string literal,
+# and formwork's Dart projection (code-only-dart) blanks string contents. Running
+# these under it would keep the fixtures green while silently retiring half the
+# pattern, so raw is the sound choice and the extra strictness is the price.
+#
+# Sub-rule C is a required anchor, where raw fails the other way: a comment
+# naming handleCrossBrowserCapture satisfied it, so the driver could stop routing
+# screenshots and keep this rule green (fire-2 is that shape; #263.3). Its anchor
+# is a bare identifier in code, nothing it needs lives in a literal, so it reads
+# through code-only-dart and matches the .sh's comment-stripping exactly.
+#
+# Sub-rule A (per-browser spec FILENAME ban) is a filename-shape rule, not a
+# content pattern, and is not ported here (see notes).
+rules:
+  - id: cross-browser-specs-must-not-read-matrix-cell
+    type: forbidden-pattern
+    scope:
+      include:
+        - "frontend/integration_test/*_test.dart"
+    params:
+      pattern: 'DeviceMatrixCell|BrowserEngine\.|fromEnvironment\(["\x27]CELL_|["\x27]xbrowser:'
+    cure: "Specs must not read the matrix cell or hand-roll an 'xbrowser:' checkpoint name; only the harness reads the cell and builds checkpoint names."
+    origin: scripts/check-cross-browser-spec-matrix.sh
+
+  - id: cross-browser-driver-screenshot-capture-routed
+    type: required-pattern
+    scope:
+      include:
+        - "frontend/test_driver/integration_test.dart"
+    preprocess: code-only-dart
+    params:
+      pattern: 'handleCrossBrowserCapture'
+      mode: exists
+    cure: "The extended driver must keep routing every screenshot through handleCrossBrowserCapture, or checkpoints silently stop being compared."
+    origin: scripts/check-cross-browser-spec-matrix.sh

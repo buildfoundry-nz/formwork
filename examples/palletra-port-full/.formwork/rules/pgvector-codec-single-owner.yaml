@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-pgvector-codec-single-owner.sh (#2413 PH-4).
+#
+# Only freightworks/services/core-api/internal/pgvector may convert between a Go
+# float slice and a bracketed pgvector literal. A second copy of that codec
+# silently drifts from the first, and the vector columns they write are read by
+# each other's subsystems. Detection is on the two signals that TOGETHER
+# constitute such a codec in ONE non-test Go file:
+#   1. float text conversion — strconv.FormatFloat( or strconv.ParseFloat(
+#   2. the literal's bracket delimiters — a '[' / ']' or "[" / "]" byte/string
+#      literal, OR the ::vector cast the literal exists to feed.
+# Neither signal alone fires.
+#
+# PORT MAPPING: a file-level co-occurrence, order-independent (the .sh greps the
+# raw file for each signal separately). Ported as a multiline regexp2
+# forbidden-pattern that fires on signal-2 (bracket literal or ::vector) only
+# when signal-1 (strconv float conversion) is also present — asserted via a
+# lookbehind OR a lookahead so a Format codec (strconv before the bracket) and a
+# Parse codec (bracket before the strconv) both fire, matching the .sh's two
+# independent greps. No preprocess: the .sh greps the raw file (comments
+# included), so this stays raw too. The one codec home and the gate's own
+# synthetic fixtures are scope.excluded, exactly as the .sh's case-skips.
+rules:
+  - id: pgvector-codec-single-owner
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/**/*_test.go"
+        - "freightworks/services/core-api/internal/pgvector/**"
+        - "freightworks/internal/gatetests/**"
+    params:
+      # Signal-2 (bracket literal / ::vector) is the line-anchored trigger; signal-1
+      # (strconv float conversion) is a whole-file require_present guard. This is
+      # the exact shape of the origin's two independent greps (grep Float( && grep
+      # bracket) and replaces a regexp2 pattern whose variable-length lookbehind
+      # (?<=Float\([\s\S]*) backtracked ~20ms/file over 1863 go files (37s — the
+      # single worst rule). The trigger anchors on the bracket line (fixture want).
+      pattern: '(?:''\[''|''\]''|"\["|"\]"|::vector)'
+      require_present:
+        - 'strconv\.(?:Format|Parse)Float\('
+    cure: "Call pgvector.Format / pgvector.Parse from freightworks/services/core-api/internal/pgvector — the ONE codec between []float32 and the pgvector literal. Never add an exemption: a second copy drifts from the first and the columns they write are read across subsystems (#2413 PH-4)."
+    origin: scripts/check-pgvector-codec-single-owner.sh

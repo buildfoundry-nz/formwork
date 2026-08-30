@@ -1,0 +1,6 @@
+#!/usr/bin/env tcsh
+# VIOLATION: tcsh through the `env` form. The interpreter name is not reached by
+# a shebang matcher that only looks at the path, so the `env <interp>` shape is
+# proved separately from the absolute-path shape in fire-2.
+setenv FLUTTER_SUPPRESS_ANALYTICS 1
+flutter analyze && gofmt -l .

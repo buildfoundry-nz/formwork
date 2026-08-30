@@ -1,0 +1,16 @@
+# Ported from Palletra scripts/check-issue-filing-skill-contract.sh (#7744), invariant R1:
+# the /file-issue skill (.claude/skills/file-issue/SKILL.md) must derive labels
+# at runtime — it MUST reference `gh label list`, never a hard-coded allowlist.
+# The skill is prose, so a careless edit could silently drop this; an exists-mode
+# required rule pins the token's presence.
+rules:
+  - id: file-issue-skill-labels-derived-at-runtime
+    type: required-pattern
+    scope:
+      include:
+        - ".claude/skills/file-issue/SKILL.md"
+    params:
+      pattern: 'gh label list'
+      mode: exists
+    cure: "Keep the /file-issue skill referencing `gh label list` — labels are derived at runtime, never a hard-coded allowlist (R1, #7744)."
+    origin: scripts/check-issue-filing-skill-contract.sh

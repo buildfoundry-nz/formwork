@@ -1,0 +1,36 @@
+# Ported from Palletra scripts/check-dart-weak-type-casts-banned.sh.
+# The .sh bans ~15 weak-type escape-hatch shapes (categories A-E). A single
+# forbidden-pattern cannot express all of them; this rule ports the most
+# distinctive and lowest-false-positive shape — a cast to a weak top-type
+# `as dynamic|Object|Object?|Function` — which is the .sh's category (E2) plus
+# the `as` limb of category (A). The remaining category-A/B/C/D shapes (weak
+# type annotations, weak generic instantiations, weak typedef/empty-class,
+# Function-typed params) and the E1/E3/E4 limbs (ignore directives, non-null
+# `!`, chained `as..as`) are noted in skipped[] as beyond a single pattern.
+# Generated Dart is excluded (generators emit weak types legitimately).
+rules:
+  - id: dart-forbid-weak-type-casts
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.gr.dart"
+        - "**/*.config.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbserver.dart"
+        - "**/*.pbgrpc.dart"
+        - "**/generated/**"
+        - "shared/generated/**"
+        - "**/node_modules/**"
+        - "**/build/**"
+        - "**/.dart_tool/**"
+    params:
+      pattern: '\bas[[:space:]]+(dynamic|Object\?|Object|Function)\b'
+    cure: "Do not launder a value through a weak top-type cast. Declare the actual class / sealed union, use a Freezed value object, or narrow the wire shape via fromJson before propagating a typed value inward."
+    origin: scripts/check-dart-weak-type-casts-banned.sh

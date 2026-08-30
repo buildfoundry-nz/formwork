@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-pdftrace-single-text-walk.sh (sweep-1 #6,
+# hardened sweep-3 #4). The Phase-4 descope exposed a duplicated PDFium
+# text-extraction pipeline: the text path (ExtractPageContent -> scale/pitch
+# detection) and the geometry path (ExtractDocumentLayout -> page_layout rows)
+# each carried a line-for-line copy of the GetPageTextStructured walk. Two copies
+# of one PDFium walk WILL drift — a grouping tweak landing in one path silently
+# forks what detection sees from what the geometry rows store. The invariant: the
+# method call `.GetPageTextStructured(` appears at most ONE call site across
+# non-test Go in internal/pdftrace (the shared clusteredPageText helper); a second
+# call is a re-forked walk.
+#
+# Ported as pattern-count (op: at-most, n: 1) over the pattern
+# `\.GetPageTextStructured\(`, comment-stripped via decomment-go so a commented-
+# out call cannot inflate the count. A whole-scope tally > 1 fires (scope-level;
+# fire-1.want carries `-`).
+#
+# DIVERGENCE (noted): (1) the .sh removes ALL whitespace before counting so a
+# gofmt receiver-dot-newline split (`i.\n  GetPageTextStructured(`) still counts;
+# pattern-count is line-oriented, so a call split across a newline would be
+# missed. (2) The .sh also counts method-VALUE / EOF-follow forms
+# (`, i.GetPageTextStructured`, `return i.GetPageTextStructured }`) via a
+# `[^A-Za-z0-9_{]|$` follow class; this port counts the call form `(` only.
+# (3) pattern-count tallies matching LINES, not occurrences, so two calls on one
+# line would count once. All three narrow the counter slightly; the primary
+# defect — a second call site on its own line, the shape a forked walk actually
+# takes — is caught identically.
+rules:
+  - id: pdftrace-single-text-walk
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/pdftrace/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\.GetPageTextStructured\('
+      op: at-most
+      n: 1
+    cure: "Every consumer of PDFium structured text goes through the one clusteredPageText helper (extractor.go) — one call shape, one grouping heuristic. Extend the helper; never re-fork the .GetPageTextStructured( walk (sweep-1 #6 / sweep-3 #4)."
+    origin: scripts/check-pdftrace-single-text-walk.sh

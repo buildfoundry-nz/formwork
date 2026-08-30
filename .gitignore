@@ -1,0 +1,11 @@
+/formwork
+*.test
+cover.out
+dist/
+
+# Cloned validating targets (independent git repos; managed via repos.txt +
+# `make sync`, never committed here). Kept out of the tree that formwork
+# self-hosts on — see the `fmt` target, which lints tracked files only.
+projects/
+.superpowers/
+__pycache__/

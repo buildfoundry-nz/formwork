@@ -1,0 +1,32 @@
+# Ported from Palletra scripts/check-extraction-runs-writes-limited-to-start-sites.sh (#3466).
+# Only extraction-START sites may CREATE (INSERT) or ADOPT a
+# palletra.extraction_attempts row; every read path must resolve the project's
+# latest run (locateExtractionRun), never manufacture one (a manufactured
+# 'pending' orphan 409s Retry forever). A file is a WRITER if, once Go
+# comments are stripped, it raw-STOREs into the table or calls
+# InsertOrClaimActive(. Every writer must be one of the 8 allowlisted START
+# sites — ported here as scope.exclude (the .sh's ALLOWLIST). Comment-aware via
+# decomment-go.
+rules:
+  - id: extraction-runs-writes-limited-to-start-sites
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/**/*.go"
+        - "freightworks/internal/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/internal/glyphcount/glyphcount.go"
+        - "freightworks/services/core-api/internal/automation/dispatch.go"
+        - "freightworks/services/core-api/internal/parseruns/insert.go"
+        - "freightworks/services/core-api/internal/parseruns/reset.go"
+        - "freightworks/services/core-api/internal/parseruns/retry.go"
+        - "freightworks/services/core-api/internal/intakeflow/intake_project.go"
+        - "freightworks/services/core-api/routes/upload/upload_complete.go"
+        - "freightworks/services/core-api/routes/upload/upload_amendment.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'INSERT INTO palletra\.extraction_attempts|InsertOrClaimActive\('
+    cure: "Read paths (detection, status, metrics) must resolve the project's latest run (locateExtractionRun), never create one; adding a run-creating entry point is a reviewed change to the allowlist (#3466)."
+    origin: scripts/check-extraction-runs-writes-limited-to-start-sites.sh

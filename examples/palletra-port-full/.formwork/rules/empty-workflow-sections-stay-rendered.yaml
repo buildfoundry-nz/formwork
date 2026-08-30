@@ -1,0 +1,33 @@
+# Ported from Palletra scripts/check-empty-workflow-sections-stay-rendered.sh
+# (W1 keystone gate). An EMPTY annotation-list section must stay visible
+# (header + Add button + empty-state copy) and be dropped ONLY when its def is in
+# the workflowstrategy.CollapseWhenEmpty set. workflow_panels.go must NOT gate the
+# empty-section drop on a hand-rolled section-code allowlist in ANY form — a
+# quoted literal (`rs.code != "partition_widths"`), a NAMED CONSTANT (the actual
+# 126c03d08 bug, `rs.code != partitionWidthsSectionTag`), or a local-var alias.
+#
+# The invariant: every compound `blankAnnotationList &&` drop condition MUST
+# reference CollapseWhenEmpty on that SAME line. The .sh greps every
+# `blankAnnotationList &&` line and fires any that does not contain
+# CollapseWhenEmpty. That is a same-line "A but not B" test, which RE2 cannot express
+# (no lookaround) — so this ports to forbidden-pattern with syntax: regexp2 and a
+# negative lookahead: a line containing `blankAnnotationList &&` and NOT
+# containing CollapseWhenEmpty anywhere. The legit bare `if blankAnnotationList {`
+# attachment (no `&&`) and the per-section `rs.code == …` copy compare inside it
+# are not on an `blankAnnotationList &&` line, so neither is a false positive.
+#
+# decomment-go strips `//` comments first (the .sh greps raw; stripping is a
+# strict improvement — a doc-comment naming the pattern cannot false-fire).
+rules:
+  - id: empty-workflow-sections-stay-rendered
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/workflow/workflow_panels.go"
+    preprocess: decomment-go
+    params:
+      syntax: regexp2
+      pattern: '^(?!.*CollapseWhenEmpty).*blankAnnotationList\s*&&'
+    cure: "Gate the empty-section drop on workflowstrategy.CollapseWhenEmpty[rs.code], never a section-code compare (quoted literal, named constant, or local-var alias). An empty draw section dropped by code comes back as no row and the Flutter sidebar renders a blank body with no Add button."
+    origin: scripts/check-empty-workflow-sections-stay-rendered.sh

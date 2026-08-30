@@ -1,0 +1,18 @@
+# Ported from Palletra scripts/check-detection-plan-zone-gantry-approval.sh (#6386) — Rule A.
+# Zone/gantry derived-detection dispatch must gate approval PER PAGE. The single file
+# internal/autodetect/plan.go must reference detectiongates.CheckZonesApprovalGate,
+# so pagesPassingZonesApproval actually consults the page-scoped zones gate.
+# Comments are stripped so prose mentioning the symbol cannot satisfy the anchor.
+rules:
+  - id: detection-plan-zones-approval-gate
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/autodetect/plan.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'CheckZonesApprovalGate'
+      mode: exists
+    cure: "plan.go must keep calling detectiongates.CheckZonesApprovalGate so the zones detection plan is page-scoped (#6386)."
+    origin: scripts/check-detection-plan-zone-gantry-approval.sh

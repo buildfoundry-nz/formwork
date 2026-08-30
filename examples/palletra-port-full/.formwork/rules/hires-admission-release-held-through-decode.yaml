@@ -1,0 +1,38 @@
+# Ported from Palletra scripts/check-hires-admission-release-held-through-decode.sh (P4-2, #3323).
+# RenderPageFileToPNGUnbounded (and the render funcs it flows through) returns a
+# release func() representing a held slice of the weighted hi-res admission
+# budget. The release MUST stay held across the caller's whole decode/OCR window
+# — the caller must `defer release()` immediately after the nil-error check, OR
+# (the retain-then-Close shape) store it on a struct field to be freed by that
+# value's deferred Close(). A captured release that does NEITHER leaks the
+# admission slot forever (or frees it at the wrong point), reopening the #3323
+# OOM the admission model exists to close.
+#
+# The trigger is the 5-value capture shape unique to consuming a render result:
+# `<a>, <b>, <c>, release, err :=` (three leading LHS names, then release, then
+# err — the P2-2 contract). Scoping to the 5-value shape deliberately excludes
+# the budget primitive's own 2-value acquire calls (AcquireFullDetailWeighted), which
+# legitimately compose the release rather than defer it. The companion is either
+# `defer release()` (same-scope) or `<recv>.<field> = release` (retain-on-field).
+# This is exactly a pair-consistency: trigger = the capture, requires = one of
+# the two release-holding shapes.
+#
+# DIVERGENCE (noted): the .sh scopes the requires to the SAME FUNCTION body (it
+# walks from the capture line to the next top-level `func `); pair-consistency is
+# same-FILE. A file whose capture is in one func and whose defer/field-store is
+# in an unrelated func would pass here but fail the .sh. The real call-site shape
+# (capture + hold in one func) is enforced faithfully.
+rules:
+  - id: hires-admission-release-held-through-decode
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      trigger: '[A-Za-z_]\w*\s*,\s*[A-Za-z_]\w*\s*,\s*[A-Za-z_]\w*\s*,\s*release\s*,\s*err\s*:='
+      requires: 'defer\s+release\(\)|\.[A-Za-z_]\w*\s*=\s*release'
+    cure: "Hold the captured hi-res admission release across the whole decode/OCR window: either `defer release()` immediately after the nil-error check (same-scope shape), or store it on a struct field freed by a deferred Close() (retain-then-Close shape, e.g. ocrcrop.Page). Neither is the #3323 slot leak."
+    origin: scripts/check-hires-admission-release-held-through-decode.sh

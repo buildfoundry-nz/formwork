@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-dart-footer-flip-seam-owns-notifier-clear.sh (#3872 /
+# #4628), RULE A — only the footer-flip seam file may read the optimistic
+# primary-action notifier; any leaf under packages/feature_dimension/lib or
+# packages/plt_canvas_kit/lib/measure that reads
+# `plotOptimisticPrimaryActionProvider(...).notifier` is re-deriving show/clear
+# for itself and can leave the wrong button stuck on throw. Ported as a
+# forbidden-pattern over the measure surface with the seam file carved out via
+# except.paths (the .sh content-anchors the seam by its publishFooterToggle def;
+# the port pins it by path). RULE B (the seam must name runWithFooterToggle + call
+# .show(/.clear() is the seam-liveness half and is not the leaf ban ported here.
+#
+# FP FIX: the .sh content-anchors the seam to whichever file DEFINES
+# `void publishFooterToggle(` under the two measure lib trees; on develop that file
+# is packages/plt_canvas_kit/lib/measure/providers/footer_session_toggle.dart
+# (publishFooterToggle / resetFooterFlip legitimately read the optimistic notifier
+# there — that IS the seam), NOT the feature_dimension path the original port pinned
+# (which does not exist on develop). Pinning only the wrong path made the real
+# seam a false positive. except.paths now carves out the seam at BOTH known
+# locations so the seam's own notifier reads are silent on clean develop while a
+# genuine leaf elsewhere still fires.
+rules:
+  - id: dart-footer-flip-seam-owns-notifier-clear
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/feature_dimension/lib/**/*.dart"
+        - "packages/plt_canvas_kit/lib/measure/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+    except:
+      paths:
+        - "packages/plt_canvas_kit/lib/measure/providers/footer_session_toggle.dart"
+        - "packages/feature_dimension/lib/providers/footer_session_toggle.dart"
+    params:
+      pattern: 'plotOptimisticPrimaryActionProvider\([^)]*\)\.notifier'
+    cure: "Route optimistic show/clear through the footer-flip seam (runWithFooterToggle / publishFooterToggle / resetFooterFlip) so a throw always clears the override; a leaf must not read plotOptimisticPrimaryActionProvider(...).notifier (#4628)."
+    origin: scripts/check-dart-footer-flip-seam-owns-notifier-clear.sh

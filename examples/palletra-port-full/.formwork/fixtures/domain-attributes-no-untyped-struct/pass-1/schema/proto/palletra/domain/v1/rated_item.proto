@@ -1,0 +1,10 @@
+syntax = "proto3";
+package palletra.domain.v1;
+
+import "google/protobuf/struct.proto";
+
+// Stockroom dynamic-attribute bag: supplier-specific open key/values, untyped by design.
+message RatedItem {
+  string id = 1;
+  google.protobuf.Struct attributes = 5;
+}

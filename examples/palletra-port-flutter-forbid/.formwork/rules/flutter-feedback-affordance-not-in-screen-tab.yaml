@@ -1,0 +1,18 @@
+rules:
+  # Port of scripts/check-flutter-feedback-affordance-not-in-screen-tab.sh.
+  # The report-a-bug affordance is an appbar `CritiqueButton`, never an
+  # in-screen `*CritiqueTab` floating over the canvas. Any identifier of the
+  # form Feedback<...>Tab (class decl OR constructor usage) under any Flutter
+  # lib root FAILs. `CritiqueButton` (ends in Button, not Tab) never matches.
+  - id: flutter-feedback-affordance-not-in-screen-tab
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+    preprocess: raw
+    params:
+      pattern: '(?:Critique|Feedback)[A-Za-z0-9_]*Tab\b'
+    cure: "The report-a-bug affordance is CritiqueButton in the appbar, never an in-screen *CritiqueTab. Inject CritiqueButton into the screen's ShellHeader (or AppBar.actions)."
+    origin: scripts/check-flutter-feedback-affordance-not-in-screen-tab.sh

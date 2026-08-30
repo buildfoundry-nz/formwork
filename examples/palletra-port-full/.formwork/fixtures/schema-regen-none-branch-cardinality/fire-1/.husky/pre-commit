@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+SCHEMA_SYNC_DECISION=$(go run scripts/dev/schema-regen-choice.go)
+
+# First buf-touching block
+if [ "$SCHEMA_SYNC_DECISION" = "none" ]; then
+  :
+elif [ "$SCHEMA_SYNC_DECISION" = "skip-merge-identical" ]; then
+  :
+else
+  buf generate
+fi
+
+# Second buf-touching block — none branch dropped (reverts to inline regen)
+if [ "$SCHEMA_SYNC_DECISION" = "skip-merge-identical" ]; then
+  :
+else
+  buf build
+fi

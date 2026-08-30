@@ -1,0 +1,3 @@
+SESSION BANNER
+
+Follow the repository conventions. (Banner has drifted; it no longer names the standard.)

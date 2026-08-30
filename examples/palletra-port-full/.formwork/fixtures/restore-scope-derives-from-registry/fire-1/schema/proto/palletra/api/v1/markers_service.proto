@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+message ReinstateSectionAnnotationsRequest {
+  string segment_code = 1;
+  // The client names what a restore deletes — this is exactly #1114.
+  repeated string marker_types = 2;
+}

@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-annotation-name-template-banned.sh (#6416),
+# anchor 2 of 2. custom_presets_service.proto must never again define a
+# *CustomAnnotationNamePreset* message (the recurring nightly-audit #7960 orphan
+# response). The kept sibling names CustomAnnotationTagEntry / CustomPagePreset do
+# NOT contain the banned token, so the sibling feature is not a false positive.
+# Anchor 1 (the schema-snapshot table) is a separate rule.
+rules:
+  - id: no-custom-annotation-name-template-in-proto
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "schema/proto/palletra/api/v1/custom_presets_service.proto"
+    params:
+      pattern: 'CustomAnnotationNamePreset'
+    cure: "Do not resurrect the CustomAnnotationNamePreset proto message (#6416/#7960); build the feature for real with a writer + RPC or leave it out."
+    origin: scripts/check-annotation-name-template-banned.sh

@@ -1,0 +1,52 @@
+# Ported from Palletra scripts/check-go-services-call-cgroup-configure.sh (#1148).
+# Every containerized Go binary (built by an freightworks/**/Dockerfile that runs
+# `go build`) MUST call runtimeenv.Configure() in its main package. Configure()
+# sets GOMEMLIMIT from the cgroup memory limit so the process GCs under memory
+# pressure instead of being OOM-killed on Cloud Run (root cause of the #4870
+# detection-worker OOM). The predicate is self-maintaining: it resolves each
+# Dockerfile's ./<path> build target to the Go main package and requires the
+# call there.
+#
+# PORT MAPPING: this fundamentally correlates Dockerfile build targets with Go
+# main-package source — it inspects two file kinds and resolves a build graph,
+# which no single declarative rule expresses. It uses the ESCAPE HATCH: a
+# command rule running a small self-contained reproduction over the fixture
+# tree. fire-1 has a Dockerfile-built main package missing Configure() (exit 1);
+# pass-1 has the call present (exit 0). Test-file matches and non-main dirs are
+# excluded, mirroring the .sh.
+rules:
+  - id: go-services-call-cgroup-configure
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          fail=0
+          while IFS= read -r df; do
+            grep -q 'go build' "$df" || continue
+            resolved=0
+            for t in $(grep -oE '\./[A-Za-z0-9._/-]+' "$df" | sort -u); do
+              dir="${t#./}"; dir="${dir%/}"
+              [ -d "$dir" ] || continue
+              ls "$dir"/*.go >/dev/null 2>&1 || continue
+              grep -lqE '^package main([[:space:]]|$)' "$dir"/*.go 2>/dev/null || continue
+              resolved=1
+              found=0
+              for f in "$dir"/*.go; do
+                case "$f" in *_test.go) continue ;; esac
+                if grep -qE 'runtimeenv\.Configure\(' <(sed 's://.*$::' "$f"); then found=1; fi
+              done
+              [ "$found" -eq 1 ] || fail=1
+            done
+            [ "$resolved" -eq 1 ] || fail=1
+          done < <(find . -name Dockerfile -type f)
+          exit $fail
+      expect:
+        exit: 0
+    cure: "Call runtimeenv.Configure() in the main package of every Dockerfile-built Go binary so GOMEMLIMIT is derived from the cgroup memory limit (#1148)."
+    origin: scripts/check-go-services-call-cgroup-configure.sh

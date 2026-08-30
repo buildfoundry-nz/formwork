@@ -1,0 +1,6 @@
+package workflow
+
+// A .bak copy of workflow_signoff_step.go that rode in on a merge commit — a
+// stale second definition of every symbol it names. The whole-tree scanners
+// read it as live code. Forbidden by extension.
+func approveStage() {}

@@ -1,0 +1,34 @@
+# Ported from Palletra scripts/check-project-annotations-read-has-limit.sh
+# (#6478 gate). GET /api/projects/{id}/annotations returns the WHOLE project
+# in one payload, assembled by shared.FetchProjectAnnotations, and the Flutter
+# measure canvas renders every shape from it. Each project-scoped read
+# (`project_id = $1`) must be bounded by a LIMIT so a runaway project cannot
+# return an unbounded payload; the cap fails loud (413), never silently
+# truncating. The gate makes the bound un-removable: a project-scoped read with
+# no LIMIT is a violation.
+#
+# Ported as pair-consistency: a file with a `project_id = $1` read (trigger)
+# MUST also carry a `LIMIT` (requires). preprocess: decomment-go so a `LIMIT`
+# sitting only inside a `//` comment cannot fake the bound (exactly the .sh's
+# comment-stripping before the token rules); the SQL lives in Go string
+# literals, which decomment-go preserves.
+#
+# NOTE (fidelity): the .sh scopes to the FetchProjectAnnotations function body and
+# settles each read against the NEXT tx.Query, so it catches a partially bounded
+# set (three reads capped, a fourth added unbounded). pair-consistency couples
+# project_id=$1 <-> LIMIT at file grain, catching the named regression ("delete a
+# LIMIT" leaving an unbounded read) but not the multi-read partial case. The
+# function-scoping and per-read/order settling are the parts not ported.
+rules:
+  - id: project-annotations-read-has-limit
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/shared/markers_helpers.go"
+    preprocess: decomment-go
+    params:
+      trigger: 'project_id = \$1'
+      requires: 'LIMIT'
+    cure: "Every project-scoped read (project_id = $1) in FetchProjectAnnotations must carry a LIMIT so a runaway project cannot return an unbounded payload; keep the LIMIT and the len>maxRows fail-loud (413) guard together (#6478)."
+    origin: scripts/check-project-annotations-read-has-limit.sh

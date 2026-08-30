@@ -1,0 +1,16 @@
+# Ported from Palletra scripts/check-single-writer-pagefeed-existence.sh
+# (sweep-1 #3, link 2). The render lookup must decide presence via
+# AssetPresent(int64(hit.Len())), not an open-coded hit.Len() > 0.
+rules:
+  - id: pagefeed-single-writer-cachedbytes-routed
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/pageraster/pagefeed/cache.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'AssetPresent\(int64\(hit\.Len\(\)\)\)'
+      mode: exists
+    cure: "StoredBytes must decide presence via AssetPresent(int64(hit.Len())), not an open-coded hit.Len() > 0 (sweep-1 #3)."
+    origin: scripts/check-single-writer-pagefeed-existence.sh

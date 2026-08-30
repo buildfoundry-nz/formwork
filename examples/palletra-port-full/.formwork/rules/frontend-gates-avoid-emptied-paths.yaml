@@ -1,0 +1,51 @@
+# Ported from Palletra scripts/check-frontend-gates-avoid-emptied-paths.sh
+# (sweep-1 #6 / sweep-2 #4). A class-gate META-gate: after the frontend
+# package-split, library code moved from frontend/lib/{features,shared,core,theme}
+# and frontend/test/support into packages/*/lib. A gate left scanning one of
+# those EMPTIED code-home paths passes VACUOUSLY — it scans an empty/absent dir
+# and enforces nothing. This gate rejects any scripts/check-{dart,flutter,no-fe}-*.go
+# whose REAL (non-comment, non-fmt.Print) lines name a split-emptied path.
+#
+# This gate does not read Go/SQL/Dart structure; it greps the TEXT of other gate
+# sources for a rotted path token in scan lines. That is a tool-shaped
+# check with no declarative analyzer, so it is ported via the ESCAPE HATCH
+# `command` type: a small self-contained shell reproduction that runs at the
+# fixture root, exits non-zero when a frontend gate names an emptied path in a
+# real scan line, and exits 0 when clean. It reproduces the gate's own EMPTIED
+# regex and its comment/print real-scan-line filter faithfully.
+#
+# DIVERGENCE (noted): only Part 1 (the emptied-path scan over frontend gates) is
+# reproduced. The original gate's Part 2 (pinning check-dart-analyzer-clean to
+# the repo root before flutter analyze, and forbidding an active `cd frontend`)
+# and the bare `frontend/lib` + packages/*/lib companion rule are additional
+# sub-checks over a specific sibling gate; they are out of scope for this single
+# reproduction.
+rules:
+  - id: frontend-gates-avoid-emptied-paths
+    type: command
+    severity: error
+    scope:
+      include:
+        - "scripts/check-dart-*.go"
+        - "scripts/check-flutter-*.go"
+        - "scripts/check-no-fe-*.go"
+    params:
+      cmd:
+        - bash
+        - "-c"
+        - |
+          EMPTIED='frontend/lib/(features|shared|core|theme)([^[:alnum:]_]|$)|frontend/test/support([^[:alnum:]_]|$)'
+          hits=$(grep -rnE "$EMPTIED" scripts/check-dart-*.go scripts/check-flutter-*.go scripts/check-no-fe-*.go 2>/dev/null \
+            | grep -vE ':[0-9]+:[[:space:]]*//' \
+            | grep -vE ':[0-9]+:[[:space:]]*fmt\.Print' \
+            || true)
+          if [ -n "$hits" ]; then
+            echo "frontend gate scans a package-split-emptied path:" >&2
+            printf '%s\n' "$hits" >&2
+            exit 1
+          fi
+          exit 0
+      expect:
+        exit: 0
+    cure: "Repoint the frontend gate's scan from frontend/lib/{features,shared,core,theme} (or frontend/test/support) to packages/*/lib — those dirs no longer hold code after the split, so a gate scanning them passes vacuously. If the reference is only a human-facing message, move it into a // comment or a fmt.Print line."
+    origin: scripts/check-frontend-gates-avoid-emptied-paths.sh

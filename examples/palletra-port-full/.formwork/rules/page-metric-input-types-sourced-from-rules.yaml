@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-page-metric-input-schema-single-source.sh
+# (SV-5, #7411/#4244) RULE 2 (positive single-source). When input_types.go exists
+# it MUST derive from metricspage.DefaultPageTallyRules() — the single source —
+# not a local table. exists-mode over that exact file; file absent => passes
+# (the .sh guards the file with `if [ -f ]`).
+rules:
+  - id: page-metric-input-types-sourced-from-rules
+    type: required-pattern
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/metricmenu/input_types.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'DefaultPageTallyRules'
+      mode: exists
+    cure: "input_types.go must derive page-metric input types from metricspage.DefaultPageTallyRules() (the single source), not a local table."
+    origin: scripts/check-page-metric-input-schema-single-source.sh

@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-gemini-call-label-never-zero-value.sh (#4644).
+# Every gemini.Client seam takes a REQUIRED gemini.CallTag naming the spending
+# feature, so per-feature spend telemetry is attributable. The compiler forces a
+# label to be PRESENT; this closes the zero-value hole — a CallTag{} literal or
+# an uninitialized `var x CallTag` compiles yet stringifies to "" (silent
+# label=unlabelled). Ported verbatim from the .sh grep set (RE2, decomment-go so
+# a commented example does not fire):
+#   Rule A — empty / empty-string composite literal: CallTag{} / CallTag{""}.
+#   Rule B — uninitialized var: `var x [,y] CallTag`, a var-group member line
+#            `name CallTag`, and new(CallTag) / new(gemini.CallTag).
+# Scope: non-test Go under freightworks (internal/gemini/label.go only ever writes
+# named constants, so it matches neither rule and needs no carve-out).
+rules:
+  - id: gemini-call-label-never-zero-value
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\bCallTag\{[ \t]*\}|\bCallTag\{[ \t]*""[ \t]*\}|\bvar[ \t]+[A-Za-z_][A-Za-z0-9_]*(?:[ \t]*,[ \t]*[A-Za-z_][A-Za-z0-9_]*)*[ \t]+(?:gemini\.)?CallTag[ \t]*$|^[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+(?:gemini\.)?CallTag[ \t]*$|\bnew\([ \t]*(?:gemini\.)?CallTag[ \t]*\)'
+    cure: "Pass a named vocabulary constant from internal/gemini/label.go (gemini.Label…); never a zero-value gemini.CallTag, which stringifies to label=unlabelled (#4644)."
+    origin: scripts/check-gemini-call-label-never-zero-value.sh

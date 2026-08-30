@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-run-status-avoid-literals.sh (#1312).
+# The Go backend must not hard-code the live run_state pair as an inline SQL
+# IN-clause literal — status IN ('pending','running') (either order,
+# case-insensitive IN). The canonical vocabulary is runstate.Live(), bound as
+# = ANY($n::palletra.run_state[]). No preprocessor: the .sh greps raw source.
+rules:
+  - id: run-status-avoid-literals
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/services/core-api/internal/runstate/**"
+        - "freightworks/services/core-api/migrations/**"
+        - "**/*_test.go"
+        - "**/*.pb.go"
+        - "**/*.gen.go"
+    preprocess: raw
+    params:
+      pattern: "status\\s*[Ii][Nn]\\s*\\(\\s*'pending'\\s*,\\s*'running'|status\\s*[Ii][Nn]\\s*\\(\\s*'running'\\s*,\\s*'pending'"
+    cure: "Replace status IN ('pending','running') with status = ANY($n::palletra.run_state[]) and bind runstate.Live() (freightworks/services/core-api/internal/runstate/) as the parameter (#1312)."
+    origin: scripts/check-run-status-avoid-literals.sh

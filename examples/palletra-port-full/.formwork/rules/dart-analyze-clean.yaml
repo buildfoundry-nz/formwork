@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-dart-analyzer-clean.sh.
+#
+# Runs `flutter analyze --no-fatal-warnings=false --no-fatal-infos=false` at the
+# pub-workspace root; ANY analyzer info/warning/error is a hard fail. That gate
+# fundamentally shells out to the Flutter toolchain (the analyzer is not a
+# text/AST heuristic formwork can reproduce — it is a full semantic pass over the
+# resolved workspace), so it maps to the `command` ESCAPE HATCH: params.cmd is
+# the real check script, verified in CI where the Flutter SDK is present. The
+# Flutter SDK is absent from the fixture sandbox, so this rule carries no fixture
+# and SKIPs locally (formwork lint enumerates it as an escape hatch).
+rules:
+  - id: dart-analyze-clean
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-dart-analyzer-clean.sh — the validating
+      target's own gate script, which this corpus does not carry and cannot:
+      it is written in that tree's vocabulary, and this repository tracks no
+      shell scripts at all. In a fixture tree bash would exit 127 in the fire
+      tree and the pass tree alike, so the fire proof would be satisfied by
+      the detector NOT EXISTING and the pass proof would report that same
+      missing-detector exit as a finding. What the port asserts here is the
+      SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "frontend/**/*.dart"
+        - "packages/**/*.dart"
+        - "frontend/pubspec.yaml"
+        - "packages/**/pubspec.yaml"
+        - "pubspec.yaml"
+        - "pubspec.lock"
+    params:
+      cmd:
+        - bash
+        - scripts/check-dart-analyzer-clean.sh
+      expect:
+        exit: 0
+    cure: "Run 'flutter analyze' from the repo root and fix every issue — no // ignore:, no suppressions, no allowlist (CLAUDE.md Flutter Hard Rules + docs/flutter-standards.md §5)."
+    origin: scripts/check-dart-analyzer-clean.sh

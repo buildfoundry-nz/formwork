@@ -1,0 +1,45 @@
+# Ported from Palletra scripts/check-no-custom-error-snackbar-implementations.sh (#8913).
+#
+# The error-snackbar idiom — showSnackBar(SnackBar(content: Text(explainError(
+# err)))) — has ONE home (plt_widgets showAlertSnackBar). This anti-drift gate
+# fails when, in non-test Dart lib source OUTSIDE plt_widgets/lib and
+# plt_core/lib, `explainError(` appears within a 6-line forward window of a
+# `showSnackBar(`/`SnackBar(` anchor.
+#
+# PORT MAPPING: the .sh is a forward-window awk matcher (anchor line + next 5).
+# Ported as a multiline linear-RE2 forbidden-pattern: the anchor, then up to 5
+# following physical lines, then explainError( — reported on the anchor line.
+# The `\b` word boundary replaces the .sh's load-bearing (?<![A-Za-z0-9_])
+# non-identifier guard: showAlertSnackBar( (the sanctioned helper) ENDS with the
+# substring `SnackBar(` but has a word char (r) before it, so `\bSnackBar` never
+# anchors there. preprocess: decomment-go mirrors the .sh's strip_comments_dart (Dart
+# shares Go's // and /* */ comments) so a quoted idiom in a doc comment cannot fire.
+rules:
+  - id: no-custom-error-snackbar-implementations
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*_test.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+        - "**/generated/**"
+        - "packages/plt_widgets/lib/**"
+        - "packages/plt_core/lib/**"
+    preprocess: decomment-go
+    params:
+      # Origin: awk forward-window matcher — an anchor line
+      # (^|[^A-Za-z0-9_])(showSnackBar|SnackBar)\( then explainError( within the
+      # next 5 physical lines (window = 6). Linear-RE2 multiline pattern: `\b`
+      # replaces the .sh's (?<![A-Za-z0-9_]) non-identifier guard, and the bounded
+      # (?:[^\n]*\n){0,5} + lazy [^\n]*? reproduce the 6-line forward window with no
+      # backtracking. LocateLine anchors on the showSnackBar( start line (fixture want).
+      pattern: '\b(?:showSnackBar|SnackBar)\((?:[^\n]*\n){0,5}[^\n]*?explainError\('
+      prefilter: 'explainError'
+      multiline: true
+    cure: "Call showAlertSnackBar(messenger, err) from packages/plt_widgets/lib/error_toast.dart instead of hand-rolling showSnackBar(SnackBar(content: Text(explainError(err)))). Reference: #5124 (shared helper), #8913 (anti-drift gate)."
+    origin: scripts/check-no-custom-error-snackbar-implementations.sh

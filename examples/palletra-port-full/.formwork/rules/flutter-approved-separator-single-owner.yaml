@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-flutter-approved-separator-single-owner.sh (#7942).
+# The unapproved-first / ClearedSeparator / approved partition-divider layout must
+# be constructed in exactly ONE file (tally_card_parts.dart, the shared
+# composeApprovalPartitionedCards builder). Any other Dart lib file constructing
+# `ClearedSeparator(` is a second hand-rolled partition layout that can re-diverge.
+rules:
+  - id: flutter-approved-separator-single-owner
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+      exclude:
+        - "**/tally_card_parts.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.gr.dart"
+        - "**/generated/**"
+    params:
+      pattern: 'ClearedSeparator\('
+    cure: "Call composeApprovalPartitionedCards(units, card: ...) from tally_card_parts.dart instead of hand-rolling the partition + divider (it owns the shared predicate)."
+    origin: scripts/check-flutter-approved-separator-single-owner.sh

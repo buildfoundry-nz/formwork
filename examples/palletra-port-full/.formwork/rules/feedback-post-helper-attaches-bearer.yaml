@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-feedback-submission-bearer-auth.sh (#1898) —
+# backstop for the security-critical bearer attach. This is the HELPER half:
+# the web-free helper packages/plt_core/lib/network/raw_http_client.dart must set an
+# 'Authorization' header AND attach 'Bearer $sessionToken'. The companion rule
+# feedback-post-test-covers-bearer-cases covers the adapter-test half.
+#
+# Ported to a linear-RE2 all_of + none_of: fire (anchored on LINE 1 = fixture
+# want-marker) when the file HAS 'Authorization' but LACKS 'Bearer $sessionToken' —
+# the exact #1898 regression (header key set, Bearer value dropped). Replaces the
+# regexp2 `\A(?:(?![\s\S]*A)|(?![\s\S]*B))` zero-width whole-file lookahead
+# alternation with two linear scans.
+#
+# DIVERGENCE (noted for fidelity): (a) the .sh runs strip_comments_dart first; formwork
+# has no decomment-dart preprocessor, so this is a raw scan. A token that appears
+# ONLY inside a comment would satisfy the presence check here where the .sh
+# (decommented) would not — production raw_http_client.dart carries these as live code,
+# not prose. (b) The .sh's two FAIL branches are independent (lacks A OR lacks B);
+# a linear conjunction cannot OR two absences, so the origin's separate
+# "lacks 'Authorization' entirely" branch folds into all_of's presence
+# requirement (the prefilter already gated that branch). Split into two rules
+# (helper / test) because the .sh's assertions target two different files.
+rules:
+  - id: feedback-post-helper-attaches-bearer
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/plt_core/lib/network/raw_http_client.dart"
+    params:
+      # Origin: the helper must set an 'Authorization' header AND attach
+      # 'Bearer $sessionToken' (two independent grep -qF assertions). all_of holds the
+      # present context token, none_of the required Bearer attach whose absence fires.
+      all_of:
+        - "'Authorization'"
+      none_of:
+        - 'Bearer \$sessionToken'
+      prefilter: 'Authorization'
+    cure: "Keep the Bearer attach in raw_http_client.dart: set the 'Authorization' header to 'Bearer $sessionToken' (#1898)."
+    origin: scripts/check-feedback-submission-bearer-auth.sh

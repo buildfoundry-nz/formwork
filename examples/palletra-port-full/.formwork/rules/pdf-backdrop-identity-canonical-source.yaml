@@ -1,0 +1,12 @@
+rules:
+- id: pdf-backdrop-identity-canonical-source
+  type: required-pattern
+  severity: error
+  scope:
+    include:
+    - packages/plt_page_raster/lib/presentation/pdf_underlay.dart
+  params:
+    pattern: '_fingerprintOf\(PdfUnderlay '
+    mode: exists
+  cure: PdfUnderlay page identity must stay single-sourced through _fingerprintOf(PdfUnderlay w) => (w.projectId, w.pageNumber); a rename must move the anchor, not drop it (#1708).
+  origin: scripts/check-dart-pdf-page-identity-single-source.sh

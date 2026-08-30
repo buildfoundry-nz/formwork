@@ -1,0 +1,40 @@
+# Ported from Palletra scripts/check-flutter-flutter-global-error-handler-installed.sh
+# (#2961). Flutter raises errors on two independent channels, and the app must
+# install a handler on BOTH at its one bootstrap (frontend/lib/main.dart) or it
+# is blind to half its failures:
+#   Rule 1 — FlutterError.onError = logFlutterError  (SYNC build/layout/paint)
+#   Rule 2 — platformDispatcher.onError = logUncaughtError  (async, #5048)
+#   Rule 3 — EXACTLY ONE FlutterError.onError assignment tree-wide (anti-shadow)
+# The gate's namesake #2961 regression is the SYNC channel being unhandled, so
+# this ports Rule 1 as a required-pattern: main.dart MUST install the canonical
+# `FlutterError.onError = logFlutterError;`. Pinning the handler NAME (not
+# merely "something is assigned") is deliberate — an inline lambda that swallows
+# the error would otherwise satisfy the gate while reinstating the bug.
+#
+# Port note: code-only-dart, not raw. That projection blanks comment bytes and
+# string CONTENTS while leaving the quote delimiters and all real code, so the
+# install — which is code — still matches, and a comment merely NAMING
+# FlutterError.onError does not. Checked against pass-1, where the assignment is
+# code and the only literals are import paths, so nothing the rule needs lives
+# inside a string. Under raw a comment naming the field WAS the required match,
+# which let a bootstrap that installs nothing on the sync channel keep this gate
+# green — the #2961 regression itself, invisible (fire-2 is that shape; #263.3).
+#
+# DIVERGENCE (noted): this file ports Rule 1 — the sync-channel install the gate
+# is named for — and only that. Rule 2 (the async channel, a second required
+# install) and Rule 3 (exactly one FlutterError.onError assignment tree-wide, a
+# pattern-count) are separate assertions over separate scopes, and neither is
+# expressed here, so a green on this rule says nothing about either.
+rules:
+  - id: flutter-global-error-handler-installed
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/main.dart"
+    preprocess: code-only-dart
+    params:
+      pattern: "FlutterError\\.onError\\s*=\\s*logFlutterError\\s*;"
+      mode: exists
+    cure: "Install the canonical sync-error handler at the one bootstrap: frontend/lib/main.dart must contain `FlutterError.onError = logFlutterError;` or synchronous build/layout/paint errors bypass package:logging (#2961)."
+    origin: scripts/check-flutter-flutter-global-error-handler-installed.sh

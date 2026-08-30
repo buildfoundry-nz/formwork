@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-core-api-bans-chi-stdlib-logger.sh (#3908).
+# chi's stdlib-log middleware.Logger writes plain-text request lines that Cloud
+# Logging ingests as unstructured textPayload at DEFAULT severity — invisible to
+# severity>=ERROR filters. The slog RequestLog middleware replaced it; this rule
+# makes the regression physically impossible by banning `middleware.Logger` in
+# non-test Go under freightworks/.
+#
+# decomment-go strips comments before matching, so a `//`-comment mention of the
+# symbol (this file's rationale, the #3908 doc block) stays legal while a real
+# `r.Use(middleware.Logger)` call fires. The .sh's per-file import-alias/dot-
+# import resolution is the nuance dropped: this rule bans the conventional
+# `middleware.Logger` spelling (the default, unaliased local name).
+rules:
+  - id: core-api-bans-chi-stdlib-logger
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '\bmiddleware\.Logger\b'
+    cure: "Install services/core-api/middleware.RequestLog on the chi router (r.Use(apiMiddleware.RequestLog)) instead of chi's stdlib middleware.Logger, which emits unstructured textPayload at DEFAULT severity (#3908)."
+    origin: scripts/check-core-api-bans-chi-stdlib-logger.sh

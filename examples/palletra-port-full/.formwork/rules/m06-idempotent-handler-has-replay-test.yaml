@@ -1,0 +1,47 @@
+# Ported from Palletra scripts/check-idempotent-handler-replay-test.sh
+# (audit #20 gate).
+#
+# Every package directory under routes/ whose non-test .go calls
+# idempotency.MountRoute( must, in that SAME directory's *_test.go files,
+# prove BOTH:
+#   (A) replay / single-application — a test carrying an idempotency marker
+#       (Idempotent|origin_request_id|clientRequestId) AND a count(*) or Replay
+#       single-application assertion, and
+#   (B) fingerprint-mismatch — a test referencing
+#       origin_request_id_payload_mismatch (the 409 the handlers return).
+# Both signals may be split across the directory's *_test.go files; the gate
+# scopes to the directory.
+#
+# This is a DIRECTORY-scoped, cross-file trigger⇒companion property: the
+# trigger lives in a non-test .go, and the two required companion signals are
+# aggregated across every *_test.go in the same package directory. formwork's
+# pair-consistency is same-file only, and no declarative rule expresses "for
+# each directory holding a trigger, require two markers anywhere across its sibling
+# test files," so it maps to the `command` escape hatch running the real gate
+# (which uses ripgrep + per-directory aggregation). params.cmd is the real
+# check; expect.exit 0.
+rules:
+  - id: m06-idempotent-handler-has-replay-test
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-idempotent-handler-replay-test.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+    params:
+      cmd:
+        - bash
+        - scripts/check-idempotent-handler-replay-test.sh
+      expect:
+        exit: 0
+    cure: "In the offending package's *_test.go add BOTH: a replay test (same origin_request_id twice → exactly one row / unchanged value; assert count(*)==1 or a Replay value-stability test) and a fingerprint-mismatch test (same origin_request_id, different payload → 409 origin_request_id_payload_mismatch). Model: routes/partition_heights/partition_heights_idempotency_test.go. There is no allowlist."
+    origin: scripts/check-idempotent-handler-replay-test.sh

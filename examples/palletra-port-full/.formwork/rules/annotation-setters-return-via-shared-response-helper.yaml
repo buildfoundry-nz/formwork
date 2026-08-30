@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-annotation-setters-return-via-shared-response-helper.sh
+# (#3926 / #5032). PER-FUNC invariant: a routes/annotations/ func that mutates via a
+# setter seam (markupwrite.LogAndUpdate<Attr>( or
+# partitiontypemut.RecordAndUpdatePartitionType() MUST return its success response THROUGH
+# shared.SuccessProtoResponse( in the SAME func body. Func-scoped (#6928 shape) so a second
+# co-located setter cannot pass on another handler's shared-response call ->
+# go/per-func-count-relation (per func: count(setter) <= count(shared.SuccessProtoResponse)).
+# Every trigger and the companion are Go call expressions, so the port is faithful
+# with no divergence.
+rules:
+  - id: annotation-setters-return-via-shared-response-helper
+    type: go/per-func-count-relation
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/annotations/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      left: 'markupwrite\.LogAndUpdate|partitiontypemut\.RecordAndUpdatePartitionType'
+      right: 'shared\.SuccessProtoResponse'
+      relation: "<="
+    cure: "Return the success response via shared.SuccessProtoResponse(&apiv1.Set<Attr>Response{...}) — the shared (200, application/json, body, nil) tail — instead of a hand-rolled shared.EncodeOpts.Marshal + http.StatusOK return (#3926, #5032)."
+    origin: scripts/check-annotation-setters-return-via-shared-response-helper.sh

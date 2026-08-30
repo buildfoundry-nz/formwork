@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-dockerignore-build-context-excludes.sh
+# (#1484). The root .dockerignore must list each heavy non-COPY'd tree
+# (frontend, packages, docs, shared/generated/dart) as an ACTIVE pattern, or
+# the Docker build context ships ~950 MB of Flutter/docs to every Go image.
+# The .sh requires ALL four (AND semantics), so each is a separate exists-mode
+# required rule (a single OR rule would pass with only one present — weaker than
+# the gate). The pattern matches an active (non-comment) line, trailing slash
+# and trailing inline #-comment tolerated, mirroring the .sh's decomment +
+# trailing-slash strip.
+rules:
+  - id: dockerignore-must-exclude-frontend
+    type: required-pattern
+    scope:
+      include:
+        - ".dockerignore"
+    params:
+      pattern: '^[ \t]*frontend/?[ \t]*(#.*)?$'
+      mode: exists
+    cure: "Add an active 'frontend' (or 'frontend/') line to the root .dockerignore; the build context ships it to every image otherwise (#1484)."
+    origin: scripts/check-dockerignore-build-context-excludes.sh

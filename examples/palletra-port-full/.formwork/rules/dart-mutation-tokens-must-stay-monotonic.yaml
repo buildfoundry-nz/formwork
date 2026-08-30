@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-dart-mutation-tokens-must-stay-monotonic.sh (#5093).
+# Mutation freshness tokens MUST be process-monotonic: a released token value
+# must never be re-issued. The reset idiom `(map.remove(id) ?? 0) + 1` /
+# `(map[id] ?? 0) + 1` restarts the counter after release and produces classic
+# ABA collisions — a still-in-flight generation-1 token 1 collides with
+# generation-2 token 1, so isNewest returns true for a stale response and snaps
+# the canvas back. Correct issuers use a process-monotonic `++_next` field.
+#
+# The .sh scopes to candidate files (basename *token*ledger*, OR a file defining
+# class WriteTokenLedger, OR an `int begin*Mutation(` issuer) so the idiom is
+# only banned where a token is actually issued (`(x ?? 0) + 1` is a legitimate
+# counter idiom elsewhere). formwork's scope is glob-only, so this port keys on
+# the dominant, canonical candidate signal — the *token*ledger* basename (the
+# fixed WriteTokenLedger lives in write_token_ledger.dart) — and bans the
+# reset idiom there. Narrower than the .sh's content-based candidacy, never
+# broader: it will not false-fire on unrelated `?? 0) + 1` counters.
+rules:
+  - id: dart-mutation-tokens-must-stay-monotonic
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*token*ledger*.dart"
+        - "packages/*/lib/**/*token*ledger*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbserver.dart"
+    params:
+      pattern: '\?\?\s*0\s*\)\s*\+\s*1'
+    cure: "Issue tokens from a process-monotonic field (int _next = 0; final next = ++_next;), never from (map.remove(id) ?? 0) + 1 — the reset re-issues released token values and re-opens the ABA collision (#5093). See WriteTokenLedger.register / view_settings_notifier.openMutation."
+    origin: scripts/check-dart-mutation-tokens-must-stay-monotonic.sh

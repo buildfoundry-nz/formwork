@@ -1,0 +1,36 @@
+# Ported from Palletra scripts/check-page-source-resolver-sole-source.sh
+# (#7139). The single-page source-precedence resolver lives ONCE, in
+# workerharness/pagefeedresolve. This scans every non-test *.go under
+# workerharness/ EXCEPT the immediate children of pagefeedresolve/ (a decoy
+# nested in a wire package, scalewire/pagefeedresolve/fork.go, is still scanned;
+# a real sub-package pagefeedresolve/evil/fork.go is too — only the home dir's
+# own files are exempt). Comment-aware: the .sh pipes each file through
+# decomment-go.awk, so preprocess: decomment-go.
+#
+# This ports Ban 1 (pdftrace.ExtractPageData( — re-inlined resolver leg-2) and
+# Ban 3 (func FetchSinglePageBytes — a forked resolver) as one forbidden
+# alternation.
+#
+# DIVERGENCE (noted): Ban 2 — the POSITIVE-DERIVATION rule that every `*PageIndex =`
+# declaration line MUST carry the token pagefeedresolve.SoloPageIndex — is a
+# per-line trigger->requires shape (pair-consistency), which is neither
+# forbidden-pattern nor required-pattern(exists); it is not ported here. Also
+# omitted: the .sh's whole-file whitespace-stripped second pass (a gofmt one-arg-
+# per-line split of a banned call), which per-line RE2 cannot reassemble.
+rules:
+  - id: page-source-resolver-sole-source
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/workerharness/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    except:
+      paths:
+        - "freightworks/services/core-api/internal/workerharness/pagefeedresolve/*.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'pdftrace\.ExtractPageData\(|func\s+FetchSinglePageBytes'
+    cure: "Delete the private copy and call pagefeedresolve.FetchSinglePageBytes; derive the read index from pagefeedresolve.SoloPageIndex (#7139)."
+    origin: scripts/check-page-source-resolver-sole-source.sh

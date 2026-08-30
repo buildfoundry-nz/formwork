@@ -1,0 +1,43 @@
+# Ported from Palletra scripts/check-no-hand-rolled-millimeter-to-meter-division.sh (#2960 PR-3).
+#
+# The millimeter->meter conversion (mm / 1000) is canonical measurement math and
+# has ONE home: internal/scalecalc.MetersFromMillimeters. A `/ 1000` divide in
+# executable Go anywhere under freightworks (except scalecalc.go) is a violation.
+#
+# PORT MAPPING: a per-line forbidden-pattern (regexp2) reproducing the .sh's
+# bounded-divide ban `/ *1000([^0-9]|$)` plus its THREE named idiom exemptions,
+# each a negative lookahead over the line:
+#   E1  `::` — a Postgres cast token: SQL fragment, not Go arithmetic.
+#   E2  `Tons` / `kgOver` — a kg->tons mass conversion, not a length.
+#   E3  `int(...*1000)` — the fixed-decimal rounding round-trip, not a unit conv.
+# These are precise idiom exemptions, NOT path carve-outs. The canonical home
+# scalecalc.go is scope.excluded. preprocess: decomment-go strips the // and
+# /* */ comment tails so a doc comment spelling the formula never trips it.
+#
+# FP FIX (was: fired on internal/conveyor/formulas.go:113,116,119,125,131). Those
+# are conveyor formula-DSL `Expr:` strings — `Expr: "run_length / (bay_spacing/1000)"`
+# — where the `/1000` lives INSIDE a double-quoted Go string literal, not in
+# executable position. The .sh strips `"..."` (and `` `...` ``) string literals
+# before re-testing; decomment-go strips only comments, so the port matched the
+# in-string divide. Instead of the removed `.*` prefix the pattern now consumes
+# only COMPLETE `"..."` string pairs plus non-quote runs before the divide
+# (`(?:[^"\n]*"[^"\n]*")*[^"\n]*?`), so a `/1000` reachable only through an
+# unclosed (odd) quote — i.e. inside a string — can never anchor the match,
+# exactly as the .sh's string-strip intends. A real executable `mm / 1000`
+# (even quote count before it) still fires wherever it is added.
+rules:
+  - id: no-hand-rolled-millimeter-to-meter-division
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "freightworks/**/*_test.go"
+        - "freightworks/services/core-api/internal/scalecalc/scalecalc.go"
+    preprocess: decomment-go
+    params:
+      pattern: '^(?!.*::)(?!.*Tons)(?!.*kgOver)(?!.*int\([^)]*\*\s*1000)(?:[^"\n]*"[^"\n]*")*[^"\n]*?/\s*1000(?:[^0-9]|$)'
+      syntax: regexp2
+    cure: "Call internal/scalecalc.MetersFromMillimeters(mm) instead of open-coding mm / 1000 (generic over float32/float64, divides in the caller's width, byte-identical). A genuinely non-mm ÷1000 needs a NAMED exemption in the script, never a per-file carve-out (#2960 PR-3)."
+    origin: scripts/check-no-hand-rolled-millimeter-to-meter-division.sh

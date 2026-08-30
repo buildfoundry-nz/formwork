@@ -1,0 +1,6 @@
+name: deploy
+jobs:
+  build:
+    steps:
+      - run: flutter build web --source-maps --dart-define=BUILD_ID=${{ github.run_id }}
+      - run: gcloud storage cp build/web/main.dart.js.map gs://bkt/sourcemaps/${{ github.sha }}/main.dart.js.map

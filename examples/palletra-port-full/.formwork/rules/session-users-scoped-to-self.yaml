@@ -1,0 +1,33 @@
+# Ported from Palletra scripts/check-session-membership-self-scoped.sh
+# (finding #4), USERS arm — the sibling of session-memberships-scoped-to-self.yaml
+# (see that file's header for the full BYPASSRLS rationale). Every SQL statement
+# in a non-test .go file under routes/session/ that touches the `users` table
+# MUST carry a parameterised self-scope predicate: `id = $n` OR `user_id = $n`
+# (users.id IS the user id). The `id` must be a bare column, not the tail of
+# user_id/org_id, so it is matched only when preceded by a non-identifier char —
+# the .sh's exact `[^A-Za-z0-9_]id` anchor, ported verbatim into the require
+# regex.
+#
+# Ported as sql/statement-predicate: `table` selects statements naming users
+# right after FROM/JOIN/UPDATE/INTO; the single `require` accepts EITHER
+# parameterised predicate shape as one alternation (both are legitimate for the
+# users table).
+#
+# DIVERGENCE (noted): same strings.Builder-assembly limit as the memberships
+# arm — formwork folds only constant `+`-concat. The raw-string, double-quoted,
+# and `+`-concat shapes are caught identically.
+rules:
+  - id: session-users-scoped-to-self
+    type: sql/statement-predicate
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/session/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      table: '(FROM|JOIN|UPDATE|INTO)[[:space:]]+users'
+      require:
+        - 'user_id[[:space:]]*=[[:space:]]*\$[0-9]|[^A-Za-z0-9_]id[[:space:]]*=[[:space:]]*\$[0-9]'
+    cure: "This statement runs under db.AsSuperuser (BYPASSRLS). Add a parameterised, claims-bound `WHERE id = $n` (the caller's own users row) or `WHERE user_id = $n` predicate, supplying claims.GetUserId() — never read or write another user's row from this surface (#4)."
+    origin: scripts/check-session-membership-self-scoped.sh

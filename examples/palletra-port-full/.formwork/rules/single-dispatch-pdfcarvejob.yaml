@@ -1,0 +1,22 @@
+# Ported from Palletra scripts/check-single-dispatch-pdfcarvejob.sh (sweep-1 #4).
+# A route handler must NOT open-code the eager pdf-split dispatch by building an
+# apiv1.PdfCarveJob inline; it must route through the single shared contract
+# parseruns.RoutePdfSplit. This bans the literal apiv1.PdfCarveJob{ in any
+# production (non-test) Go under services/core-api/routes/. The legitimate
+# builders live OUTSIDE routes/ (RoutePdfSplit, the worker uploadnorm
+# layer, the worker job decode). _test.go is exempt — route tests legitimately
+# construct/inspect a PdfCarveJob. The .sh greps raw source, so preprocess is
+# omitted.
+rules:
+  - id: single-dispatch-pdfcarvejob
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: 'apiv1\.PdfCarveJob\{'
+    cure: "Dispatch the eager split via parseruns.RoutePdfSplit (the single shared contract, sweep-1 #4); never build the apiv1.PdfCarveJob job inline in a route handler."
+    origin: scripts/check-single-dispatch-pdfcarvejob.sh

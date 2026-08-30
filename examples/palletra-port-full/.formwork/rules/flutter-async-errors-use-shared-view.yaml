@@ -1,0 +1,62 @@
+# Ported from Palletra scripts/check-flutter-async-errors-use-shared-view.sh
+# (Flutter B4, epic #5848).
+#
+# Every `.when(error: ...)` / `.maybeWhen(error: ...)` callback under
+# packages/feature_*/lib/**/presentation/** MUST render the ONE canonical async-
+# error surface, RemoteErrorView — directly, or via a helper widget whose body
+# renders it. An open-coded error branch (a bare SizedBox, a private _FooError,
+# raw `$err` text) both diverges the UX and drops the error off telemetry. There
+# is no allowlist.
+#
+# The .sh `exec`s a python scanner that strips comments + string literals and
+# parses Dart PAREN DEPTH so it sees multi-line `.when(...)` blocks a line-anchored
+# grep would miss — i.e. it fundamentally RUNS A TOOL. So this is the command
+# escape hatch: a self-contained python reproducing the scan over the presentation
+# tree, requiring any file with a `.when(error:`/`.maybeWhen(error:` callback to
+# reference RemoteErrorView.
+#
+# DIVERGENCE (noted): the ported scan is per-FILE (a file carrying a when-error
+# callback must reference RemoteErrorView) rather than per-callback with full paren-
+# depth attribution; it keeps the "no open-coded async error branch" contract
+# fixture-provable without a Dart parser. Scope-level finding (no want marker);
+# fire-1 open-codes the error branch, pass-1 routes through RemoteErrorView.
+rules:
+  - id: flutter-async-errors-use-shared-view
+    type: command
+    severity: error
+    scope:
+      include:
+        - "packages/feature_*/lib/**/presentation/**/*.dart"
+    params:
+      cmd:
+        - python3
+        - "-c"
+        - |
+          import os, re, sys
+          viol = []
+          for root, _, names in os.walk("packages"):
+              # Only feature_* presentation trees are in scope.
+              if "/presentation" not in root.replace(os.sep, "/"):
+                  continue
+              rel_root = root.replace(os.sep, "/")
+              if "/feature_" not in rel_root or "/lib/" not in rel_root:
+                  continue
+              for n in names:
+                  if not n.endswith(".dart"):
+                      continue
+                  p = os.path.join(root, n)
+                  text = open(p).read()
+                  # Strip line comments so a `// .when(error:` mention is inert.
+                  code = re.sub(r"//[^\n]*", "", text)
+                  if re.search(r"\.(when|maybeWhen)\(", code) and "error:" in code:
+                      if "RemoteErrorView" not in code:
+                          viol.append(p)
+          if viol:
+              for p in sorted(viol):
+                  sys.stderr.write("open-coded async error branch (no RemoteErrorView): %s\n" % p)
+              sys.exit(1)
+          sys.exit(0)
+      expect:
+        exit: 0
+    cure: "Render RemoteErrorView in the AsyncValue error branch — directly, or via a helper widget whose body renders it (so a card can keep its retry/back chrome around the shared view). Never open-code a bare SizedBox / private _FooError / raw $err branch, and never widen an exclude — there is no allowlist (#5848)."
+    origin: scripts/check-flutter-async-errors-use-shared-view.sh

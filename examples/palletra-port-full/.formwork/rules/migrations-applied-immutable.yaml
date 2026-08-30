@@ -1,0 +1,59 @@
+# Ported from Palletra scripts/check-migrations-applied-immutable.sh (#6336).
+# An APPLIED migration is immutable. golang-migrate records a single current
+# version per cluster and applies only versions strictly greater than it — it
+# NEVER re-runs a version it has already applied. Editing an already-committed
+# migration silently diverges every environment that ran the OLD text from a
+# fresh from-scratch apply: release-blocking schema drift (the #6336 anchor:
+# palletra/0022 gained rows AFTER dev had applied it). The ONLY legal change to
+# applied schema is a NEW forward migration; a committed *.up.sql/*.down.sql must
+# never be Modified, Deleted, or Renamed.
+#
+# Why the ESCAPE HATCH (type: command): the check is a git name-status diff of the
+# migration tree against a base ref (origin/develop, MIGRATION_DIFF_BASE
+# overridable), failing any migration body that is Modified/Deleted/Renamed —
+# GIT HISTORY, not a self-contained fixture. git's blob hash IS the content pin.
+# This command reproduces the gate; it self-skips (exit 0) when the base ref is
+# unavailable (shallow clone / detached fixture), matching the real gate.
+rules:
+  - id: migrations-applied-immutable
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The input is git HISTORY, not a directory tree: the detector diffs the
+      migration directories against MIGRATION_DIFF_BASE and reports a
+      migration that was MODIFIED, DELETED or RENAMED relative to that ref. A
+      fixture tree has no base ref, so the command takes its own no-base
+      branch and exits 0 before reading anything — a fire tree could only ever
+      reproduce that exit, which would prove the self-skip works rather than
+      that the detector discriminates. The states it judges are edits BETWEEN
+      two commits and a single tree cannot hold both.
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**/*.sql"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          BASE="${MIGRATION_DIFF_BASE:-origin/develop}"
+          MT="freightworks/services/core-api/migrations/palletra"
+          MP="freightworks/services/core-api/migrations/platform"
+          git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null 2>&1 || exit 0
+          rc=0
+          while IFS="$(printf '\t')" read -r st f1 f2; do
+            [ -n "${st:-}" ] || continue
+            case "$f1" in
+              "$MT"/*.up.sql|"$MT"/*.down.sql|"$MP"/*.up.sql|"$MP"/*.down.sql) ;;
+              *) continue ;;
+            esac
+            case "$st" in
+              M*) echo "$f1: an applied migration was MODIFIED (ship the change as a NEW forward migration)"; rc=1 ;;
+              D*) echo "$f1: an applied migration was DELETED (applied migrations are immutable history)"; rc=1 ;;
+              R*) echo "$f1: an applied migration was RENAMED to ${f2} (renumbering strands it in golang-migrate's ledger)"; rc=1 ;;
+            esac
+          done < <(git diff --name-status --find-renames --diff-filter=MDR "$BASE" -- "$MT" "$MP" 2>/dev/null || true)
+          exit $rc
+      expect:
+        exit: 0
+    cure: "Revert the change to the committed migration and express the schema change as a NEW forward migration (scripts/new-migration.sh <palletra|platform> <slug_name>). An already-applied migration never re-runs, so its file is frozen history; idempotent backfills (ON CONFLICT DO NOTHING) reconcile drift (#6336, migration 0099)."
+    origin: scripts/check-migrations-applied-immutable.sh

@@ -1,0 +1,27 @@
+rules:
+  # Port of check-dart-response-decoding-boundary.sh rule 1 ("jsonDecode(...) not narrowed
+  # into a fromJson companion"). The shell greps jsonDecode( lines then DROPS the
+  # hit when the same line also chains fromJson / fromJsonString
+  # (grep -qE 'fromJson\b|fromJsonString\b'). "matches A but not also B on the
+  # same line" is a PCRE2 negative lookahead — hence syntax: regexp2. The typed
+  # wrapper layer (plt_core/lib/network|sse, packages/*/lib/data) is exempt via
+  # scope.exclude, exactly as the shell's is_service_shim() carve-out.
+  - id: dart-jsondecode-requires-fromjson-narrowing
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/plt_core/lib/network/**"
+        - "**/plt_core/lib/sse/**"
+        - "**/lib/data/**"
+        - "**/lib/*/data/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+    params:
+      pattern: '^(?!.*fromJson).*\bjsonDecode\s*\('
+      syntax: regexp2
+    cure: "Decode + narrow inside a typed wrapper: chain jsonDecode(...) straight into a Freezed/proto fromJson (or fromJsonString) and return the typed value."
+    origin: scripts/check-dart-response-decoding-boundary.sh

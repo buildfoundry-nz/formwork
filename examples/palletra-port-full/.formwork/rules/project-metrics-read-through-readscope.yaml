@@ -1,0 +1,28 @@
+# Ported from Palletra project-metrics-read-through-readscope (#1928) — amplifying
+# project-metric reads must go through projectreadscope.Memo.
+#
+# Unit is same-func (#2480): go/parser function spans, so a multi-line
+# signature cannot blind the unit the way the retired shell brace-depth
+# accumulator did. also_present restores the shell's has_filter arm — Queue*
+# siblings name the SQL builder without issuing a query and must not oblige
+# Memo. Comment-stripped (decomment-go) so a prose mention of a marker cannot
+# trigger the pairing.
+rules:
+  - id: project-metrics-read-through-readscope
+    type: pair-consistency
+    severity: error
+    preprocess: decomment-go
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/scan/project/**/*.go"
+        - "freightworks/services/core-api/internal/workflow/approve/metricload/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      trigger: 'projectTallyUnionSQL|projectCalloutTypeCountsSQL'
+      requires: 'projectreadscope\.Memo\('
+      where: same-func
+      also_present: 'tx\.(Query|QueryRow)\('
+    cure: "Wrap the amplifying project-metric read in a projectreadscope.Memo(ctx, key, func() {...}) closure so interactive endpoints run it at most once per request (#1928)."
+    origin: "#1928"
+    tags: [go]

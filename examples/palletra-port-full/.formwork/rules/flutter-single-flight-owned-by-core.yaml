@@ -1,0 +1,32 @@
+# Ported from Palletra scripts/check-flutter-single-flight-owned-by-core.sh
+# (#7759). Request-dedup single-flight has ONE home: plt_core. Every other
+# package must consume GetCoalesced<T> / PageCoalesced, never hand-roll its
+# own join-in-flight owner. Detection is SHAPE-based (five forms), ported
+# verbatim from the .sh awk (all RE2-compatible, no lookaround):
+#   1. `class <Name>Coalesced`                 — the name form
+#   2. `Map<..., (Future|Completer)<...>>` field  — annotated keyed registry
+#   3. keyed collection literal `<_,(Future|Completer)<_>>{` — inferred/wrapped
+#   4. nullable `(Future|Completer)<...>?` field named in-flight/pending/current/
+#      ongoing/coalesc                            — single-slot holder
+#   5. `(Hash|SplayTree|LinkedHash)?Map<...>` field named in-flight — entry-wrapped
+#
+# Port fidelity (noted): the .sh strips Dart comments (no decomment-dart
+# preprocessor here, so a shape inside a comment would match — safe direction,
+# stricter not a bypass) and honours an in-place `// single-flight-owner-ok(...)`
+# escape marker; that structured-marker exemption is not ported (the current
+# tree needs zero markers). plt_core/lib and **/lib/testing/** are carved out.
+rules:
+  - id: flutter-single-flight-owned-by-core
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "packages/*/lib/**/*.dart"
+        - "frontend/lib/**/*.dart"
+      exclude:
+        - "packages/plt_core/lib/**"
+        - "**/lib/testing/**"
+    params:
+      pattern: 'class[ \t]+[A-Za-z_][A-Za-z0-9_]*Coalesced[^A-Za-z0-9_]|Map<[^;=]*(?:Future|Completer)<|<[^;=<>]*,[^;=]*(?:Future|Completer)<[^;=]*>[ \t]*\{|(?:Future|Completer)<[^;=]*>\?[ \t]+[A-Za-z_]*(?:[iI][nN]_?[fF][lL][iI][gG][hH][tT]|[pP]ending|[cC]urrent|[oO]ngoing|[cC]oalesc)|(?:Map|HashMap|SplayTreeMap|LinkedHashMap)<[^;=]*>[ \t]+_?[A-Za-z]*[iI][nN]_?[fF][lL][iI][gG][hH][tT]'
+    cure: "Single-flight lives in plt_core. Reuse GetCoalesced<T> (network/get_single_flight.dart) or PageCoalesced; a keyed Map<_,Future<_>> or a nullable Future _inFlight slot is the mechanism, not just the name (#7759)."
+    origin: scripts/check-flutter-single-flight-owned-by-core.sh

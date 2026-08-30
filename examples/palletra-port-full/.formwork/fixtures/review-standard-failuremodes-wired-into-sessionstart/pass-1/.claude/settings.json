@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "cat .claude/hooks/review-standard-banner.txt" },
+          { "type": "command", "command": "go run .claude/hooks/review-standard-failure-modes.go" }
+        ]
+      }
+    ]
+  }
+}

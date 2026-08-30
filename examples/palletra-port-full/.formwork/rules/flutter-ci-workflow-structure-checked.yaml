@@ -1,0 +1,70 @@
+# Port of scripts/check-flutter-ci-workflow-structure-checked.sh.
+#
+# This gate structurally inspects .github/workflows/ci.yml: it extracts the
+# `flutter-*` job block (comment-stripped), requires each load-bearing Flutter
+# step to appear INSIDE that block, forbids the `--concurrency 1` serial
+# foot-gun, requires a timeout-minutes cap on every flutter-* job, and requires
+# flutter-integration.yml to exist. That is YAML-block extraction + counting,
+# which no declarative pattern rule can express (a token in a comment or a
+# different job must not satisfy it) — so it maps to the `command` escape hatch:
+# a self-contained shell reproduction of the gate's checks over the fixture tree.
+# The finding is scope-level (no want marker); fire-1 genuinely violates and
+# pass-1 is genuinely clean.
+rules:
+  - id: flutter-ci-workflow-structure-checked
+    type: command
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/*.yml"
+    params:
+      cmd:
+        - bash
+        - -c
+        - |
+          set -uo pipefail
+          ci=".github/workflows/ci.yml"
+          integ=".github/workflows/flutter-integration.yml"
+          fail=0
+          if [ ! -f "$ci" ]; then
+            echo "MISSING $ci"; exit 1
+          fi
+          if [ ! -f "$integ" ]; then
+            echo "MISSING $integ (Patrol integration workflow)"; fail=1
+          fi
+          # Extract every flutter-* job block, comment lines stripped.
+          block="$(awk '
+            /^  flutter[A-Za-z-]*:/ { inblk=1; print; next }
+            inblk && /^  [A-Za-z_]/ { inblk=0 }
+            inblk { print }
+          ' "$ci" | sed -e '/^[[:space:]]*#/d')"
+          if [ -z "$block" ]; then
+            echo "MISSING a flutter-* job in $ci"; exit 1
+          fi
+          while IFS='~' read -r pat desc; do
+            [ -n "$pat" ] || continue
+            grep -qE "$pat" <<<"$block" || { echo "MISSING flutter step: $desc ($pat)"; fail=1; }
+          done <<'STEPS'
+          check-dart-analyzer-clean\.sh~flutter analyze gate
+          check-dart-generated-code-fresh\.sh~codegen-fresh gate
+          flutter test( |$)~flutter test step
+          flutter build web( |$)~flutter web build step
+          check-flutter-tests-compile\.sh~integration_test compile gate
+          dart run melos exec~melos affected-test runner
+          [-][-]include-dependents~affected selection includes reverse-deps
+          [-][-]diff=~affected selection diffs against PR base
+          fetch-depth: 0~full history for the affected diff
+          STEPS
+          if grep -qE 'melos exec.*--concurrency 1([^0-9]|$)' <<<"$block"; then
+            echo "FORBIDDEN --concurrency 1 in flutter job (serial full-suite times out)"; fail=1
+          fi
+          jobs="$(grep -cE '^  flutter[A-Za-z-]*:' <<<"$block" || true)"
+          caps="$(grep -c 'timeout-minutes:' <<<"$block" || true)"
+          if [ "$caps" -lt "$jobs" ]; then
+            echo "MISSING timeout-minutes: ($caps cap(s) for $jobs flutter job(s))"; fail=1
+          fi
+          exit $fail
+      expect:
+        exit: 0
+    cure: "ci.yml must run flutter analyze/test/build-web + the codegen-fresh and integration_test compile gates inside the flutter-* jobs, use melos affected selection (--include-dependents/--diff=/fetch-depth:0), never --concurrency 1, and cap every flutter-* job with timeout-minutes; flutter-integration.yml must exist."
+    origin: scripts/check-flutter-ci-workflow-structure-checked.sh

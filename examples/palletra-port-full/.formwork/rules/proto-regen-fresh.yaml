@@ -1,0 +1,41 @@
+# Ported from Palletra scripts/check-proto-codegen-fresh.sh (audit L3 gate).
+#
+# The committed shared/generated/{go,dart} tree MUST byte-match what `buf
+# generate` produces today: the gate copies buf.gen*.yaml with out: paths
+# rewritten to a tempdir, reruns buf generate, normalizes Go comments, prunes
+# dead dart pbjson, gofmts, then diffs the regen tree against the committed tree.
+# It catches BOTH a hand-edit to shared/generated/** with no proto change AND
+# drift between the committed tree and buf's output (buf/plugin version drift).
+#
+# PORT MAPPING: COMMAND ESCAPE. The check fundamentally shells out to the
+# EXTERNAL `buf` toolchain (plus gofmt and the repo's normalize/prune scripts) to
+# regenerate code and diff it against the tree — there is no self-contained
+# fixture for "what buf generate emits today", and no declarative type runs an
+# external code generator. This is the sanctioned escape: params.cmd runs the
+# real check, which verifies in CI. No fixture (formwork lint enumerates it).
+rules:
+  - id: proto-regen-fresh
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-proto-codegen-fresh.sh — the validating
+      target's own gate script, which this corpus does not carry and cannot:
+      it is written in that tree's vocabulary, and this repository tracks no
+      shell scripts at all. In a fixture tree bash would exit 127 in the fire
+      tree and the pass tree alike, so the fire proof would be satisfied by
+      the detector NOT EXISTING and the pass proof would report that same
+      missing-detector exit as a finding. What the port asserts here is the
+      SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "schema/**"
+        - "shared/generated/**"
+    params:
+      cmd:
+        - bash
+        - scripts/check-proto-codegen-fresh.sh
+      expect:
+        exit: 0
+    cure: "Run 'scripts/schema.sh generate' and commit shared/generated/. If the diff is unexpected, your local buf version or plugin set drifted — pin buf to the version in .husky/pre-commit and retry (audit L3)."
+    origin: scripts/check-proto-codegen-fresh.sh

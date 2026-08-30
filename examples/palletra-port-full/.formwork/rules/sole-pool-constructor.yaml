@@ -1,0 +1,25 @@
+# Ported from Palletra scripts/check-sole-pool-constructor.sh (#7159).
+# Every production pgxpool.Pool MUST be created through the shared
+# db.NewPool / db.NewLazyPool constructor (internal/db/pool.go), whose
+# AfterConnect runs `SET search_path TO palletra, platform, public`. A bare
+# pgxpool.New( / pgxpool.NewWithConfig( skips that AfterConnect, so unqualified
+# palletra.* references silently fail (the #7159 extraction-worker outage). Bans
+# the bare constructor in any non-test *.go under freightworks/ EXCEPT files under
+# internal/db/ (the one sanctioned wrapper). The .sh greps raw source, so
+# preprocess is omitted.
+rules:
+  - id: sole-pool-constructor
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    except:
+      paths:
+        - "**/internal/db/**"
+    params:
+      pattern: 'pgxpool\.New(WithConfig)?\('
+    cure: "Create the pool via db.NewPool(...) (eager Ping) or db.NewLazyPool(...) (lazy) — never bare pgxpool.New, which skips the search_path AfterConnect (#7159)."
+    origin: scripts/check-sole-pool-constructor.sh

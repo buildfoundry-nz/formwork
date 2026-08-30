@@ -1,0 +1,23 @@
+# Ported from Palletra scripts/check-money-text-fields-must-read-back-from-db.sh (#8606). Money in
+# a numeric(p,s) column may only reach the wire via a ::text read of that column,
+# never via an echo of caller input. CreatePriceEntry echoed TariffText: req.GetRateInput()
+# while the INSERT only RETURNING-ed id — so "9.99" on create became "9.9900" on
+# reload. This freezes the contract for every routes/** non-test handler:
+# binding a money *Text response field from a request getter is forbidden in both
+# composite-literal and assignment forms (one alternation regex).
+# decomment-go strips // comments so doc references to the banned shape (and the
+# gate's own advice) do not fire.
+rules:
+  - id: money-text-fields-must-read-back-from-db
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '(TariffText|LaborRateText|SumText|CountText):\s*req\.Get[A-Za-z]*\(\)|\.(TariffText|LaborRateText|SumText|CountText)\s*=\s*req\.Get[A-Za-z]*\(\)'
+    cure: "RETURNING <col>::text from the INSERT/UPDATE and Scan into the response field (see CreatePriceEntry's rate::text read-back, #8606). Bind write-path INSERT params through a validated local, never echo req.Get*() onto a money *Text field."
+    origin: scripts/check-money-text-fields-must-read-back-from-db.sh

@@ -1,0 +1,7 @@
+syntax = "proto3";
+package palletra.domain.v1;
+
+message Annotation {
+  string id = 1;
+  MarkerAttributes structured_attributes = 8;
+}

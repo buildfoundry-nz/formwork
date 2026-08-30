@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-routes-log-pre-500.sh — RULE 2 (#4177 +
+# #8573, sweep-12 #9). A context-less `slog.Error(` / `slog.Warn(` / `slog.Info(`
+# logs against context.Background(), so the OTel request span never attaches and
+# the Cloud Logging trace-correlation fields never emit — the line cannot be
+# joined to its trace. All three bare forms are BANNED inside routes/**, EXCEPT
+# routes/shared/ (whose ctx-less writer helpers carry no request context in their
+# signatures). The `...Context(` forms are a different selector entirely and are
+# never matched.
+#
+# RULE 2 is a plain lexical ban, so it ports to forbidden-pattern. The pattern
+# matches the bare level selectors `slog.Error(` / `slog.Warn(` / `slog.Info(`.
+# `slog.ErrorContext(` is not matched (Error is followed by "Context", not "("),
+# and `http.Error(` is not matched (http receiver, not slog) — the .sh's stdlib
+# carve is structural here. decomment-go strips Go comments first so a
+# `// slog.Error(...)` prose mention is never flagged.
+#
+# DIVERGENCE (noted):
+#   (1) RULE 1 of the .sh — every internal-error 500 writer must be lexically
+#       DOMINATED on every path, within its handler scope, by an error log — is
+#       branch-aware all-paths domination (the .sh is itself a go/ast program for
+#       exactly this reason). It is not expressible as a single lexical rule and
+#       is NOT ported.
+#   (2) RULE 2 is narrowed to the `slog.` receiver: a derived logger
+#       (`l := slog.With(...)` then `l.Error(`) that the .sh also bans is not
+#       caught, because a bare `\.Error\(` would sweep in http.Error and every
+#       non-logger method. The canonical, overwhelmingly common bare form
+#       (`slog.Error(` on the package receiver) is caught faithfully.
+rules:
+  - id: routes-slog-must-have-context
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "freightworks/services/core-api/routes/shared/**"
+    preprocess: decomment-go
+    params:
+      pattern: 'slog\.(Error|Warn|Info)\('
+    cure: "Use slog.ErrorContext(r.Context(), …) / slog.WarnContext(r.Context(), …) / slog.InfoContext(r.Context(), …) — a context-less slog.Error/Warn/Info logs against context.Background(), so the request span never attaches and the line can't be joined to its Cloud Trace (#4177, #8573). routes/shared/ writer helpers are exempt."
+    origin: scripts/check-routes-log-pre-500.sh

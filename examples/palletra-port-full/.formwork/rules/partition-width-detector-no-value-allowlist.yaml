@@ -1,0 +1,20 @@
+# Ported from Palletra scripts/check-partition-width-no-hardcoded-vocab.sh rule 1 (#7909).
+# The detector package (internal/detection/partitionwidth, runtime non-test) must not
+# reintroduce a partition-width value allowlist: a `PresetWidths` symbol or a
+# `map[string]bool{..."90"...}` literal. Use the partitionwidth.MaxPartitionWidthMm range
+# cap instead. One of four coupled sub-rules split from the .sh (see the sibling
+# partition-width-* rules); a single OR rule would be weaker than the gate.
+rules:
+  - id: partition-width-detector-no-value-allowlist
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/detection/partitionwidth/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/*.pb.go"
+    params:
+      pattern: 'PresetWidths|map\[string\]bool\{[^}]*"90"'
+    cure: "Drop the partition-width value allowlist (PresetWidths / {90,140} map); any integer callout in [1, MaxPartitionWidthMm] is a candidate (#7909)."
+    origin: scripts/check-partition-width-no-hardcoded-vocab.sh

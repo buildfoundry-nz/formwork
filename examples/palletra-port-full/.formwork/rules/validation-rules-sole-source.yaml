@@ -1,0 +1,64 @@
+# Ported from Palletra scripts/check-validation-rules-sole-source.sh
+# (#5768 / #5087 / #4637 / #7643). Cross-surface field-shape rules (email,
+# phone) live ONCE in Go (fieldcheck.go) and the Flutter forms consume the
+# SAME pattern bytes via the mirror (server_validation_policy.dart). This gate's
+# RULE A makes a second, drifting ruleset physically impossible: every
+# `plt-validation-rule:<id>` sentinel must name BYTE-IDENTICAL pattern bytes on
+# both sides — the Go backtick literal after the marker must equal the Dart
+# raw-string literal after the matching marker, and a rule present on one side
+# only is a violation. RULE D pins that both source files exist (a rename must
+# MOVE the gate, never silence it by vacuous pass).
+#
+# PORT MAPPING: RULE A is a byte-for-byte equality between a literal extracted
+# from a Go file and a literal extracted from a Dart file, keyed by a shared
+# sentinel — a cross-file, cross-language identity no declarative rule expresses
+# (the five-rule .sh also has RULE C rogue-regex + RULE E second-Go-validator
+# arms that would each be their own port). It uses the ESCAPE HATCH: a command
+# rule reproducing RULE A + RULE D over the fixture tree. fire-1 has a rule whose
+# Dart mirror bytes DRIFTED from the Go source (exit 1); pass-1 mirrors byte-for-
+# byte (exit 0).
+rules:
+  - id: validation-rules-sole-source
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*"
+    params:
+      cmd:
+        - "bash"
+        - "-c"
+        - |
+          set -u
+          GO_SRC="freightworks/services/core-api/internal/fieldcheck/fieldcheck.go"
+          DART="packages/plt_core/lib/validation/server_validation_policy.dart"
+          fail=0
+          # RULE D — the pinned files exist.
+          [ -f "$GO_SRC" ] || { echo "RULE D: Go single source missing: $GO_SRC" >&2; fail=1; }
+          [ -f "$DART" ]   || { echo "RULE D: Dart mirror missing: $DART" >&2; fail=1; }
+          if [ "$fail" -ne 0 ]; then exit 1; fi
+
+          marker_ids() { grep -oE 'plt-validation-rule:[A-Za-z0-9_]+' "$1" | sed 's/^plt-validation-rule://' | sort -u; }
+          # The first Go backtick literal at/after the marker (the pattern binds on
+          # the sentinel's own line or the line directly below it).
+          go_pattern()   { grep -A2 -E "plt-validation-rule:$1([^A-Za-z0-9_]|$)" "$GO_SRC" | grep -oE '`[^`]*`' | head -1 | sed 's/^.//;s/.$//'; }
+          # The first Dart double-quoted raw-string literal at/after the marker.
+          dart_pattern() { grep -A2 -E "plt-validation-rule:$1([^A-Za-z0-9_]|$)" "$DART" | grep -oE 'r"[^"]*"' | head -1 | sed 's/^r"//;s/"$//'; }
+
+          ids=$( { marker_ids "$GO_SRC"; marker_ids "$DART"; } | sort -u )
+          if [ -z "$ids" ]; then echo "RULE A: no plt-validation-rule sentinels found" >&2; exit 1; fi
+          while IFS= read -r id; do
+            [ -n "$id" ] || continue
+            gp=$(go_pattern "$id"); dp=$(dart_pattern "$id")
+            if [ -z "$gp" ]; then echo "RULE A: rule '$id' has no Go pattern" >&2; fail=1; continue; fi
+            if [ -z "$dp" ]; then echo "RULE A: rule '$id' missing from the Dart mirror" >&2; fail=1; continue; fi
+            if [ "$gp" != "$dp" ]; then
+              echo "RULE A: rule '$id' DRIFTED — go:[$gp] dart:[$dp]" >&2; fail=1
+            fi
+          done <<< "$ids"
+          [ "$fail" -eq 0 ] && echo "OK: field-shape rules single-sourced in Go, mirrored byte-for-byte to the FE"
+          exit $fail
+      expect:
+        exit: 0
+    cure: "Keep each plt-validation-rule:<id> pattern byte-identical across Go (fieldcheck.go, backtick literal) and Dart (server_validation_policy.dart, r\"...\" literal). Change the rule in Go FIRST, then re-mirror the exact bytes; a rule cannot live on one side only (#5768)."
+    origin: scripts/check-validation-rules-sole-source.sh

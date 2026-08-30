@@ -1,0 +1,24 @@
+# Ported from Palletra scripts/check-single-source-human-confirmed-status.sh (sweep-1
+# #5). The gold-label status literal human_verified (the page-classifier training
+# corpus filter) may appear as a raw literal in exactly one Go file — the constant
+# home parsecompose/classifier/confidence.go; every other non-test,
+# non-gatetests .go must reference classifier.ClassificationStatusManuallyConfirmed.
+# The .sh strips full-line // comments (docs may name the value); ported with
+# decomment-go. NOTE: this rule id and cure use hyphens, never the underscore
+# token, so they do not self-trip.
+rules:
+  - id: single-source-human-confirmed-status
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/parsecompose/classifier/confidence.go"
+        - "**/internal/gatetests/**"
+    preprocess: decomment-go
+    params:
+      pattern: 'human_verified'
+    cure: "Use classifier.ClassificationStatusManuallyConfirmed so the human-role writers and the trainer corpus filter can never drift (sweep-1 #5)."
+    origin: scripts/check-single-source-human-confirmed-status.sh

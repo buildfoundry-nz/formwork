@@ -1,0 +1,26 @@
+rules:
+  # Port of check-classify-anchor-text-single-source.sh rule 1 ("ONE anchor-text emitter").
+  # The `" — "` subcategory-anchor literal may be concatenated ONLY by
+  # classify_reprocess.go (allowlisted via scope.exclude). Any OTHER non-test .go
+  # file across the classifier surface (internal/stockroom/ + routes/stockroom/) that
+  # carries the anchor literal is a divergent emitter. The shell strips
+  # full-comment lines (grep -vE ':[0-9]+:[[:space:]]*//') so prose mentioning
+  # the em-dash never false-fires. decomment-go blanks Go `//` (incl. `///`) and
+  # `/* */` comments, mirroring that strip, so the RE2 `" — "` replaces the
+  # regexp2 `^(?!\s*//)` same-line comment lookahead (same conversion as the
+  # sibling classify-anchor-text-single-emitter-source).
+  - id: only-one-classify-anchor-text-emitter
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/stockroom/**/*.go"
+        - "freightworks/services/core-api/routes/stockroom/**/*.go"
+      exclude:
+        - "**/classify_reprocess.go"
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: '" — "'
+    cure: "Emit the '<category> — <name>' anchor text only via ComposeSubcategoryAnchorText in internal/stockroom/classify/classify_reprocess.go; a second emitter drifts the anchor vectors."
+    origin: scripts/check-classify-anchor-text-single-source.sh

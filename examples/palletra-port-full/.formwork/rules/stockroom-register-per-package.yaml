@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-stockroom-register-per-package.sh (#5783).
+# Every extracted stockroom sub-package owns its own route wiring behind a
+# `func Register(` seam, and RegisterStockroom (routes/stockroom/register.go) is a pure
+# composition root that only DELEGATES to each package's Register and
+# concatenates the returned RouteInfo. The gate makes re-absorption impossible:
+# once a package is extracted, its routes can never drift back inline into the
+# composition root.
+#
+# The .sh asserts three coupled facts per extracted package/prefix — RULE A (the
+# package's own register.go defines `func Register(`), RULE B (the root delegates
+# `<pkg>.Register(`), and RULE C (the root contains NO inline `rg.Capability(...
+# "<prefix>"["/])` re-inlining the package's routes). RULE C is the crux — the
+# re-absorption ban — and the only one a single-file check expresses. Ported as
+# forbidden-pattern over the composition root register.go: an inline
+# `rg.Capability(... "/api/stockroom/<owned-prefix>"["/])` for any extracted
+# package's prefix is the finding. preprocess: raw, matching the .sh's plain grep
+# (no decomment).
+#
+# DIVERGENCE (noted): RULE A (each package register.go owns a `func Register(`
+# seam) and RULE B (the root delegates `<pkg>.Register(`) are cross-file EXISTENCE
+# checks a single forbidden-pattern cannot express; they are not modeled. The
+# ported invariant is the novel one — the composition root must not re-inline an
+# extracted subdomain's routes.
+rules:
+  - id: stockroom-register-per-package
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/routes/stockroom/register.go"
+    preprocess: raw
+    params:
+      pattern: 'rg\.Capability\(.*"/api/stockroom/(suppliers|ratecard|priced-items|taxonomy|categories|groups|labor-rate-lines|canonical-products|units|classify-subcategories|subcategory-labor-rates|price-sources|price-source-versions|pricing)["/]'
+    cure: "Delete the inline rg.Capability re-wiring from routes/stockroom/register.go and delegate through the owning package's Register seam (e.g. suppliers.Register(r, pool)). The composition root only concatenates each package's RouteInfo — an extracted subdomain's routes live in its own register.go (#5783)."
+    origin: scripts/check-stockroom-register-per-package.sh

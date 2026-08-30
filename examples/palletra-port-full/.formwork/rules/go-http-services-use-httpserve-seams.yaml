@@ -1,0 +1,39 @@
+# Ported from Palletra scripts/check-go-http-services-use-httpserve-seams.sh (#2567 consolidated
+# service-lifecycle gate).
+#
+# Every containerized Go binary that SERVES HTTP (built by a Dockerfile under
+# freightworks/** whose resolved main package references an HTTP server) MUST, in
+# its main package: (1) build its server via httpserve.NewServer (standard
+# timeouts), (2) run via httpserve.ListenAndServe/Run (graceful SIGTERM drain),
+# and (3) wire /readyz through liveprobe.Probe. Non-HTTP mains are exempt.
+#
+# The gate walks Dockerfiles, resolves each `go build ./<path>` token to a Go
+# main package, decomments it, and checks the three seam calls — a
+# tool/git-tree-inspection shape that no declarative type captures, so it ports
+# to the `command` escape hatch. The command reproduces the invariant on the
+# fixture tree: if any Go file serves HTTP (http.ListenAndServe / http.Server{ /
+# httpserve.*), then all three seam calls must be present, else fail.
+# Scope-level finding — fire-1's HTTP main bypasses httpserve.NewServer; pass-1
+# uses all three seams.
+#
+# APPROXIMATION (noted): the command keys off the in-tree Go HTTP seam rather
+# than resolving the Dockerfile `go build` target to a specific main package
+# (the fixtures still carry a Dockerfile for fidelity). The core "serves HTTP =>
+# NewServer + ListenAndServe/Run + liveprobe.Probe" invariant is faithful.
+rules:
+  - id: go-http-services-use-httpserve-seams
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+        - "freightworks/**/Dockerfile"
+    params:
+      cmd:
+        - "sh"
+        - "-c"
+        - "if grep -rqE 'http\\.ListenAndServe|http\\.Server\\{|httpserve\\.' --include=*.go .; then grep -rqE 'httpserve\\.NewServer\\(' --include=*.go . && grep -rqE 'httpserve\\.(ListenAndServe|Run)\\(' --include=*.go . && grep -rqE 'liveprobe\\.Probe\\(' --include=*.go . || exit 1; fi"
+      expect:
+        exit: 0
+    cure: "Containerized HTTP servers must build via httpserve.NewServer, run via httpserve.ListenAndServe/Run, and wire /readyz through liveprobe.Probe — see #2567."
+    origin: scripts/check-go-http-services-use-httpserve-seams.sh

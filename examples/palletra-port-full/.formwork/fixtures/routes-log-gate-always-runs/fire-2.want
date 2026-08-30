@@ -1,0 +1,4 @@
+# Scope-level: the guardrails job's only invocation of the gate is commented
+# out, so nothing in ci.yml ever runs it. Distinct from fire-1, whose job DOES
+# invoke it but is go_touched-gated — the two pins cannot satisfy each other.
+- ci.yml never invokes check-routes-log-pre-500.sh

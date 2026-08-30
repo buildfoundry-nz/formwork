@@ -1,0 +1,217 @@
+formwork
+Copyright 2026 BuildFoundry Limited
+
+Licensed under the Apache License, Version 2.0; see the LICENSE file.
+
+This product's binary distributions statically embed third-party software.
+Every module compiled into the released binaries is listed below, with the
+copyright notices its own license files carry and with the permission notice
+or condition text that license requires to accompany a binary redistribution.
+The following attributions are reproduced as their licenses require.
+
+This list is not maintained by hand. internal/repoproof's
+TestNoticeAttributesEveryStaticallyLinkedModule runs `go list -deps
+./cmd/formwork` for each of the four platforms .goreleaser.yaml builds and
+fails when a linked module has no block here, or a block here names a module
+that is not linked. TestNoticeReproducesEveryDependencyCopyrightNotice reads
+each module's own LICENSE, NOTICE, COPYRIGHT and ATTRIB files and fails when a
+copyright notice any of them carries is missing below.
+
+--------------------------------------------------------------------------
+MIT-licensed modules
+--------------------------------------------------------------------------
+
+github.com/bmatcuk/doublestar/v4 (MIT License)
+
+    Copyright (c) 2014 Bob Matcuk
+
+github.com/dlclark/regexp2 (MIT License)
+
+    Copyright (c) Doug Clark
+
+  Linked code in this module was ported from dotnet/corefx — syntax/*.go,
+  match.go, regexp.go, replace.go and runner.go — which was released under
+  the MIT License:
+
+    Copyright (c) Microsoft Corporation
+
+  and from the Go standard library — the escape optimisation in
+  syntax/escape.go and parts of regexp.go — released under the 3-clause BSD
+  license reproduced further below:
+
+    Copyright (c) 2012 The Go Authors. All rights reserved.
+
+github.com/Masterminds/semver/v3 (MIT License)
+
+    Copyright (C) 2014-2019, Matt Butcher and Matt Farina
+
+github.com/wasilibs/go-pgquery (MIT License)
+
+    Copyright (c) wasilibs authors
+
+  It bundles and compiles libpg_query, which contains work from pganalyze
+  released under the 3-clause BSD license reproduced further below:
+
+    Copyright (c) 2015, Lukas Fittl <lukas@fittl.com>
+
+  and code derived from the PostgreSQL project
+  (https://www.postgresql.org/), distributed under the PostgreSQL License
+  reproduced further below:
+
+    PostgreSQL Database Management System
+    (also known as Postgres, formerly known as Postgres95)
+    Portions Copyright (c) 1996-2025, PostgreSQL Global Development Group
+    Portions Copyright (c) 1994, The Regents of the University of California
+
+github.com/wasilibs/wazero-helpers (MIT License)
+
+    Copyright (c) wasilibs authors
+
+Each of the five modules above is distributed under the MIT License, whose
+permission notice must accompany the software:
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the
+    "Software"), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to permit
+    persons to whom the Software is furnished to do so, subject to the
+    following conditions:
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+--------------------------------------------------------------------------
+BSD 3-Clause licensed modules
+--------------------------------------------------------------------------
+
+github.com/pganalyze/pg_query_go/v6 (BSD 3-Clause License)
+
+    Copyright (c) 2015, Lukas Fittl <lukas@fittl.com>
+    Copyright (c) 2016-2025, Duboce Labs, Inc. (pganalyze) <team@pganalyze.com>
+    All rights reserved.
+
+  It carries the same PostgreSQL-derived notices as go-pgquery above. Its own
+  copy of them states the Global Development Group range as 1996-2015 where
+  the libpg_query sources go-pgquery bundles state 1996-2025, so both are
+  reproduced:
+
+    PostgreSQL Database Management System
+    (formerly known as Postgres, then as Postgres95)
+    Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
+    Portions Copyright (c) 1994, The Regents of the University of California
+
+golang.org/x/sys (BSD 3-Clause License)
+
+    Copyright 2009 The Go Authors.
+
+google.golang.org/protobuf (BSD 3-Clause License)
+
+    Copyright (c) 2018 The Go Authors. All rights reserved.
+
+The three modules above, the pganalyze work bundled by go-pgquery and the
+Go-derived code in regexp2 are distributed under the 3-clause BSD license,
+which requires binary redistributions to reproduce the copyright notice, the
+conditions and the disclaimer:
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are
+    met:
+
+       * Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+       * Redistributions in binary form must reproduce the above
+    copyright notice, this list of conditions and the following disclaimer
+    in the documentation and/or other materials provided with the
+    distribution.
+       * Neither the name of the copyright holder nor the names of its
+    contributors may be used to endorse or promote products derived from
+    this software without specific prior written permission.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+    "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+    LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+    A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+    OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+    LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+    DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+    THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+  The third condition names a different party in each copy: Google LLC in
+  golang.org/x/sys, Google Inc. in google.golang.org/protobuf and in the
+  Go-derived code in regexp2, and pg_query in pg_query_go and the pganalyze
+  work bundled by go-pgquery.
+
+--------------------------------------------------------------------------
+PostgreSQL License
+--------------------------------------------------------------------------
+
+The PostgreSQL-derived code listed above is distributed under the PostgreSQL
+License, which requires its copyright notice and the two paragraphs that
+follow to appear in all copies:
+
+    Permission to use, copy, modify, and distribute this software and its
+    documentation for any purpose, without fee, and without a written
+    agreement is hereby granted, provided that the above copyright notice
+    and this paragraph and the following two paragraphs appear in all
+    copies.
+
+    IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE TO ANY PARTY
+    FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES,
+    INCLUDING LOST PROFITS, ARISING OUT OF THE USE OF THIS SOFTWARE AND ITS
+    DOCUMENTATION, EVEN IF THE UNIVERSITY OF CALIFORNIA HAS BEEN ADVISED OF
+    THE POSSIBILITY OF SUCH DAMAGE.
+
+    THE UNIVERSITY OF CALIFORNIA SPECIFICALLY DISCLAIMS ANY WARRANTIES,
+    INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+    MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE SOFTWARE
+    PROVIDED HEREUNDER IS ON AN "AS IS" BASIS, AND THE UNIVERSITY OF
+    CALIFORNIA HAS NO OBLIGATIONS TO PROVIDE MAINTENANCE, SUPPORT, UPDATES,
+    ENHANCEMENTS, OR MODIFICATIONS.
+
+--------------------------------------------------------------------------
+Apache License 2.0 modules
+--------------------------------------------------------------------------
+
+github.com/tetratelabs/wazero (Apache License 2.0) — attribution notice
+reproduced from its NOTICE file:
+
+    wazero
+    Copyright 2020-2023 wazero authors
+
+gopkg.in/yaml.v3 (Apache License 2.0) — attribution notice reproduced from
+its NOTICE file:
+
+    Copyright 2011-2016 Canonical Ltd.
+
+  Its LICENSE states the Apache-covered portion as:
+
+    Copyright (c) 2011-2019 Canonical Ltd
+
+  and the files ported to Go from the C files of libyaml — apic.go,
+  emitterc.go, parserc.go, readerc.go, scannerc.go, writerc.go, yamlh.go and
+  yamlprivateh.go — remain covered by their original MIT license, whose
+  permission notice is reproduced above:
+
+    Copyright (c) 2006-2010 Kirill Simonov
+    Copyright (c) 2006-2011 Kirill Simonov
+
+Both modules above are distributed under the Apache License, Version 2.0, the
+same license this product is under; its full text is in the LICENSE file.
+
+--------------------------------------------------------------------------
+
+golang.org/x/sys and google.golang.org/protobuf additionally ship a PATENTS
+file granting patent rights on the Go authors' contributions. Each module's
+full license text ships in its own source tree.

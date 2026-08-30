@@ -1,0 +1,9 @@
+name: flutter-integration
+on:
+  pull_request:
+jobs:
+  patrol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - run: xvfb-run scripts/ci/patrol-run.sh

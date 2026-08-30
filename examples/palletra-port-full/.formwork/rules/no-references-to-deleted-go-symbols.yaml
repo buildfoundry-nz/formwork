@@ -1,0 +1,77 @@
+# Ported from Palletra scripts/check-no-references-to-deleted-go-symbols.sh (sweep-2 #13).
+# Comments rot when the file they cite is deleted or renamed. Rule: a comment
+# (// line OR /* */ block) in a NON-test Go file must not name a `.go` FILE whose
+# basename is absent from the set of EVERY .go basename in the tree. Wildcard /
+# suffix mentions (*.go, _test.go), URLs, and string-literal content are
+# excluded; _test.go files are exempt (a test may quote a historical filename).
+# File-level only by design — symbol staleness stays a review concern.
+#
+# Why the ESCAPE HATCH (type: command): the rule is a set-membership join whose
+# right side is the set of every .go BASENAME enumerated from the tree's FILE
+# LIST (not file content), and whose left side is tokens pulled from COMMENT text
+# only. doc-path-exists resolves a cited token as a PATH relative to the repo
+# root, so it would false-positive on the basename-anywhere match this gate wants
+# (a comment citing `worker/local.go` passes if any `local.go` exists); set-
+# relation cannot enumerate filenames as a set. It is self-contained (a comment
+# lex + basename membership, no external tool), so this is a fixture-PROVABLE
+# command escape reproducing the .sh: fire-1's comment cites a deleted .go file;
+# pass-1's comment cites an existing basename.
+rules:
+  - id: no-references-to-deleted-go-symbols
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/vendor/**"
+    params:
+      cmd:
+        - bash
+        - "-c"
+        - |
+          set -uo pipefail
+          [ -d freightworks ] || exit 0
+          BN="$(mktemp)"; trap 'rm -f "$BN"' EXIT
+          find . -type f -name '*.go' -not -path '*/vendor/*' | awk -F/ '{print $NF}' | sort -u > "$BN"
+          rc=0
+          while IFS=$'\t' read -r loc token; do
+            [ -n "${token:-}" ] || continue
+            base="${token##*/}"
+            grep -qxF "$base" "$BN" || { echo "$loc: comment cites a .go file absent from the tree: $token" >&2; rc=1; }
+          done < <(
+            find freightworks -type f -name '*.go' -not -name '*_test.go' -not -path '*/vendor/*' -print0 \
+              | xargs -0 awk '
+                  FNR==1 { inblock=0 }
+                  {
+                    line=$0; c=""; i=1; n=length(line)
+                    while (i<=n) {
+                      if (inblock) {
+                        rest=substr(line,i); p=index(rest,"*/")
+                        if (p==0) { c=c" "rest; break }
+                        c=c" "substr(rest,1,p-1); i=i+p+1; inblock=0; continue
+                      }
+                      two=substr(line,i,2)
+                      if (two=="//") { if (i>1 && substr(line,i-1,1)==":") { i++; continue } c=c" "substr(line,i+2); break }
+                      if (two=="/*") { inblock=1; i+=2; continue }
+                      i++
+                    }
+                    if (c=="") next
+                    gsub(/[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^[:space:]]*/,"",c)
+                    while (match(c,/[[:alnum:]_.*\/]+\.go([^[:alnum:]_]|$)/)) {
+                      tok=substr(c,RSTART,RLENGTH)
+                      sub(/[^[:alnum:]_]$/,"",tok); sub(/\.go[^[:alnum:]_]?$/,".go",tok)
+                      c=substr(c,RSTART+RLENGTH)
+                      if (tok ~ /\*/) continue
+                      sub(/^\/+/,"",tok)
+                      if (tok !~ /^[[:alnum:]]/) continue
+                      printf "%s:%d\t%s\n", FILENAME, FNR, tok
+                    }
+                  }'
+          )
+          exit $rc
+      expect:
+        exit: 0
+    cure: "The cited .go file was renamed (point the comment at the new name) or deleted (keep the behavioral prose, drop the dead filename token — describe what the code did, not where it lived). Never delete the whole comment."
+    origin: scripts/check-no-references-to-deleted-go-symbols.sh

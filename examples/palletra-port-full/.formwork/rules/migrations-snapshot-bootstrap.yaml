@@ -1,0 +1,44 @@
+# Ported from Palletra scripts/check-schema-snapshot-bootstrap.sh — the
+# SNAPSHOT-BOOTSTRAP equivalence gate (#7473). db-schema-snapshot.sh emits a
+# data-inclusive dump (schema.data-snapshot.sql) that CI/bootstrap restore into
+# an empty DB INSTEAD of replaying the whole migration ledger. That shortcut is
+# only trustworthy if provably equivalent to a full from-scratch replay. On a
+# fresh scratch pgvector container this gate: (1) restores schema.data-snapshot.sql
+# into an empty DB; (2) runs the real migrate binary (`go run ./cmd/migrate`,
+# PLATFORM_MIGRATIONS_OPTIONAL=true) against it and asserts exit 0 — proving the
+# snapshot's ledger frontier is correct (no re-apply of an already-restored
+# migration); (3) pg_dumps the restored schema and diffs it against
+# schema.snapshot.sql — proving restore-from-snapshot reproduces the exact schema
+# a full replay produces.
+#
+# Why the ESCAPE HATCH (type: command): UNFIREABLE from a tmpdir fixture — it
+# boots a docker postgres, restores a real dump, and shells out to
+# `go run ./cmd/migrate`. Both an external tool (docker) AND a toolchain build
+# (cgo go) over live DB state. CI runs it as a hard gate
+# (CHECK_MIGRATIONS_SNAPSHOT_BOOTSTRAP_FORCE=1) where it verifies; `formwork lint`
+# enumerates it. No standalone fixture.
+rules:
+  - id: migrations-snapshot-bootstrap
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is scripts/check-schema-snapshot-bootstrap.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/**"
+    params:
+      cmd:
+        - bash
+        - scripts/check-schema-snapshot-bootstrap.sh
+      expect:
+        exit: 0
+    cure: "Restore-from-snapshot must equal a full replay (schema + ledger frontier). Regenerate BOTH schema.snapshot.sql and schema.data-snapshot.sql with scripts/db-schema-snapshot.sh and commit them; a drifted snapshot or a wrong ledger frontier fails this gate (#7473)."
+    origin: scripts/check-schema-snapshot-bootstrap.sh

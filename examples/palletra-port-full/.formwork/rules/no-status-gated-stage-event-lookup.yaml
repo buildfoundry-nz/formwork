@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-no-status-gated-stage-event-lookup.sh (audit 2026-05-23 BUG #2).
+# In non-test Go under internal/parsewrite/, the run lookup that resolves the
+# active run for a stage-event INSERT must be ORDER BY started_at DESC LIMIT 1 with
+# NO status predicate — stage events are an audit trail and land regardless of run
+# lifecycle. Fires on status IN ('pending'|'running') (any subset / whitespace /
+# table alias) or status = 'pending'|'running'. _test.go excluded.
+rules:
+  - id: no-status-gated-stage-event-lookup
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/internal/parsewrite/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: 'status[[:space:]]*(IN[[:space:]]*\([^)]*''(pending|running)''|=[[:space:]]*''(pending|running)'')'
+    cure: "Remove the AND status IN (...) clause; the lookup is ORDER BY started_at DESC LIMIT 1 (audit 2026-05-23 BUG #2)."
+    origin: scripts/check-no-status-gated-stage-event-lookup.sh

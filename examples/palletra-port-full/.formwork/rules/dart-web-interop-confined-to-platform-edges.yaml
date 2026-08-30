@@ -1,0 +1,36 @@
+# Ported from Palletra scripts/check-dart-web-interop-confined-to-platform-edges.sh
+# (Sweep-2 #5). Modern web-interop imports — dart:js_interop[_unsafe],
+# package:web/*, dart:html — are confined to a fixed allowlist of ~8
+# platform-edge files under packages/plt_core + frontend/lib/main.dart, and are
+# a HARD FAIL anywhere else under frontend/lib or packages/*/lib. The allowlisted
+# edges + generated files become scope.exclude here; the .sh's rg PATTERN ports
+# directly.
+rules:
+  - id: dart-web-interop-confined-to-platform-edges
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "packages/plt_core/lib/sse/**"
+        - "packages/plt_core/lib/observability/logging.dart"
+        - "packages/plt_core/lib/observability/js_error_relay.dart"
+        - "packages/plt_core/lib/observability/web_vitals.dart"
+        - "packages/plt_core/lib/services/browser_feedback_service.dart"
+        - "packages/plt_core/lib/services/browser_pdf_popout_launcher.dart"
+        - "packages/plt_core/lib/services/eye_dropper_canvas_color_sampler.dart"
+        - "frontend/lib/main.dart"
+        - "**/generated/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbserver.dart"
+        - "**/*.pbgrpc.dart"
+    params:
+      pattern: "^import[[:space:]]+'(dart:js_interop(_unsafe)?|dart:html|package:web/[^']*)'"
+    cure: "Web-interop imports are confined to the platform-edge allowlist under packages/plt_core/lib + frontend/lib/main.dart. Add a thin seam in one of those edges (or a new plt_core edge with a decision-log entry); never reach for js-interop inline (sweep-2 #5)."
+    origin: scripts/check-dart-web-interop-confined-to-platform-edges.sh

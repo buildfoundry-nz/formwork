@@ -1,0 +1,32 @@
+# Ported from Palletra scripts/check-no-bare-mergeFromProto3Json.sh (P1.3 / B11).
+# The open-coded proto3-JSON decode mergeFromProto3Json(jsonDecode(...)) must ride
+# the canonical WireDio decoder; a ninth open-coded copy would revive the
+# empty-body / DioException-decoding regressions. Scans the Dart lib roots
+# (frontend/lib + packages/*/lib), excludes generated files, and carves out the 5
+# canonical decoder files via except.paths.
+# Note: the .sh runs rg --multiline; forbidden-pattern is line-oriented (RE2, no
+# multiline param), which catches the dominant single-line form
+# `decoded.mergeFromProto3Json(jsonDecode(body))` faithfully.
+rules:
+  - id: no-direct-proto3-json-merge-call
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+    params:
+      pattern: 'mergeFromProto3Json\s*\(\s*jsonDecode'
+    except:
+      paths:
+        - "**/plt_core/lib/network/wire_dio.dart"
+        - "**/plt_core/lib/network/wire_dio_media.dart"
+        - "**/plt_core/lib/sse/project_activity_stream.dart"
+        - "**/plt_core/lib/sse/tasks_queue_events_stream.dart"
+        - "**/plt_core/lib/sse/dock_intake_events_stream.dart"
+    cure: "Route the decode through packages/plt_core/lib/network/wire_dio.dart (WireDio.get/post/patch/delete/...); it owns the empty-body + DioException branches."
+    origin: scripts/check-no-bare-mergeFromProto3Json.sh

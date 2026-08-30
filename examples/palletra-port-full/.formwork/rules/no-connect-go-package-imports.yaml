@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-no-connect-go-package-imports.sh (SV-ARC-3).
+# The backend is hand-rolled Chi + protojson, not Connect-go. No Go source under
+# freightworks/ (test files excluded, mirroring the .sh) may import
+# connectrpc.com/connect or any sub-package.
+rules:
+  - id: no-connect-go-package-imports
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      pattern: '"connectrpc\.com/connect[^"]*"'
+    cure: "Replace the Connect-go handler with a Chi handler + protojson encode/decode (SV-ARC-3)."
+    origin: scripts/check-no-connect-go-package-imports.sh

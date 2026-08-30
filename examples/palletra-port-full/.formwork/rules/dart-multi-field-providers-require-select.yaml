@@ -1,0 +1,35 @@
+# Ported from Palletra scripts/check-dart-multi-field-providers-require-select.sh (Tier 6.1 /
+# FR-ARC-4). A consumer that watches a multi-field state provider whole
+# rebuilds on every field change. Bans `ref.watch(<provider>)` against the
+# enumerated multi-field providers (readerPageUiProvider, layerToggleProvider)
+# unless the watch chains `.select(`, across all Dart library source. Files
+# under **/providers/** are exempt (a provider watching another's full state is
+# a dependency edge). Generated files excluded. ref.read is a one-shot and the
+# .sh only bans ref.watch.
+#
+# APPROXIMATION: the .sh uses a pcre2 negative lookahead `(?!\.select\()`.
+# formwork uses RE2 (no lookahead), so this matches the two canonical
+# whole-state watch shapes — scalar `ref.watch(provider)` and family
+# `ref.watch(provider(key))` — and exempts a `.select(` chained directly onto
+# the provider or the family paren. It does not catch a direct member read
+# without select (`ref.watch(provider.field)`), which the lookahead gate would.
+rules:
+  - id: dart-multi-field-providers-require-select
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/providers/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+        - "**/*.pbenum.dart"
+        - "**/*.pbjson.dart"
+        - "**/*.pbserver.dart"
+    params:
+      pattern: 'ref\.watch\((readerPageUiProvider|layerToggleProvider)(\s*\)|\([^)]*\)\s*\))'
+    cure: "Chain .select((s) => s.<field>) for each field you actually read; each field gets its own ref.watch(...).select line so the consumer rebuilds only when that field changes."
+    origin: scripts/check-dart-multi-field-providers-require-select.sh

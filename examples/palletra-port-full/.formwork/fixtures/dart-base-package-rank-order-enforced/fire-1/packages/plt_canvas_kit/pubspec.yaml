@@ -1,0 +1,9 @@
+name: plt_canvas_kit
+description: Higher-layer canvas engine (rank 2).
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  meta: ^1.15.0

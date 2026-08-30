@@ -1,0 +1,15 @@
+name: deploy-hosting
+on:
+  push:
+    branches: [develop]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build web bundle
+        run: flutter build web --release --source-maps
+      - name: Upload source maps
+        run: gcloud storage cp build/web/main.dart.js.map gs://plt-sourcemaps/${GITHUB_SHA}/main.dart.js.map
+      - name: Deploy
+        run: firebase deploy --only hosting

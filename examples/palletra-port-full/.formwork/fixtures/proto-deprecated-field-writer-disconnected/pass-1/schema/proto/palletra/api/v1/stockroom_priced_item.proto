@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package palletra.api.v1;
+
+message UpdateRatedItemRequest {
+  reserved 6;
+  reserved "active_rate";
+  optional string tariff_text = 8;
+}

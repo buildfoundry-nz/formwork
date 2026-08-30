@@ -1,0 +1,26 @@
+# Ported from Palletra scripts/check-no-eval-data-directory-in-git.sh (#5949).
+# The sku/detail extraction eval harness scores against REAL customer plans
+# + ground-truth tallies. That eval DATA must NEVER enter the repo; it lives in
+# an out-of-repo store and the in-repo mount `eval-data/` is .gitignored. The .sh
+# is PATH RESERVATION (not content sniffing): any file present under `eval-data/`
+# is a violation. That maps exactly onto file-naming's `reserved` glob — a file
+# whose path matches the reserved pattern fails.
+#
+# DIVERGENCE (noted): the .sh reads git state (git ls-files / git diff --cached),
+# so it flags only TRACKED/STAGED files; file-naming reasons over the scanned
+# working tree. For the reservation invariant these coincide — a scanned file
+# under eval-data/ is the same defect the .sh blocks — and formwork has no git-
+# tracked-set predicate for a path-only rule. The --staged pre-commit mode is not
+# separately modelled (formwork's --staged lane git-mode is the equivalent seam).
+rules:
+  - id: no-eval-data-directory-in-git
+    type: file-naming
+    severity: error
+    scope:
+      include:
+        - "**"
+    params:
+      reserved:
+        - "eval-data/**"
+    cure: "Eval data (customer plan PDFs + ground-truth lists) must never be committed. The eval store lives OUTSIDE the repo; eval-data/ is a .gitignored mount. Remove the file from the index (git rm --cached <file>) — #5949."
+    origin: scripts/check-no-eval-data-directory-in-git.sh

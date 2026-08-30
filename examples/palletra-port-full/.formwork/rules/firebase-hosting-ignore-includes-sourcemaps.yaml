@@ -1,0 +1,42 @@
+# Ported from Palletra scripts/check-firebase-hosting-ignore-includes-sourcemaps.sh
+# (epic #5848 Task C3-6). Every firebase*.json hosting target (a single object
+# OR each element of a multi-site ARRAY) must carry the exact element
+# "**/*.map" in its own `hosting.ignore[]`, so a `--source-maps` web build
+# never publishes de-minified source maps to the public Hosting CDN. A
+# "**/*.map" token elsewhere (a headers.source, a sibling key) must NOT satisfy
+# it — the check is STRUCTURAL (jq), per-target, subset-of-array membership.
+#
+# Why the ESCAPE HATCH (type: command): the invariant is a per-target JSON
+# structural fact — "every element of the hosting array has "**/*.map" as an
+# exact member of its ignore array" — with a hard fail on a jq parse error and
+# an env-agnostic sweep over ALL firebase*.json. That structural, array-quantified
+# JSON predicate (and the "string-valued ignore must NOT pass on a substring"
+# distinction) is not faithfully expressible in the line/multiline pattern types;
+# it fundamentally needs jq. This command runs the real gate; formwork lint
+# enumerates it and it verifies in CI.
+rules:
+  - id: firebase-hosting-ignore-includes-sourcemaps
+    type: command
+    severity: error
+    fixture_exempt: >-
+      The detector is
+      scripts/check-firebase-hosting-ignore-includes-sourcemaps.sh — the
+      validating target's own gate script, which this corpus does not carry
+      and cannot: it is written in that tree's vocabulary, and this repository
+      tracks no shell scripts at all. In a fixture tree bash would exit 127 in
+      the fire tree and the pass tree alike, so the fire proof would be
+      satisfied by the detector NOT EXISTING and the pass proof would report
+      that same missing-detector exit as a finding. What the port asserts here
+      is the SCOPE and the CURE, both readable against the origin script; the
+      detection runs where the script does.
+    scope:
+      include:
+        - "firebase*.json"
+    params:
+      cmd:
+        - "bash"
+        - "scripts/check-firebase-hosting-ignore-includes-sourcemaps.sh"
+      expect:
+        exit: 0
+    cure: "Add \"**/*.map\" to every firebase hosting target's ignore[] array (not headers.source) so source maps are never published to the public CDN (#5848 C3-6)."
+    origin: scripts/check-firebase-hosting-ignore-includes-sourcemaps.sh

@@ -1,0 +1,36 @@
+# Ported from Palletra scripts/check-slot-resolution-sole-helper.sh (sweep-1
+# #11). Resolving a project's canonical slots is "read the pages
+# (ListSlotPages) then run slots.Resolve(jobType, pages)". That two-step was
+# re-inlined at four call sites and drifted; the fix consolidates it into ONE
+# helper, workflowdata.LoadForProjectWithPages. This gate forbids any
+# non-test Go file — except the helper's own file — from calling BOTH
+# `ListSlotPages(` AND `slots.Resolve(` (co-occurrence in one file).
+#
+# The .sh does two per-file greps and fails when both hit. Ported as a multiline
+# co-occurrence forbidden-pattern: an order-independent alternation matches
+# whichever token appears first, then any span, then the other. The match starts
+# at the first token's line (the reported line). Scope mirrors the .sh:
+# freightworks/**/*.go, excluding *_test.go and the canonical helper file
+# internal/workflow/data/project.go.
+rules:
+  - id: slot-resolution-sole-helper
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/internal/workflow/data/project.go"
+    params:
+      # Whole-file co-occurrence (origin: grep -q ListSlotPages( && grep -q
+      # slots.Resolve(). Order-independent alternation over a linear RE2 `[\s\S]*?`
+      # span matches whichever token comes first, then the other — no lookaround,
+      # so RE2 runs it linearly. NOT all_of: the fixture want-marker sits on the
+      # first-token (ListSlotPages) line, not line 1, and this alternation
+      # anchors the finding there; all_of would anchor on line 1.
+      pattern: 'ListSlotPages\([\s\S]*?slots\.Resolve\(|slots\.Resolve\([\s\S]*?ListSlotPages\('
+      prefilter: 'ListSlotPages'
+      multiline: true
+    cure: "Call workflowdata.LoadForProjectWithPages(ctx, tx, projectID, jobType) — the single helper that reads the pages and runs slots.Resolve — instead of re-inlining both calls (sweep-1 #11)."
+    origin: scripts/check-slot-resolution-sole-helper.sh

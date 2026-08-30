@@ -1,0 +1,19 @@
+# Ported from Palletra scripts/check-scheduled-jobs-use-taskboot.sh (#1920),
+# Rule B (negative). No non-test .go under services/*/cmd/job/ may call the pool
+# constructor directly (db.NewLazyPool( / db.NewPool(); those belong inside
+# taskboot now, and a cmd/job that calls them bypasses the shared startup budget
+# and role assertion.
+rules:
+  - id: scheduled-jobs-avoid-direct-pool
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/*/cmd/job/**/*.go"
+      exclude:
+        - "**/*_test.go"
+    preprocess: raw
+    params:
+      pattern: 'db\.NewLazyPool\(|db\.NewPool\('
+    cure: "Open the pool via taskboot.OpenDBPool(ctx, dsn, logger, serviceRole); the direct db.NewPool/NewLazyPool constructors belong inside internal/taskboot, not in a cmd/job main (#1920)."
+    origin: scripts/check-scheduled-jobs-use-taskboot.sh

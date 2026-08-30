@@ -1,0 +1,16 @@
+# Ported from Palletra scripts/check-annotation-name-template-banned.sh (#6416),
+# anchor 1 of 2. The dropped never-wired palletra.custom_annotation_label_presets
+# table must not reappear in the committed schema snapshot (a migration re-adding it
+# regenerates the snapshot and trips this). The sibling palletra.custom_page_presets
+# table does not match. Anchor 2 (the proto message) is a separate rule.
+rules:
+  - id: no-custom-annotation-name-template-in-schema
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "freightworks/services/core-api/migrations/schema.snapshot.sql"
+    params:
+      pattern: '^CREATE TABLE palletra\.custom_annotation_label_presets \('
+    cure: "custom_annotation_label_presets is a dropped dead feature (#6416); build it for real with a writer + RPC or leave it out — do not resurrect the table."
+    origin: scripts/check-annotation-name-template-banned.sh

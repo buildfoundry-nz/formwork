@@ -1,0 +1,17 @@
+# Ported from Palletra scripts/check-issue-filing-skill-contract.sh (#7744), invariant F1:
+# the /file-issue skill must never edit an existing issue's body — no
+# `gh issue edit … --body` command. The only sanctioned `gh issue edit` is
+# `--parent`; `gh issue create --body-file` is a create, not an edit, and never
+# matches. Line-scoped forbidden pattern (RE2 `.*` does not cross newlines) over
+# SKILL.md.
+rules:
+  - id: file-issue-skill-never-edits-issue-body
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - ".claude/skills/file-issue/SKILL.md"
+    params:
+      pattern: 'gh issue edit.*--body'
+    cure: "Never edit the epic/parent issue body (F1, #7744); the only sanctioned `gh issue edit` is `--parent`. Create with `gh issue create --body-file`."
+    origin: scripts/check-issue-filing-skill-contract.sh

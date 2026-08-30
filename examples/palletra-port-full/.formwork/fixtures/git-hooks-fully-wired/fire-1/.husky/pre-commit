@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# VIOLATION: re-admits the husky runtime source (_/husky.sh) — the exact node
+# coupling that killed the hooks once node was deleted from the repo.
+. "$(dirname "$0")/_/husky.sh"
+flutter analyze && gofmt -l .

@@ -1,0 +1,105 @@
+# Ported from Palletra scripts/check-no-inline-duplicate-of-named-constraint.sh
+# (sweep-4 #6 / DD-3). Bans an inline generic type-parameter constraint literal
+# `[T interface{ … }]` whose structural body is identical to a NAMED constraint
+# interface already declared in the SAME Go package. The named constraint is the
+# canonical home; an inline copy of it re-opens the sweep-1 15x duplication that
+# 77c0d3b190 collapsed. check-no-int32-typed-id-fields.sh Rule 2 deliberately EXEMPTS
+# constraint-position interface literals, so this focused gate closes that hole.
+#
+# ESCAPE HATCH (type: command). The detector is a Go STRUCTURE analyzer over
+# type-parameter brackets and interface literals with per-package canonicalised
+# body-set comparison — the built-in goast analyzers reason over funcs/calls, not
+# generic constraint literals, so none of them fit. Ported as a self-contained
+# python3 reproduction of the gate's own detector over the fixture's freightworks
+# tree; finding is scope-level. fire-1 re-inlines a named constraint's body in a
+# type-param bracket in the same package; pass-1 uses the named constraint.
+rules:
+  - id: no-inline-duplicate-of-named-constraint
+    type: command
+    severity: error
+    scope:
+      include:
+        - "freightworks/**/*.go"
+    params:
+      cmd:
+        - python3
+        - -c
+        - |
+          import os, re, sys
+
+          scan = "freightworks"
+          pkgfiles = {}
+          for dirpath, dirnames, filenames in os.walk(scan):
+              dirnames[:] = [d for d in dirnames
+                             if d not in ("node_modules", "vendor", ".git", "generated")]
+              for fn in filenames:
+                  if fn.endswith(".go") and not fn.endswith("_test.go"):
+                      pkgfiles.setdefault(dirpath, []).append(os.path.join(dirpath, fn))
+
+          def drop_comments(s):
+              s = re.sub(r'/\*.*?\*/', ' ', s, flags=re.S)
+              s = re.sub(r'//[^\n]*', ' ', s)
+              return s
+
+          def canon(body):
+              elems = []
+              for p in re.split(r'[;\n]', body):
+                  p = re.sub(r'\s+', ' ', p).strip()
+                  if p:
+                      elems.append(p)
+              return tuple(sorted(elems))
+
+          def constraint_shaped(c):
+              return any(('comparable' in e or '~' in e or '|' in e or '.' in e) for e in c)
+
+          def braced(s, open_idx):
+              depth = 0
+              for i in range(open_idx, len(s)):
+                  if s[i] == '{':
+                      depth += 1
+                  elif s[i] == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return s[open_idx + 1:i]
+              return None
+
+          NAMED_RE = re.compile(r'\btype\s+(\w+)\s*(?:=\s*)?interface\s*\{')
+          INLINE_RE = re.compile(r'\binterface\s*\{')
+
+          out = []
+          for files in pkgfiles.values():
+              blobs = {f: drop_comments(open(f, encoding="utf-8").read()) for f in files}
+              named = {}
+              for f in files:
+                  s = blobs[f]
+                  for m in NAMED_RE.finditer(s):
+                      body = braced(s, s.index('{', m.start()))
+                      if body is None:
+                          continue
+                      c = canon(body)
+                      if constraint_shaped(c):
+                          named.setdefault(c, m.group(1))
+              if not named:
+                  continue
+              for f in files:
+                  s = blobs[f]
+                  for im in INLINE_RE.finditer(s):
+                      prefix = s[:im.start()]
+                      if prefix.count('[') <= prefix.count(']'):
+                          continue
+                      body = braced(s, s.index('{', im.start()))
+                      if body is None:
+                          continue
+                      c = canon(body)
+                      if c and c in named:
+                          ln = s.count('\n', 0, im.start()) + 1
+                          out.append(f"{f}:{ln}\t{named[c]}")
+
+          for line in sorted(set(out)):
+              loc, name = line.split("\t")
+              print(f"FAIL {loc}: re-inlines named constraint `{name}` from the same package")
+          sys.exit(1 if out else 0)
+      expect:
+        exit: 0
+    cure: "Delete the inline interface{...} and use the named constraint (e.g. [J JobMessage]). The named declaration is the one home for that constraint shape; re-inlining reopens the sweep-1 15x duplication (DD-3). Rule 2 cannot catch this — it exempts constraint-position literals by design."
+    origin: scripts/check-no-inline-duplicate-of-named-constraint.sh

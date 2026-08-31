@@ -39,7 +39,7 @@ grammar), and enumerating those exceptions would be a list that itself rots.
 Prose accuracy inside an entry is likewise not mechanically checkable; a
 handful of facts too easy to get wrong are pinned individually.
 
-Counts at the time of writing: **26 rule types, 14 preprocessors.** If your
+Counts at the time of writing: **27 rule types, 14 preprocessors.** If your
 binary reports different numbers, believe your binary and file an issue against
 this document.
 
@@ -201,7 +201,7 @@ are enumerated by the escape-hatch census with their reason.
 
 ## Rule types
 
-26 registered rule types. Parameters below are the strictly-decoded set — an unknown one is
+27 registered rule types. Parameters below are the strictly-decoded set — an unknown one is
 exit 2. Each entry gives what the type asserts, every parameter it decodes, and
 a worked example.
 
@@ -546,6 +546,60 @@ call matching both patterns does not guard itself.
     sink: '^store\.Write'
     funcs: '^Handle'
 ```
+
+#### `go/expected-derives-from-actual`
+Flags a conformance test whose **expected** value is derived from the very
+artifact it is checking. Such a test compares an artifact to itself: it can only
+falsify the round trip — ordering, dedup, formatting — never agreement with
+whatever the artifact is supposed to track.
+
+| param | meaning |
+|---|---|
+| `reader` | regex over the selector of a whole-file read |
+| `loader` | regex over the selector of a loader that returns parsed content |
+| `compare` | regex over the comparison the test asserts on |
+| `declare` | comment marker that declares a deliberate round trip |
+
+```yaml
+- id: conformance-tests-consult-the-writer
+  type: go/expected-derives-from-actual
+  scope:
+    include: ["**/*_test.go"]
+  params:
+    reader:  '^os\.ReadFile$'
+    loader:  '^(load|read)[A-Z]\w*$'
+    compare: '^(bytes\.Equal|reflect\.DeepEqual|cmp\.Diff)$'
+    declare: 'self-comparison:'
+```
+
+**This cannot be a pattern rule, and that is the whole point.** The correct form
+and the defective form are the same TEXT. A golden-file test — read the
+committed file, compare it to freshly rendered output — is the RIGHT shape, and
+both spell `bytes.Equal(os.ReadFile(p), render(x))`. What separates them is
+whether the expected side's data traces back to the same read, a local dataflow
+fact with no textual signature. Measured on a live corpus, a grep for the shape
+returned 20 candidates, nearly all correct golden tests.
+
+**The trigger is the UNDECLARED self-comparison, not the shape.** A round-trip
+normalisation check is legitimate and worth pinning — it is what keeps a large
+generated file diffable and merge-friendly. So `declare` names a comment marker,
+in the spirit of `# glob-dead:`, and a function carrying it is cleared. The cure
+is to state the claim, not to delete the test.
+
+Two properties of the dataflow are load-bearing:
+
+1. **A call's function is not a data origin.** Only its ARGUMENTS carry data.
+   Counting the callee would make every `filepath.Join` share an origin with
+   every other and collapse the analysis.
+2. **Function parameters are not origins**, and the exclusion comes from the
+   signature rather than a name list. `*testing.T` reaches every helper in a
+   body; counting a parameter as an origin makes two unrelated roots share one,
+   and then every comparison in every test reads as a self-comparison.
+
+A variable whose right-hand side yields no operand origins is its own root. Two
+reads are the same artifact when the roots their arguments trace to overlap,
+which is how a path built with `filepath.Join` from the same root is recognised
+as the file a loader was pointed at.
 
 #### `go/per-func-count-relation`
 Counts two families of call per function and asserts a relation between the

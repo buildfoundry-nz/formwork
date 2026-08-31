@@ -75,6 +75,26 @@ func parseGo(f *scan.File) (*token.FileSet, *ast.File, bool, error) {
 	return fset, file, true, nil
 }
 
+// parseGoWithComments is parseGo plus the comment groups. Comments are dropped
+// by default because no other analyzer here reads them, and carrying them costs
+// allocation on every Go file in a scan; go/expected-derives-from-actual needs
+// them because its cure is a DECLARATION written in a comment (#3).
+func parseGoWithComments(f *scan.File) (*token.FileSet, *ast.File, bool, error) {
+	if !strings.HasSuffix(f.Path(), ".go") {
+		return nil, nil, false, nil
+	}
+	content, err := f.Content()
+	if err != nil {
+		return nil, nil, false, err
+	}
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, f.Path(), content, parser.AllErrors|parser.ParseComments)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("goast: parse %s: %w", f.Path(), err)
+	}
+	return fset, file, true, nil
+}
+
 // buildImportBindings reads file.Imports into an alias→base map and a list of
 // dot-imported package bases. The path base is path.Base of the import path
 // (Go's default local name), so `…/internal/quoteshare` binds as "quoteshare"

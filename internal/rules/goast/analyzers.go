@@ -512,6 +512,7 @@ func (c *countRelation) WholeTreeInvariant() bool { return c.funcs != nil || c.r
 // ---------------------------------------------------------------------------
 
 func init() {
+	rules.Register("go/expected-derives-from-actual", newExpectedDerives)
 	rules.Register("go/func-line-budget", newFuncLineBudget)
 	rules.Register("go/call-confined-to-func-name", newCallConfined)
 	rules.Register("go/call-order-in-func", newCallOrder)

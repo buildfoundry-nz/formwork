@@ -21,13 +21,26 @@ import (
 type lineMatcher interface {
 	MatchString(s string) (bool, error)
 	FindLine(content string) (int, bool, error)
+	// FindIndex reports the byte offset where the first match starts, so a
+	// caller can inspect the text immediately before it (params.denied_by,
+	// #4). Returns -1 when there is no match; a matcher that cannot report a
+	// position returns -1 with ok=true, which the denial stage treats as
+	// undecidable and therefore not a denial.
+	FindIndex(s string) (int, bool, error)
 	String() string
 }
 
 type re2Matcher struct{ re *regexp.Regexp }
 
 func (m re2Matcher) MatchString(s string) (bool, error) { return m.re.MatchString(s), nil }
-func (m re2Matcher) String() string                     { return m.re.String() }
+func (m re2Matcher) FindIndex(s string) (int, bool, error) {
+	loc := m.re.FindStringIndex(s)
+	if loc == nil {
+		return -1, false, nil
+	}
+	return loc[0], true, nil
+}
+func (m re2Matcher) String() string { return m.re.String() }
 func (m re2Matcher) FindLine(content string) (int, bool, error) {
 	loc := m.re.FindStringIndex(content)
 	if loc == nil {
@@ -78,6 +91,20 @@ func (m pcreMatcher) MatchString(s string) (bool, error) {
 	}
 	return ok, nil
 }
+func (m pcreMatcher) FindIndex(s string) (int, bool, error) {
+	mm, err := m.re.FindStringMatch(s)
+	if err != nil {
+		return -1, false, fmt.Errorf("regexp2 %q: %w", m.src, err)
+	}
+	if mm == nil {
+		return -1, false, nil
+	}
+	// regexp2 indexes in RUNES, not bytes. Converting keeps the offset usable
+	// as a byte slice bound; getting this wrong would hand the denial stage a
+	// prefix cut mid-character on any non-ASCII line.
+	return len(string([]rune(s)[:mm.Index])), true, nil
+}
+
 func (m pcreMatcher) String() string { return m.src }
 
 // compileMatcher builds a matcher for pattern under syntax: "" or "re2" -> RE2;

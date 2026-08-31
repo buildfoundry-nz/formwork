@@ -4,6 +4,7 @@ package pattern
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/buildfoundry-nz/formwork/internal/rules"
@@ -27,10 +28,11 @@ type forbiddenParams struct {
 	// tombstone rule nothing on the tree will ever reveal it. lint proves this
 	// from the rule's fixtures and from the pattern itself (implication.go),
 	// and reports a prefilter it cannot prove either way as unproven (#133).
-	Prefilter string `yaml:"prefilter"`
-	Syntax    string `yaml:"syntax"`    // "" | re2 | regexp2
-	Multiline bool   `yaml:"multiline"` // match over whole file content, not line-by-line
-	Window    int    `yaml:"window"`    // all_of only: patterns must co-occur within this many consecutive lines (0 = whole file)
+	Prefilter string   `yaml:"prefilter"`
+	Syntax    string   `yaml:"syntax"`    // "" | re2 | regexp2
+	Multiline bool     `yaml:"multiline"` // match over whole file content, not line-by-line
+	DeniedBy  []string `yaml:"denied_by"` // suppress a match whose text DENIES the topic it matched (#4)
+	Window    int      `yaml:"window"`    // all_of only: patterns must co-occur within this many consecutive lines (0 = whole file)
 }
 
 type forbidden struct {
@@ -41,7 +43,8 @@ type forbidden struct {
 	requireAbsent  []lineMatcher
 	prefilter      string // if set, a file not containing this literal cannot match — skip cheaply
 	multiline      bool
-	window         int // all_of only: 0 = whole-file co-occurrence; >0 = within this many consecutive lines
+	denial         *denial // nil unless params.denied_by is set (#4)
+	window         int     // all_of only: 0 = whole-file co-occurrence; >0 = within this many consecutive lines
 
 	// Pattern sources kept verbatim for the prefilter-implication analysis
 	// (implication.go): it re-parses them with regexp/syntax to decide whether
@@ -72,10 +75,21 @@ func newForbidden(params *yaml.Node) (rules.Checker, error) {
 	if p.Window < 0 {
 		return nil, errors.New("forbidden-pattern: window must be >= 0")
 	}
+	if len(p.DeniedBy) > 0 && !hasPattern {
+		// all_of is a whole-file co-occurrence with no single match position,
+		// so there is no "text immediately before the match" to read. Rejecting
+		// it is the honest answer; accepting it would silently do nothing.
+		return nil, errors.New("forbidden-pattern: denied_by applies to params.pattern, not params.all_of")
+	}
+	den, err := newDenial(p.DeniedBy)
+	if err != nil {
+		return nil, fmt.Errorf("forbidden-pattern: %w", err)
+	}
 	if p.Window > 0 && !hasAllOf {
 		return nil, errors.New("forbidden-pattern: window applies to params.all_of")
 	}
 	c := &forbidden{
+		denial:            den,
 		multiline:         p.Multiline,
 		prefilter:         p.Prefilter,
 		window:            p.Window,
@@ -260,6 +274,15 @@ func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 		if err != nil {
 			return nil, err
 		}
+		if ok && c.denial != nil {
+			idx, found, ferr := c.re.FindIndex(s)
+			if ferr != nil {
+				return nil, ferr
+			}
+			if found && c.denial.deniedAt(s, idx) {
+				return nil, nil
+			}
+		}
 		if ok {
 			return []rules.Match{{Line: line, Message: "forbidden pattern matched (multiline): " + c.re.String()}}, nil
 		}
@@ -298,6 +321,19 @@ func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 		ok, err := c.re.MatchString(line)
 		if err != nil {
 			return nil, err
+		}
+		if ok && c.denial != nil {
+			// Second stage: drop a match whose text DENIES the topic it matched
+			// (#4). The position comes from the matcher rather than a search, so
+			// the prefix handed over is the real text before the match; an
+			// unlocatable position leaves ok true and the finding stands.
+			idx, found, err := c.re.FindIndex(line)
+			if err != nil {
+				return nil, err
+			}
+			if found && c.denial.deniedAt(line, idx) {
+				continue
+			}
 		}
 		if ok {
 			matches = append(matches, rules.Match{

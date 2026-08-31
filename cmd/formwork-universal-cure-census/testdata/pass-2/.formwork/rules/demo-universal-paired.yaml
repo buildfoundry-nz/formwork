@@ -1,0 +1,14 @@
+# Universal obligation PROPERLY PAIRED: the cure says "every" and the
+# detector is every-file over the obligated set. Firing here would mean the
+# census flags the word instead of the mis-pairing.
+rules:
+- id: demo-universal-paired
+  type: required-pattern
+  severity: error
+  scope:
+    include: [frontend/lib/main.dart, frontend/admin_app/lib/main.dart]
+  params:
+    pattern: FlutterError\.onError
+    mode: every-file
+  cure: Every shipped bootstrap must install the handler itself.
+  tags: [dart]

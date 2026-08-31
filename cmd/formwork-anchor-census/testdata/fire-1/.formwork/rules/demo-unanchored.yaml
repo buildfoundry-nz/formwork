@@ -1,0 +1,17 @@
+# Present-but-wrong: the rule file is present, well-formed, and its own gate is
+# GREEN today — every handler that calls requireGate also calls recordAccess.
+# But nothing pins the name `requireGate`. Rename it and count(left) collapses
+# to zero in every func, `0 <= count(right)` holds everywhere, and the arm
+# passes forever without seeing anything. That silence is what must fire.
+rules:
+- id: demo-collab-access-audited
+  type: go/per-func-count-relation
+  severity: error
+  scope:
+    include: [api-factory/**/*.go]
+  params:
+    left: suppliercollab\.RequireEnabled
+    right: quoteroomaudit\.RecordAccess
+    relation: '<='
+  cure: Record the access alongside the gate.
+  tags: [go]

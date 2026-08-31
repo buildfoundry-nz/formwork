@@ -1,0 +1,15 @@
+# An unanchored arm whose params block mentions funcs: only in a comment.
+# yaml.Node must not treat that comment as an anchor.
+rules:
+- id: demo-comment-anchor
+  type: go/per-func-count-relation
+  severity: error
+  scope:
+    include: [api-factory/**/*.go]
+  params:
+    # funcs: ^thisIsNotAnAnchor$
+    left: suppliercollab\.RequireEnabled
+    right: quoteroomaudit\.RecordAccess
+    relation: '<='
+  cure: Record the access alongside the gate.
+  tags: [go]

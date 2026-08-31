@@ -1,0 +1,13 @@
+# mutation-proof rematerialises keys alphabetically: `cure:` opens the
+# arm and `id:` lands later. A `^\s*- id:` scan finds zero arm headers.
+rules:
+- cure: Every shipped bootstrap must install the sync handler itself — one install anywhere does not discharge the obligation for the others.
+  severity: error
+  type: required-pattern
+  id: demo-id-not-first
+  scope:
+    include: [frontend/**/*.dart]
+  params:
+    pattern: installSyncHandler\(
+    mode: exists
+  tags: [dart]

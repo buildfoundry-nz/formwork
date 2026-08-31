@@ -1,0 +1,13 @@
+# Honest existential: the cure claims exactly what `mode: exists` detects —
+# presence in the ONE named file — and states no universal obligation.
+rules:
+- id: demo-singular-cure
+  type: required-pattern
+  severity: error
+  scope:
+    include: [frontend/lib/main.dart]
+  params:
+    pattern: configureLogging\(\)
+    mode: exists
+  cure: 'The one bootstrap frontend/lib/main.dart must call configureLogging() so records reach the console.'
+  tags: [dart]

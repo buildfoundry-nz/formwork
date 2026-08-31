@@ -1,0 +1,15 @@
+# Anchored by name: the engine asserts `funcs:` still matches a func somewhere
+# in scope, so a rename fails closed rather than going silent.
+rules:
+- id: demo-task-name-deterministic
+  type: go/per-func-count-relation
+  severity: error
+  scope:
+    include: [api-factory/**/*.go]
+  params:
+    funcs: ^DetectionTaskName$
+    left: \b(time\.Now|rand\.)\b
+    right: ZZ_NEVER_MATCH_SELECTOR
+    relation: '<='
+  cure: Read only the arguments.
+  tags: [go]

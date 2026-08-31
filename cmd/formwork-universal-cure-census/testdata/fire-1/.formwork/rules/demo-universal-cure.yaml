@@ -1,0 +1,15 @@
+# Present-but-wrong: the rule file is present, well-formed, and its own gate
+# is GREEN — one compliant bootstrap satisfies `mode: exists` forever — while
+# the cure promises EVERY bootstrap installs the handler. The detector cannot
+# see the obligation it states; that mis-pairing is what must fire.
+rules:
+- id: demo-sync-handler
+  type: required-pattern
+  severity: error
+  scope:
+    include: [frontend/**/*.dart]
+  params:
+    pattern: installSyncHandler\(
+    mode: exists
+  cure: Every shipped bootstrap must install the sync handler itself — one install anywhere does not discharge the obligation for the others.
+  tags: [dart]

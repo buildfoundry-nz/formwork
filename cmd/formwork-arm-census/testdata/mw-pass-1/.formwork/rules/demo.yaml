@@ -1,0 +1,29 @@
+# The cured shape (counted ratchet) and the stated-design-threshold shape.
+# demo-design-threshold is `at-least 2` over the same 14 witnesses: an explicit
+# n >= 2 is a cardinality the author chose, not the accidental floor of one that
+# `mode: exists` confers, so it is out of the population by construction.
+rules:
+- id: demo-counted-ratchet
+  type: pattern-count
+  severity: error
+  scope:
+    include: ["src/**"]
+  preprocess: decomment-go
+  params:
+    pattern: 'WithTenantOrg\('
+    op: at-least
+    n: 14
+  cure: demo
+  tags: [always]
+- id: demo-design-threshold
+  type: pattern-count
+  severity: error
+  scope:
+    include: ["src/**"]
+  preprocess: decomment-go
+  params:
+    pattern: 'WithTenantOrg\('
+    op: at-least
+    n: 2
+  cure: demo
+  tags: [always]

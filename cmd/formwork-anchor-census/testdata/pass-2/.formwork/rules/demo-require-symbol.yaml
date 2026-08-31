@@ -1,0 +1,16 @@
+# Anchored by symbol: `require_symbol: left` makes the engine assert the
+# constraining side still matches a call in scope, which is the cure for an arm
+# that legitimately has no funcs filter.
+rules:
+- id: demo-rows-err-checked
+  type: go/per-func-count-relation
+  severity: error
+  scope:
+    include: [api-factory/**/*.go]
+  params:
+    left: '\.Next$'
+    right: '\.Err$'
+    relation: '<='
+    require_symbol: left
+  cure: Check rows.Err() after iterating.
+  tags: [go]

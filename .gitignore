@@ -9,3 +9,6 @@ dist/
 projects/
 .superpowers/
 __pycache__/
+
+# Compiled census binaries — built by `go build ./...`, never committed.
+/cmd/formwork-*-census/*census

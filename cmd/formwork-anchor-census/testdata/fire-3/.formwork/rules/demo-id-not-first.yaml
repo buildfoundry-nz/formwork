@@ -1,0 +1,14 @@
+# mutation-proof rematerialises keys alphabetically, so `cure:` opens the
+# arm and `id:` lands later. A `^\s*- id:` scan finds zero arm headers.
+rules:
+- cure: Record the access alongside the gate.
+  severity: error
+  type: go/per-func-count-relation
+  id: demo-id-not-first
+  scope:
+    include: [api-factory/**/*.go]
+  params:
+    left: suppliercollab\.RequireEnabled
+    right: quoteroomaudit\.RecordAccess
+    relation: '<='
+  tags: [go]

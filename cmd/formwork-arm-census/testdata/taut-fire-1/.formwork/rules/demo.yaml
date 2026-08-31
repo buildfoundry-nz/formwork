@@ -1,0 +1,23 @@
+# A required-pattern that requires nothing: `.` matches any character, so the
+# only failing state is a file with no lines — and an empty scope passes.
+rules:
+- id: demo-tautological
+  type: required-pattern
+  severity: error
+  scope:
+    include: ["src/**"]
+  params:
+    pattern: '.'
+    mode: every-file
+  cure: demo
+  tags: [always]
+- id: demo-honest
+  type: required-pattern
+  severity: error
+  scope:
+    include: ["src/**"]
+  params:
+    pattern: 'WithTenantOrg\('
+    mode: exists
+  cure: demo
+  tags: [always]

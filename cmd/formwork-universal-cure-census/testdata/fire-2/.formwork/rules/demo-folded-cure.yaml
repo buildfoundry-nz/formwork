@@ -1,0 +1,18 @@
+# Present-but-wrong, folded-cure form: the universal word ("each") sits on a
+# YAML continuation line, not on the `cure:` line itself. A detector that only
+# read the cure's first line — or only cured single-line cures — would pass
+# this arm; the windowed co-occurrence reads the folded body.
+rules:
+- id: demo-folded-cure
+  type: required-pattern
+  severity: error
+  scope:
+    include: [api-factory/**/*.go]
+  params:
+    pattern: RegisterRoute\(
+    mode: exists
+  cure: >-
+    Routes must register through the shared registrar, and each route file
+    must declare its capability; a single compliant route does not discharge
+    that obligation for the rest.
+  tags: [go]

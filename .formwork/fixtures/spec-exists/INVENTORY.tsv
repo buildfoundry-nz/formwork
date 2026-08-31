@@ -1,0 +1,11 @@
+# fixture directories for this rule — the vacuity census fails if a row's directory
+# is deleted while the row is still listed (FIXTURE-REMOVED, #10838), or if a
+# directory exists with no row (FIXTURE-UNTRACKED).
+# One directory name per line; the rule id is this file's parent directory, so no
+# other rule's change ever writes this file (#12043). Regenerate:
+#   go run -C tools/formwork-vacuity-census . --write-inventory <repo-root>
+# Membership is a FLOOR, not a health claim: whether each fixture still
+# discriminates is the class-3 behavioural arms' question, and a fixture tree that
+# never runs is #10968's. Removing a row is a reviewed deletion, never a cleanup.
+fire-1
+pass-1

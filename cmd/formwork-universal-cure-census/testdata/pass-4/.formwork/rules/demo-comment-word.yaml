@@ -1,0 +1,28 @@
+# Comment-noise locality (the entitlements-audit-10001 shape): the arm is an
+# honest existential with a singular cure, but a COMMENT directly below it
+# says "each". A proximity-window detector fires here; the cure-block
+# detector must not, because the arm's cure never states the obligation.
+rules:
+- id: demo-comment-word
+  type: required-pattern
+  severity: error
+  scope:
+    include: [api-factory/**/*.go]
+  params:
+    pattern: 'LimitReader|MaxBytesReader'
+    mode: exists
+  cure: Grant/Patch must bound request body size.
+  tags: [go]
+
+# Two rules, one language each, is the only shape that is correct on both
+# halves — this comment's "each" sits three lines from mode: exists and must
+# not indict the arm above.
+- id: demo-comment-word-sibling
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include: [api-factory/**/*.go]
+  params:
+    pattern: 'SELECT SUM\(balance\)'
+  cure: Consume must not recompute the balance with a raw SUM.
+  tags: [go]

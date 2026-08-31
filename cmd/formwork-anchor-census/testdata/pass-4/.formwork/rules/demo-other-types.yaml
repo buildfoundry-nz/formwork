@@ -1,0 +1,26 @@
+# Neither arm is a count relation. go/call-order-in-func and
+# dart/method-delegates take their anchors as REQUIRED params, so the engine's
+# scope-wide existence verdict covers every arm of those types by construction
+# and this census must stay silent about them — flagging them would make the
+# ratchet fire on arms it has no cure for.
+rules:
+- id: demo-call-order
+  type: go/call-order-in-func
+  severity: error
+  scope:
+    include: [api-factory/**/*.go]
+  params:
+    funcs: ^Render$
+    sequence: [r\.resolveDPI, r\.runGM]
+  cure: Clamp before shelling out.
+  tags: [go]
+- id: demo-method-delegates
+  type: dart/method-delegates
+  severity: error
+  scope:
+    include: [packages/*/lib/**/*.dart]
+  params:
+    method: void flushProjectCaches\(
+    must_call: \.flushAll\(
+  cure: Drain every LRU-retained cache.
+  tags: [dart]

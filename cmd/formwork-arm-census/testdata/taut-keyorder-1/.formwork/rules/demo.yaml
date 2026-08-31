@@ -1,0 +1,25 @@
+# The SAME two arms as taut-fire-1, written with `id` after `cure` — the shape
+# mutation-proof's scratch corpus is re-marshalled into (yaml.Marshal emits map
+# keys alphabetically). A reader that locates arms by scanning for `- id:` finds
+# none here and reports a corpus it never read.
+rules:
+- cure: demo
+  id: demo-tautological
+  params:
+    mode: every-file
+    pattern: '.'
+  scope:
+    include: ["src/**"]
+  severity: error
+  tags: [always]
+  type: required-pattern
+- cure: demo
+  id: demo-honest
+  params:
+    mode: exists
+    pattern: 'WithTenantOrg\('
+  scope:
+    include: ["src/**"]
+  severity: error
+  tags: [always]
+  type: required-pattern

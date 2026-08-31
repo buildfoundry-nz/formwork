@@ -1,0 +1,13 @@
+# Packed live scope.include inventory (#10876, #12398).
+# One row per live glob: rule-id<TAB>glob. The per-glob vacuity census
+# fails if a row's glob is removed from its rule while still listed here
+# (GLOB-REMOVED). Regenerate:
+#   go run -C tools/formwork-vacuity-census . --write-inventory <repo-root>
+# Only LIVE globs (match count > 0) are listed; dead declared globs are
+# EMPTY-GLOB's job, and aspirational ones use `# glob-dead: <reason>`.
+file-size-vendor-cap	cmd/**/*.go
+file-size-vendor-cap	internal/**/*.go
+fixture-exempt-declares-nothing	**/.formwork/rules/**/*.yaml
+no-todo-comments	cmd/**/*.go
+no-todo-comments	internal/**/*.go
+spec-exists	docs/specs/*.md

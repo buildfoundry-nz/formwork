@@ -1,0 +1,14 @@
+# 14 production call sites, and `mode: exists` needs ONE. Thirteen can go back
+# to the RLS-bypassing seam and this arm still reports OK.
+rules:
+- id: demo-last-witness
+  type: required-pattern
+  severity: error
+  scope:
+    include: ["src/**"]
+  preprocess: decomment-go
+  params:
+    pattern: 'WithTenantOrg\('
+    mode: exists
+  cure: demo
+  tags: [always]

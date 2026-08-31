@@ -1,0 +1,47 @@
+# Two trigger lines in ONE Go file: presence semantics clear them both with a
+# single companion anywhere in the file. The per-func, countable and same-dir
+# arms over the same corpus are the NOT-judged controls.
+rules:
+- id: demo-count-blind
+  type: pair-consistency
+  severity: error
+  scope:
+    include: ["src/**"]
+  params:
+    trigger: 'db\.lockThing\('
+    requires: 'db\.unlockThing\('
+  cure: demo
+  tags: [always]
+- id: demo-per-func
+  type: pair-consistency
+  severity: error
+  scope:
+    include: ["src/**"]
+  params:
+    trigger: 'db\.lockThing\('
+    requires: 'db\.unlockThing\('
+    where: same-func
+  cure: demo
+  tags: [always]
+- id: demo-countable
+  type: pair-consistency
+  severity: error
+  scope:
+    include: ["src/**"]
+  params:
+    trigger: 'db\.lockThing\('
+    requires: 'db\.unlockThing\('
+    obligation: countable
+  cure: demo
+  tags: [always]
+- id: demo-samedir
+  type: pair-consistency
+  severity: error
+  scope:
+    include: ["src/**"]
+  params:
+    trigger: 'db\.lockThing\('
+    requires: 'db\.unlockThing\('
+    where: same-dir
+  cure: demo
+  tags: [always]

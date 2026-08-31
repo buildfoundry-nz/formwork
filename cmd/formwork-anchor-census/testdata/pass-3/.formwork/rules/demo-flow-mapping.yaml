@@ -1,0 +1,12 @@
+# The anchor sits in a FLOW mapping on the `params:` line itself (the
+# boq-apply-project-constant-reads shape). A `^\s*require_symbol:` line anchor
+# would miss it and false-flag an arm that is in fact anchored.
+rules:
+- id: demo-flow-anchored
+  type: go/per-func-count-relation
+  severity: error
+  scope:
+    include: [api-factory/**/*.go]
+  params: {left: InheritCladdingProductSwitches, right: boqrecomputescope\.Memo, relation: '<=', require_symbol: left}
+  cure: Wrap the read in the memo.
+  tags: [go]

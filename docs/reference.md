@@ -232,6 +232,42 @@ Reports files matching a pattern.
 | `syntax` | regex flavour |
 | `multiline` | match across line boundaries |
 | `window` | bounded multiline window |
+| `denied_by` | literal markers that SUPPRESS a match whose text denies the topic (see below) |
+
+**`denied_by` answers polarity, which no pattern can carry.** A
+forbidden-pattern matches TOPIC. Whether the matched text asserts that topic or
+**denies** it is polarity, and RE2 has no lookbehind, so "except when preceded
+by a denial" cannot be written inside `pattern` at all. Without it the rule
+fires on the one text stating its own success condition: prose saying the
+banned thing did not happen.
+
+```yaml
+params:
+  pattern: '\b(rewrote|rewriting)\b[^.]{0,60}\b(commits?|history)\b'
+  denied_by: [rather than, instead of, not, never, without]
+```
+
+Two properties matter more than the spelling:
+
+1. **It may only ever SUPPRESS.** Anything undecidable reaches the verdict the
+   rule would have reached anyway — a marker the set does not carry, a denial
+   spread beyond the window, a match whose position cannot be located. It
+   cannot make an existing rule weaker than it is today.
+2. **The clause boundary is carried by the ALPHABET, not by a sentence
+   splitter.** Between marker and match only spaces, tabs and at most one short
+   word may stand, so punctuation and newlines end the clause by construction.
+   `we never ship that. rewriting …` does not suppress, and a marker on the
+   previous line does not carry.
+
+The markers are literal text, not patterns — a regex here would reintroduce the
+ambiguity the stage exists to remove. The prefix is tested **untrimmed** against
+an anchored expression, because a fixed-size tail has to cut somewhere and a cut
+inside a word manufactures a marker: `cannot` sliced to its last three letters
+is `not`.
+
+`denied_by` applies to `pattern`, not `all_of`: a whole-file co-occurrence has
+no single match position, so there is no text "immediately before the match" to
+read. Setting it with `all_of` is an error rather than a silent no-op.
 
 **`prefilter` is a contract, not a hint.** It must not change any verdict.
 `formwork lint`'s `prefilter-load-bearing` check evaluates the rule with and

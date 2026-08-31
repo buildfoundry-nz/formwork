@@ -1,0 +1,22 @@
+# Every arm pins a real token. A forbidden-pattern of `.` is NOT this defect —
+# it is a rule that always fails, which announces itself.
+rules:
+- id: demo-honest-exists
+  type: required-pattern
+  severity: error
+  scope:
+    include: ["src/**"]
+  params:
+    pattern: 'WithTenantOrg\('
+    mode: exists
+  cure: demo
+  tags: [always]
+- id: demo-forbidden-dot
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include: ["src/**"]
+  params:
+    pattern: '.'
+  cure: demo
+  tags: [always]

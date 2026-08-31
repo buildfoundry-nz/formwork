@@ -1,0 +1,25 @@
+# One trigger line per file, plus an arm whose multi-trigger evidence is
+# Dart-only: both pass the census.
+rules:
+- id: demo-spread
+  type: pair-consistency
+  severity: error
+  scope:
+    include: ["src/**/*.go"]
+  params:
+    trigger: 'db\.lockThing\('
+    requires: 'db\.unlockThing\('
+  cure: demo
+  tags: [always]
+- id: demo-dart-only-evidence
+  type: pair-consistency
+  severity: error
+  scope:
+    include: ["src/**"]
+  params:
+    # Explicit file grain: a signed unit, not the omitted-where trap.
+    where: same-file
+    trigger: 'db\.lockThing\('
+    requires: 'db\.unlockThing\('
+  cure: demo
+  tags: [always]

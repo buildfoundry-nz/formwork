@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -664,15 +665,15 @@ func runTest(args []string, stdout, stderr io.Writer) int {
 	// so "0/0 rules passed, 0 fixture(s) run" at exit 0 is a green verdict over
 	// nothing (#151 row 12).
 	//
-	// But the refusal must not TAKE the better diagnosis with it. Run's first
-	// act is the orphan-fixture check — fixture trees on disk matching no rule
-	// id — and it returns before printing anything, so calling it here with a
-	// discarding writer surfaces that specific, actionable error (it names the
-	// dead trees) for the case where rule files vanished but their fixtures did
-	// not. Guarding ahead of Run instead replaced "these 3 fixture dirs can
-	// never run" with "there are no fixtures", which was both less useful and
-	// untrue. The discarded writer costs nothing: with zero rules the per-rule
-	// loop after the orphan check has nothing to iterate.
+	// But the refusal must not TAKE the better diagnosis with it. Run reports
+	// orphan fixture trees — dirs on disk matching no rule id — as FAIL
+	// verdicts counted in `failed`. Calling it here with a capturing writer
+	// surfaces that specific, actionable diagnosis (it names the dead trees)
+	// for the case where rule files vanished but their fixtures did not.
+	// Guarding ahead of Run instead replaced "these 3 fixture dirs can never
+	// run" with "there are no fixtures", which was both less useful and
+	// untrue. Zero rules is still exit 2 (a config error). When rules exist,
+	// the same orphans are findings (exit 1) and other rules still run (#9).
 	//
 	// Deliberately NOT the same condition as "zero fixtures ran". A configured
 	// rule with no fixture directory also prints "0/0 rules passed" at exit 0 —
@@ -680,8 +681,14 @@ func runTest(args []string, stdout, stderr io.Writer) int {
 	// lint's fixture-coverage check fails on it. That one is disclosed, not
 	// silent, which is the whole difference.
 	if len(cfg.Rules) == 0 {
-		if _, err := fixturetest.Run(cfg, allIDs, *root, *workers, io.Discard); err != nil {
+		var buf bytes.Buffer
+		failed, err := fixturetest.Run(cfg, allIDs, *root, *workers, &buf)
+		if err != nil {
 			fmt.Fprintln(stderr, "formwork:", err)
+			return 2
+		}
+		if failed > 0 {
+			fmt.Fprint(stderr, buf.String())
 			return 2
 		}
 		fmt.Fprintln(stderr, "formwork:", noRulesReason(cfg, "there are no fixtures to run and nothing this command could report on"))

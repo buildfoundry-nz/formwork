@@ -19,24 +19,29 @@ import (
 )
 
 // Run evaluates every rule's fixtures under root/.formwork/fixtures and
-// writes verdicts to w. It returns the number of rules with failing
-// fixtures; infrastructure problems (unreadable dirs, bad manifests,
-// un-refreshable rules, fixture dirs no rule can ever reach) return an error
-// instead — never a silent pass.
+// writes verdicts to w. It returns the number of failing verdicts (rules
+// whose fixtures misbehaved, plus fixture dirs matching no rule id).
+// Infrastructure problems (unreadable dirs, bad manifests, un-refreshable
+// rules, symlinked fixture trees) return an error instead — never a silent
+// pass.
 //
 // allRuleIDs is the FULL corpus id set, collected before any --rule scoping
 // narrows cfg: the orphan check must know every legitimate fixture-dir name,
-// or a scoped run would read sibling rules' fixtures as orphans (#58).
+// or a scoped run would read sibling rules' fixtures as orphans (#58). A dir
+// matching no id in that full set is still a FAIL finding; it does not abort
+// the run (#9).
 func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io.Writer) (int, error) {
 	fixturesRoot := filepath.Join(root, ".formwork", "fixtures")
 	failed, ran, skipped := 0, 0, 0
 
 	// A fixture tree whose directory matches no rule id is unreachable by the
 	// per-rule loop below: no run ever opens it, so the proof it holds is dead
-	// weight that reads as green. That is an infrastructure problem (doc
-	// comment above: never a silent pass) — the fail-closed counterpart of the
-	// unrecognized-subdir error inside the loop. All orphans are reported in
-	// one error, sorted, so a run names every dead tree rather than the first.
+	// weight that reads as green. That is still a failure — each orphan is a
+	// FAIL verdict, counted in `failed` — but it is not a run abort. Sibling
+	// rules still execute. The fail-closed counterpart of the unrecognized-
+	// subdir error inside the loop, without the blackout (#9). All orphans
+	// are collected here, sorted, and printed after the per-rule loop so a
+	// leftover fixture dir cannot stop unrelated proofs.
 	known := make(map[string]bool, len(allRuleIDs))
 	for _, id := range allRuleIDs {
 		known[id] = true
@@ -65,11 +70,7 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 			orphans = append(orphans, e.Name())
 		}
 	}
-	if len(orphans) > 0 {
-		sort.Strings(orphans)
-		return 0, fmt.Errorf("fixtures: %d dir(s) match no rule id and can never run: %s (rename to a rule id or delete; a fixture tree that never executes proves nothing)",
-			len(orphans), strings.Join(orphans, ", "))
-	}
+	sort.Strings(orphans)
 
 	for _, r := range cfg.Rules {
 		ruleDir := filepath.Join(fixturesRoot, r.ID)
@@ -158,7 +159,12 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 		}
 	}
 
-	total := len(cfg.Rules) - skipped
+	for _, id := range orphans {
+		failed++
+		fmt.Fprintf(w, "[%s] FAIL — dir matches no rule id and can never run\n", id)
+	}
+
+	total := len(cfg.Rules) - skipped + len(orphans)
 	fmt.Fprintf(w, "formwork test: %d/%d rules passed, %d fixture(s) run, %d rule(s) skipped\n",
 		total-failed, total, ran, skipped)
 	return failed, nil

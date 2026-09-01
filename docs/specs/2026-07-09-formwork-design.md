@@ -162,7 +162,7 @@ Config lives in the adopting repo:
 
 ```
 .formwork/
-  formwork.yaml            engine settings, lanes, scope classes, defaults
+  formwork.yaml            engine settings, lanes, scope classes, defaults, library packs
   rules/*.yaml             rules grouped by domain (go-db.yaml, flutter-state.yaml, …)
   fixtures/<rule-id>/      fire-*/ and pass-*/ fixture trees
   allowlists/*.txt         external allowlist files (one entry per line, # comments)
@@ -170,6 +170,12 @@ Config lives in the adopting repo:
 
 `formwork.yaml` carries `version: 1` (config schema version) and a minimum
 engine version constraint checked at runtime.
+
+It may also carry `library: [generic]` to opt into rule packs embedded in the
+binary (spec `docs/specs/2026-09-02-stdlib-library.md`). Pack rules load first;
+a local file restating the same `id` replaces the pack rule. Unknown pack names
+are a config error. This is how a second repo obtains the generic hygiene gates
+without copy-paste.
 
 It may also carry a `scan:` block:
 

@@ -1,0 +1,8 @@
+version: 1
+
+# This corpus is the generic pack. It does not set `library:` — the rules
+# here ARE the pack, proven by `formwork test -C stdlib/generic`.
+lanes:
+  ci:
+    all: true
+    ci: true

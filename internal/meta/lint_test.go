@@ -9,7 +9,9 @@ import (
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/meta"
+	_ "github.com/buildfoundry-nz/formwork/internal/preprocess"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/command"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/filenaming"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/gitdiff"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/pattern"
 )
@@ -40,6 +42,22 @@ func TestLintExemptsExternalToolRulesFromFixturesAndScope(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
+	}
+}
+
+func TestLintSkipsFixtureCoverageForLibraryRules(t *testing.T) {
+	failed, out := lint(t, map[string]string{
+		".formwork/formwork.yaml":                   "version: 1\nlibrary: [generic]\n",
+		".formwork/rules/r.yaml":                    lintRule,
+		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
+		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
+		"notes.txt": "in scope\n",
+	})
+	if failed != 0 {
+		t.Fatalf("failed=%d\n%s", failed, out)
+	}
+	if !strings.Contains(out, "[fixture-coverage] OK") {
+		t.Fatalf("library rules demanded local fixtures:\n%s", out)
 	}
 }
 

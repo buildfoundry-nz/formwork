@@ -1,0 +1,22 @@
+# Do not quarantine Dart tests with skip:. The ban is the token, not a
+# particular value — a variable skips just as `true` does.
+rules:
+  - id: dart-no-test-skip
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*_test.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+    preprocess: code-only-dart
+    params:
+      pattern: '(^|[^A-Za-z0-9_.])skip:'
+    cure: >-
+      Do not quarantine Dart tests with skip: — fix the flake or delete the
+      test. Guard platform-specific bodies with if (kIsWeb) return; inside
+      the test instead of skip:.
+    origin: stdlib/generic
+    tags: [dart]

@@ -1,0 +1,20 @@
+# An empty-body catch in a test is how a regression ships green.
+rules:
+  - id: no-error-swallow-in-tests
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*_test.dart"
+        - "**/testing/**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+    params:
+      pattern: '(?:on\s+\w+\s+)?\bcatch\b\s*(?:\(\s*[_a-zA-Z]\w*(?:\s*:\s*\w+)?\s*\)|\(\s*\))?\s*\{\s*(?://[^\n]*)?\}'
+    cure: >-
+      Surface the exception: fail('reason: $e'), rethrow, or log + assert. A
+      silent empty-body catch hides regressions under green CI.
+    origin: stdlib/generic
+    tags: [dart]

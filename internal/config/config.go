@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,6 +19,7 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/finding"
 	"github.com/buildfoundry-nz/formwork/internal/preprocess"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
+	"github.com/buildfoundry-nz/formwork/stdlib"
 	"gopkg.in/yaml.v3"
 )
 
@@ -39,6 +41,12 @@ type Rule struct {
 	Marker      bool       // honor inline formwork:allow markers
 	Allowlist   *Allowlist // loaded except.allowlist, nil when absent
 	ExceptPaths []string   // except.paths carve-out globs (read-only after construction)
+
+	// Library is the pack name this rule was loaded from (e.g. "generic").
+	// Empty means the rule was declared in the adopting repo. Lint's
+	// fixture-coverage check skips library-sourced rules: their fixtures
+	// live in the pack and are proven by `formwork test -C stdlib/<name>`.
+	Library string
 
 	include  []string
 	exclude  []string
@@ -310,6 +318,9 @@ type Config struct {
 	// got before this key existed.
 	Gitignore *GitignoreEntry
 	Rules     []*Rule
+	// Library is the pack names declared in formwork.yaml, in declaration
+	// order. Empty when the key is absent or the list is empty.
+	Library []string
 	// RuleFiles is how many .formwork/rules/*.yaml files were read, whatever
 	// they declared. It exists so a zero-rule refusal can name the actual
 	// cause: no rule files at all is a different mistake from rule files that
@@ -394,6 +405,7 @@ func (c *Config) RulesForLane(name string) ([]*Rule, error) {
 type rootSpec struct {
 	Version int                 `yaml:"version"`
 	Engine  string              `yaml:"engine"`
+	Library []string            `yaml:"library"`
 	Lanes   map[string]laneSpec `yaml:"lanes"`
 	Scope   scopeConfigSpec     `yaml:"scope"`
 	Scan    scanSpec            `yaml:"scan"`
@@ -538,31 +550,97 @@ func (e *Envelope) LoadRules() (*Config, error) {
 	}
 	sort.Strings(ruleFiles)
 
-	cfg := &Config{Version: e.Version, Engine: e.Engine, EngineConstraint: e.EngineConstraint, Lanes: lanes, Scope: scope, Ignore: ignore, Gitignore: gitignore, RuleFiles: len(ruleFiles)}
+	if err := validateLibraryNames(e.root.Library); err != nil {
+		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
+	}
+
+	cfg := &Config{Version: e.Version, Engine: e.Engine, EngineConstraint: e.EngineConstraint, Lanes: lanes, Scope: scope, Ignore: ignore, Gitignore: gitignore, Library: append([]string(nil), e.root.Library...), RuleFiles: len(ruleFiles)}
 	seen := map[string]string{} // rule id -> file it was defined in
+	index := map[string]int{}   // rule id -> slot in cfg.Rules
+
+	for _, pack := range e.root.Library {
+		packFS, err := stdlib.Open(pack)
+		if err != nil {
+			return nil, fmt.Errorf("config: formwork.yaml: library: %w", err)
+		}
+		matches, err := iofs.Glob(packFS, "*.yaml")
+		if err != nil {
+			return nil, fmt.Errorf("config: library %s: listing rules: %w", pack, err)
+		}
+		sort.Strings(matches)
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("config: library %s: pack contains no rule files", pack)
+		}
+		for _, name := range matches {
+			data, err := iofs.ReadFile(packFS, name)
+			if err != nil {
+				return nil, fmt.Errorf("config: library %s: reading %s: %w", pack, name, err)
+			}
+			src := "library:" + pack + "/" + name
+			if err := loadRuleFile(cfg, seen, index, src, data, e.dir, pack); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	for _, rf := range ruleFiles {
 		data, err := os.ReadFile(rf)
 		if err != nil {
 			return nil, fmt.Errorf("config: reading %s: %w", rf, err)
 		}
-		var fs fileSpec
-		if err := strictUnmarshal(data, &fs); err != nil {
-			return nil, fmt.Errorf("config: %s: %w", rf, err)
-		}
-		for _, spec := range fs.Rules {
-			rule, err := compile(spec, e.dir)
-			if err != nil {
-				return nil, fmt.Errorf("config: %s: %w", rf, err)
-			}
-			if prev, dup := seen[rule.ID]; dup {
-				return nil, fmt.Errorf("config: %s: duplicate rule id %q (already defined in %s)", rf, rule.ID, prev)
-			}
-			seen[rule.ID] = rf
-			cfg.Rules = append(cfg.Rules, rule)
+		if err := loadRuleFile(cfg, seen, index, rf, data, e.dir, ""); err != nil {
+			return nil, err
 		}
 	}
 	sort.Slice(cfg.Rules, func(i, j int) bool { return cfg.Rules[i].ID < cfg.Rules[j].ID })
 	return cfg, nil
+}
+
+func validateLibraryNames(names []string) error {
+	seen := map[string]struct{}{}
+	for _, n := range names {
+		if !idRE.MatchString(n) {
+			return fmt.Errorf("library: name %q must be kebab-case (%s)", n, idRE)
+		}
+		if _, dup := seen[n]; dup {
+			return fmt.Errorf("library: duplicate pack %q", n)
+		}
+		seen[n] = struct{}{}
+	}
+	return nil
+}
+
+// loadRuleFile compiles every rule in one YAML document. library is the pack
+// name when the bytes came from a stdlib pack, empty when they came from the
+// adopting repo. Local duplicate ids fail; a local id that already exists on
+// a library rule replaces it (local wins).
+func loadRuleFile(cfg *Config, seen map[string]string, index map[string]int, src string, data []byte, dir, library string) error {
+	var spec fileSpec
+	if err := strictUnmarshal(data, &spec); err != nil {
+		return fmt.Errorf("config: %s: %w", src, err)
+	}
+	for _, rs := range spec.Rules {
+		if library != "" && rs.Except.Allowlist != "" {
+			return fmt.Errorf("config: %s: library rule %s: except.allowlist is repo-local; redeclare the rule locally to bind an allowlist", src, rs.ID)
+		}
+		rule, err := compile(rs, dir)
+		if err != nil {
+			return fmt.Errorf("config: %s: %w", src, err)
+		}
+		rule.Library = library
+		if prev, dup := seen[rule.ID]; dup {
+			if library == "" && strings.HasPrefix(prev, "library:") {
+				cfg.Rules[index[rule.ID]] = rule
+				seen[rule.ID] = src
+				continue
+			}
+			return fmt.Errorf("config: %s: duplicate rule id %q (already defined in %s)", src, rule.ID, prev)
+		}
+		seen[rule.ID] = src
+		index[rule.ID] = len(cfg.Rules)
+		cfg.Rules = append(cfg.Rules, rule)
+	}
+	return nil
 }
 
 // Load reads .formwork/formwork.yaml and .formwork/rules/*.yaml under

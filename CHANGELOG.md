@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `library: [generic]` in `.formwork/formwork.yaml` opts into a rule pack
+  shipped inside the binary. The `generic` pack is the portable Go/Dart/SQL
+  hygiene set (`stdlib/generic/`), proven by `formwork test -C stdlib/generic`.
+  Local rules override pack rules by id. Unknown pack names are exit 2.
+
 ## 0.5.0
 
 ### Breaking

@@ -1,0 +1,4 @@
+jobs:
+  proto:
+    steps:
+      - uses: bufbuild/buf-setup-action@v1 # want: no-buf-setup-action

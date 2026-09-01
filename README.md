@@ -100,6 +100,11 @@ hook and a CI lane — in about twenty minutes.
 [`examples/quickstart/`](examples/quickstart) is the finished version: five
 rules, each commented to introduce one concept.
 
+[`stdlib/generic/`](stdlib/generic) is the portable hygiene pack — Go/Dart/SQL
+rules that are not product-specific. Opt in with `library: [generic]` in
+`.formwork/formwork.yaml` (requires `engine: ">= 0.6.0"`). Local rules override
+pack rules by id.
+
 ## Development
 
 ```sh

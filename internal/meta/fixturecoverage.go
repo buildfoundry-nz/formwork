@@ -21,6 +21,13 @@ import (
 func fixtureCoverage(cfg *config.Config, root string, w io.Writer, failed, total *int) error {
 	var coverage []string
 	for _, r := range cfg.Rules {
+		// Library-sourced rules are proven by `formwork test -C stdlib/<pack>`.
+		// Demanding .formwork/fixtures/<id>/ in the adopting repo would force
+		// every consumer to copy the pack's fixtures, which is the copy-paste
+		// the pack exists to end.
+		if r.Library != "" {
+			continue
+		}
 		// Whole-run external-tool rules (command, git-diff) can be exempt from
 		// fixtures — their behaviour depends on external tools and git state a
 		// fixture tree cannot reproduce. But the exemption must be DECLARED,

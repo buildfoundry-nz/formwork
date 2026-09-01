@@ -1,0 +1,17 @@
+# This pack has no source tree — only rules and fixtures. empty-scope and
+# exemption-hygiene would report every rule / every exclude, which measures
+# the corpus being empty rather than any glob being wrong. `formwork test`
+# proves the rules against their fixtures. Both checks stay live on adopting
+# repos (library-sourced rules are skipped there for a different reason:
+# fixtures and excludes live in this pack).
+version: 1
+skip:
+  - check: empty-scope
+    reason: >-
+      This pack has no source tree, only rules and fixtures. empty-scope would
+      name every file-reading rule. Proof is formwork test against fixtures.
+  - check: exemption-hygiene
+    reason: >-
+      With no source tree every scope.exclude is dead by construction. The
+      pack's excludes are preventative (generated, vendor, .formwork) and are
+      justified in the adopting-repo skip of library rules, not here.

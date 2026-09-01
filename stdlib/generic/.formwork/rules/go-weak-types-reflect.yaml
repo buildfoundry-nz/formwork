@@ -1,0 +1,21 @@
+# Ban reflect.* in non-test app code. Tests and generated code are excluded.
+rules:
+  - id: go-weak-types-reflect
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+      exclude:
+        - ".formwork/**"
+        - "**/*_test.go"
+        - "**/vendor/**"
+        - "**/generated/**"
+        - "**/*.pb.go"
+    params:
+      pattern: '\breflect\.[A-Z][A-Za-z0-9_]*\b'
+    cure: >-
+      Remove reflect.* from app code; name a real interface with the method
+      set you need. Override locally to carve out a sanctioned decode package.
+    origin: stdlib/generic
+    tags: [go]

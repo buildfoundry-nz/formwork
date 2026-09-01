@@ -74,7 +74,8 @@ nothing is a guardrail you believe you have and do not.
 
 ```yaml
 version: 1                      # required
-engine: ">= 0.3.0"              # optional; refuse to run below this version
+engine: ">= 0.6.0"              # optional; refuse to run below this version
+library: [generic]              # optional; opt into engine-shipped rule packs
 lanes:                          # optional; see Lanes
   ci:
     all: true
@@ -95,6 +96,25 @@ scan:                           # optional; prune the shared walk
   gitignore:
     reason: "build output is large and never committed"  # MANDATORY
 ```
+
+### `library:`
+
+Named rule packs shipped inside the binary. `generic` is the Go/Dart/SQL
+hygiene pack (`stdlib/generic/` in the formwork repo). Unknown names are exit 2
+and list the known packs.
+
+Library rules load first. A local `.formwork/rules/` file that restates the same
+`id` replaces the library rule — that is how a mixed binding (generic logic,
+repo-specific globs or allowlist) is expressed. Library rules cannot carry
+`except.allowlist` (that path is repo-local); redeclare locally to bind one.
+
+`formwork lint` does not demand local fixtures or a non-empty scope for a
+library-sourced rule. Those proofs live in the pack: `formwork test -C
+stdlib/generic`.
+
+Opt-in, not default. A repo that never sets `library:` is unchanged.
+
+See `docs/specs/2026-09-02-stdlib-library.md`.
 
 ### `engine:`
 

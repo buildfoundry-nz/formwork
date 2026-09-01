@@ -1,0 +1,56 @@
+# Zero-tolerance TODO/FIXME/HACK/XXX in comments. One rule per language
+# because each needs its own comments-only preprocessor.
+rules:
+  - id: todo-fixme-hack-go
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+      exclude:
+        - ".formwork/**"
+    preprocess: comments-only-go
+    params:
+      pattern: "(?i)((^|[^a-z0-9_./-])(todo|fixme|hack|xxx)($|[^a-z0-9_])|[./-](todo|fixme|hack|xxx)($|[^a-z0-9_./-]|[./-]($|[^a-z0-9])))"
+    cure: >-
+      Implement the work, delete the marker, or file an issue and link it
+      from plain non-marker prose. TODO/FIXME/HACK/XXX have no allowlist.
+    origin: stdlib/generic
+    tags: [always]
+
+  - id: todo-fixme-hack-dart
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.dart"
+      exclude:
+        - ".formwork/**"
+        - "**/*.freezed.dart"
+        - "**/*.g.dart"
+        - "**/*.pb*.dart"
+    preprocess: comments-only-dart
+    params:
+      pattern: "(?i)((^|[^a-z0-9_./-])(todo|fixme|hack|xxx)($|[^a-z0-9_])|[./-](todo|fixme|hack|xxx)($|[^a-z0-9_./-]|[./-]($|[^a-z0-9])))"
+    cure: >-
+      Implement the work, delete the marker, or file an issue and link it
+      from plain non-marker prose. TODO/FIXME/HACK/XXX have no allowlist.
+    origin: stdlib/generic
+    tags: [always]
+
+  - id: todo-fixme-hack-sql
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.sql"
+      exclude:
+        - ".formwork/**"
+    preprocess: comments-only-sql
+    params:
+      pattern: "(?i)((^|[^a-z0-9_./-])(todo|fixme|hack|xxx)($|[^a-z0-9_])|[./-](todo|fixme|hack|xxx)($|[^a-z0-9_./-]|[./-]($|[^a-z0-9])))"
+    cure: >-
+      Implement the work, delete the marker, or file an issue and link it
+      from plain non-marker prose. TODO/FIXME/HACK/XXX have no allowlist.
+    origin: stdlib/generic
+    tags: [always]

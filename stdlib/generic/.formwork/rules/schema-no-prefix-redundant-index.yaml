@@ -1,0 +1,28 @@
+rules:
+  - id: schema-no-prefix-redundant-index
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*snapshot*.sql"
+        - "**/*.up.sql"
+    params:
+      pattern: 'INDEX\s+(idx_metrics_project|idx_source_documents_version|idx_business_profiles_org|idx_memberships_org|idx_psc_source)\b'
+    cure: >-
+      Drop a btree that is a strict prefix of a wider btree. Override the
+      pattern locally to name the indexes this repo has banned.
+    origin: stdlib/generic
+    tags: [go]
+  - id: schema-snapshot-has-btree-indexes
+    type: pattern-count
+    severity: error
+    scope:
+      include:
+        - "**/*snapshot*.sql"
+    params:
+      pattern: '^CREATE (UNIQUE )?INDEX \S+ ON \S+ USING btree \('
+      op: at-least
+      n: 1
+    cure: A schema snapshot that declares tables must keep the btree indexes queries rely on.
+    origin: stdlib/generic
+    tags: [go]

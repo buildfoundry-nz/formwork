@@ -1,0 +1,4 @@
+jobs:
+  proto:
+    steps:
+      - uses: ./.github/actions/install-buf

@@ -1,0 +1,15 @@
+# Residual: per-method brace analysis → await in bool-build file requires keepAlive.
+rules:
+- id: dart-mutation-controller-keepalive
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include: [packages/*/lib/**/*.dart, frontend/lib/**/*.dart, frontend/admin_app/lib/**/*.dart]
+    exclude: ['**/*.g.dart', '**/*.freezed.dart', '**/*.pb.dart']
+  params:
+    pattern: '\bawait\s+'
+    require_present: ['bool\s+build\s*\(']
+    require_absent: ['ref\.keepAlive\s*\(', 'keepAlive:\s*true']
+  cure: "final link = ref.keepAlive(); try { await ... } finally { link.close(); } (#6584)."
+  origin: stdlib/generic
+  tags: [dart]

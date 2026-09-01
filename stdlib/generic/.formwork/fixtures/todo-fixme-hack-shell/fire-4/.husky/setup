@@ -1,0 +1,13 @@
+# setup — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml,
+# hook-name arm.
+#
+# Companion of .husky/ci-helper in this fixture: a second arbitrary hook
+# name, so the pin is the directory keying itself and not one lucky name.
+# (Until the #14888 zero-.sh campaign this was setup.sh at the repository
+# ROOT, pinning that the whole-tree `**/*.sh` glob reached a tree the
+# retired six-root include list never named — the #8630
+# dart-file-size-cap silent-pass shape.)
+set -euo pipefail
+
+# bootstrap notes, then TODO: pin the toolchain  # want: todo-fixme-hack-shell
+echo "setting up"

@@ -1,0 +1,118 @@
+# Zero-tolerance annotation markers in shell comments (#9272). Siblings of
+# todo-fixme-hack, which owns the Go/Dart/SQL surface. Shell needs its own rules
+# because it needs its own pattern and its own preprocessors, and a rule carries
+# one of each.
+#
+# There are TWO rules here, over the SAME file set and the SAME question, on the
+# two complementary projections of one shell lexer:
+#
+#   todo-fixme-hack-shell           destring-sh       shell's own comments
+#   todo-fixme-hack-shell-embedded  strings-only-sh   comments in the programs
+#                                                     shell carries as data
+#
+# The split is forced by the lexer: a `#` inside a single-quoted awk program or
+# a heredoc body is opaque DATA to shell, so the projection that reads shell
+# comments must blank it — and used to be the end of the story. That left a
+# standing boundary the rule disclosed but nothing measured: a marker moved
+# inside an awk program was unreachable by the gate that forbids it. The second
+# rule reads exactly the region the first one blanks, so the two together cover
+# every `#` in the file and neither reports the other's lines.
+#
+# Marker boundaries (word glue, and interior-only `.`/`-`/`/` glue) are the
+# family contract and are stated once, in todo-fixme-hack.yaml.
+rules:
+  - id: todo-fixme-hack-shell
+    type: forbidden-pattern
+    severity: error
+    scope: &shell-scope
+      include:
+        # Every .sh in the tree, not a hand-listed set of roots. An enumerated
+        # list ends in a silent PASS: a shell script in a tree nobody named —
+        # the repo root, .github/, infra/ — was unscanned and nothing said so.
+        # That is the #8630 dart-file-size-cap lesson (the list ended in a
+        # silent pass, so frontend/integration_test/** sat uncapped). Adding a
+        # tree is now nothing; forgetting one is safe. The scanner already
+        # skips .formwork/ (tools/formwork/internal/scan/scan.go), so this
+        # cannot pull fixture trees into scope. Kept until the #14888 zero-.sh
+        # campaign retires the last tracked .sh — the whole-tree pin that was
+        # fire-4 moved onto the .husky arm with the fixtures.
+        # The last four product shells were ported to Go and deleted in #15103, so
+        # this glob now matches nothing. It STAYS: no-shell-files-anywhere and
+        # tracked-sh-shrink-only make the class permanently closed, and the glob is
+        # what covers a .sh on the day one returns rather than after someone
+        # remembers to re-add it.
+        # glob-dead: tracked *.sh is ZERO (#14888 / #15103); the class is closed by ban, not by absence
+        - "**/*.sh"
+        # The repo's git hooks are shell scripts with NO extension, so an
+        # extension-keyed scope missed all of them — 666 lines that run every
+        # pre-commit formwork lane and sit on the policy-protected path list.
+        # Keyed on the directory, not a hand-listed set of hook names, so a
+        # newly added hook is in scope the day it lands.
+        - ".husky/*"
+      exclude:
+        # Engine-level: scan.Walk drops any directory named .formwork before rules
+        # run (tools/formwork/internal/scan/scan.go:19,125). Declared here so this
+        # rule's written scope equals its scanned scope. The skip is load-bearing —
+        # .formwork/fixtures holds 1,449 FIRE fixtures whose job is to contain the
+        # violation this rule bans. Pinned by formwork-engine-skip-declared.
+        - '.formwork/**'
+        # Markdown in .husky/ is documentation, not a hook: a `#` there opens a
+        # heading, not a shell comment, and the repo's marker ban exempts docs
+        # (forensic-grep does the same). Typed exclusion, matching how every
+        # include above is typed by extension — pinned by pass-2, whose
+        # .husky/CLAUDE.md carries a HEADING-SHAPED marker. The shape is the
+        # pin: a marker in bare markdown prose has no `#` on its line, so the
+        # pattern could not reach it with or without this exclusion and the
+        # fixture stayed green either way (verified by deleting the line).
+        - ".husky/*.md"
+    # Blanks single/double-quoted string contents and heredoc BODIES, and
+    # knows `#` opens a comment only at a word start, so `${#arr[@]}`, `$#`
+    # and `url#fragment` are ordinary text. Without it a gate's own marker
+    # pattern table and the `cat <<EOF` migration template in
+    # the migration minter's `cat <<EOF` template both read as comments — the
+    # second was a guaranteed false positive, since that placeholder is
+    # deliberate and the .sql it emits is scanned as .sql by the sibling
+    # rule. (Both hosts are gone with #14888; the preprocessor's job is
+    # unchanged for whatever shell lands in .husky/*.)
+    preprocess: destring-sh
+    params:
+      # `#` at a word start, then the marker ANYWHERE later on the line —
+      # position independence is the point (#7038): an anchored
+      # `#[[:space:]]*MARKER` misses `# prose first, TODO: fix`, which is
+      # the bypass the audit filed. Case-insensitive, because lower-casing a
+      # marker is the same escape.
+      pattern: "(?i)(^|[[:space:];|&()<>])#((.*[^a-z0-9_./-])?(todo|fixme|hack|xxx)($|[^a-z0-9_])|.*[./-](todo|fixme|hack|xxx)($|[^a-z0-9_./-]|[./-]($|[^a-z0-9])))"
+    cure: &shell-cure >-
+      Implement the work, delete the marker (and any dead code it guards), or open
+      an issue/decision-log entry and link it from plain non-marker prose.
+      TODO/FIXME/HACK/XXX have no allowlist and no escape hatch.
+    tags: [always]
+
+  - id: todo-fixme-hack-shell-embedded
+    type: forbidden-pattern
+    severity: error
+    # Same files, same exclusion: the two rules are one ban read twice, so a
+    # file in scope for one is in scope for the other by construction.
+    scope: *shell-scope
+    # The exact complement of destring-sh over the same lexer: it keeps ONLY
+    # the quoted-string interiors and heredoc bodies its sibling blanks. Those
+    # hold real programs with real `#` comments — the awk programs in
+    # check-no-drop-of-just-removed-table.go and scripts/ci/goaffected,
+    # and the GATE_AWK_LIB heredoc in scripts/lib/gate-awk.sh — and none of
+    # it was reachable by any rule. Reading it needs no parser and no language
+    # detection: the question is only whether a `#` comment in there carries a
+    # marker, and the answer is the same in shell, awk and python.
+    preprocess: strings-only-sh
+    # Deliberately the SAME pattern as the sibling: the two rules differ in
+    # what text they are handed, never in what counts as a marker. It is
+    # repeated rather than aliased because `params` is carried as an opaque
+    # YAML node and decoded on its own, so an alias inside it cannot reach its
+    # anchor (`scope` and `cure` decode into typed fields, which is why those
+    # two ARE aliased above). What holds the two copies together is the
+    # fixtures: this rule's fire-1 carries the same head-glued marker shapes as
+    # the sibling's fire-2, so a pattern that drifts on either side turns a
+    # fixture red.
+    params:
+      pattern: "(?i)(^|[[:space:];|&()<>])#((.*[^a-z0-9_./-])?(todo|fixme|hack|xxx)($|[^a-z0-9_])|.*[./-](todo|fixme|hack|xxx)($|[^a-z0-9_./-]|[./-]($|[^a-z0-9])))"
+    cure: *shell-cure
+    tags: [always]

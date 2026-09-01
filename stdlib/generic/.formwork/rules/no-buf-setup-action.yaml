@@ -1,0 +1,17 @@
+# buf-setup-action@v1 fetches a GitHub API manifest and hard-fails when GitHub
+# returns HTML during a blip. Direct release-asset download does not.
+rules:
+  - id: no-buf-setup-action
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/**/*.yml"
+        - ".github/actions/**/*.yml"
+    params:
+      pattern: '^\s*(-\s+)?uses:\s*bufbuild/buf-setup-action'
+    cure: >-
+      Do not use bufbuild/buf-setup-action. Install buf from a release asset
+      (or an in-repo composite that does) so a GitHub API blip cannot fail CI.
+    origin: stdlib/generic
+    tags: [always]

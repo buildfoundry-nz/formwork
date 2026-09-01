@@ -1,0 +1,36 @@
+# demo-embedded — fire fixture for the todo-fixme-hack-shell-embedded rule
+# in .formwork/rules/todo-fixme-hack-shell.yaml.
+#
+# Every marker below sits in a `#` comment inside a PROGRAM that shell carries
+# as data. To the shell lexer that text is an opaque string, so the sibling
+# rule's projection blanks it and no rule could read it — 145 whole-line `#`
+# comments across the tracked shell surface sat behind that boundary, disclosed
+# and unmeasured. These are the three shapes the boundary was described in
+# terms of: a single-quoted inline awk program, an awk library carried in a
+# heredoc, and a single-quoted `bash -c` worker body.
+#
+# The marker shapes are deliberately the same head-glued set as the sibling's
+# fire-2, because the two rules repeat one pattern and the fixtures are what
+# hold the copies together.
+set -euo pipefail
+
+awk '
+  # TODO: rework the field split                    # want: todo-fixme-hack-shell-embedded
+  { print $1 }
+' /dev/null
+
+GATE_AWK_LIB=$(cat <<'AWKLIB'
+function trim(s) {
+  # FIXME-later: bound this helper                  # want: todo-fixme-hack-shell-embedded
+  sub(/^[ \t]+/, "", s)
+  return s
+}
+AWKLIB
+)
+
+bash -c '
+  # hack-around the worker exit code                # want: todo-fixme-hack-shell-embedded
+  echo worker
+'
+
+printf '%s\n' "${GATE_AWK_LIB}"

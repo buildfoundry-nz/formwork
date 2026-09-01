@@ -1,0 +1,27 @@
+# #4919 / #4781 — required-status-checks contexts must map to workflow job names.
+rules:
+  - id: required-checks-match-workflows
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - scripts/baselines/required-status-checks.txt
+        - .github/workflows/*.yml
+    params:
+      a:
+        files:
+          - scripts/baselines/required-status-checks.txt
+        # kind context_or_job display_name...
+        pattern: '^(?:always|aggregator|reports)\s+\S+\s+(.+?)\s*$'
+        group: 1
+      b:
+        files:
+          - .github/workflows/*.yml
+        pattern: '^\s+name:\s*(.+?)\s*$'
+        group: 1
+      relation: subset
+    cure: >-
+      Keep scripts/baselines/required-status-checks.txt in lockstep with branch
+      protection and workflows: every required context must map to a real job
+      display name (#4919 / #4781).
+    tags: [none]

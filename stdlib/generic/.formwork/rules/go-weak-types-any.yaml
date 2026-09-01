@@ -1,0 +1,24 @@
+# Ban any/interface{} in function parameters, channels, generic constraints
+# that spell interface{}, and empty-interface named types. Idiomatic
+# `func() any`, `[]any`, `var x any`, `[T any]` are allowed.
+rules:
+  - id: go-weak-types-any
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+      exclude:
+        - ".formwork/**"
+        - "**/vendor/**"
+        - "**/generated/**"
+        - "**/*.pb.go"
+        - "**/*_test.go"
+    params:
+      pattern: (func\s+([A-Za-z_][A-Za-z0-9_]*\s*)?\([^)]*\s(\.\.\.)?(any|interface\{\s*\})\b)|(\bchan\s+(any|interface\{\s*\})\b)|(\[[A-Z][A-Za-z0-9_]*\s+interface\{\s*\}[],\s])|(^\s*type\s+[A-Z][A-Za-z0-9_]*\s*=\s*(any|interface\{\s*\})\b)|(^\s*type\s+[A-Z][A-Za-z0-9_]*\s+interface\s*\{\s*\})
+    cure: >-
+      Name a real interface listing the method set you need, or decode at the
+      boundary into a typed struct. Write [T any] for unconstrained generics,
+      never [T interface{}].
+    origin: stdlib/generic
+    tags: [go]

@@ -1,0 +1,14 @@
+rules:
+  - id: migration-noop-divergence
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.up.sql"
+    params:
+      pattern: '(?i)^\s*select\s+1\s*;'
+    cure: >-
+      A migration must install the schema state it describes — never ship a
+      SELECT 1; no-op stub. Restore the real DDL, or revert the version.
+    origin: stdlib/generic
+    tags: [go]

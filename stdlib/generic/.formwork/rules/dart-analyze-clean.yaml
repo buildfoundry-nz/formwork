@@ -1,0 +1,17 @@
+rules:
+  - id: dart-analyze-clean
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*.dart"
+    params:
+      cmd: [dart, analyze]
+      when:
+        paths_changed: ["**/*.dart"]
+      expect:
+        exit: 0
+    cure: "Fix dart analyze findings; do not suppress the analyzer to pass."
+    origin: stdlib/generic
+    tags: [dart]
+    fixture_exempt: "requires the dart SDK on PATH; pack CI is Go-only"

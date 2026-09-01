@@ -1,0 +1,12 @@
+name: frontend
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+  flutter: '>=3.38.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^3.2.0
+  riverpod_annotation: ^4.0.0
+  go_router: ^17.0.0
+  dio: ^5.9.0

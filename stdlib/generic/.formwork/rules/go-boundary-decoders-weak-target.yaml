@@ -1,0 +1,63 @@
+# Boundary decoders must land on a typed struct (proto-generated or a permitted
+# hand-rolled DTO), never on any / interface{} / map[...]any. An untyped decode
+# at the edge silently launders unvalidated shape into the interior.
+#
+# Re-authored per #10861 triage: the old pattern keyed ONLY on the package
+# selector `json.Unmarshal` / `protojson.Unmarshal`, which a house-style import
+# alias (`import j "encoding/json"; j.Unmarshal(data, &map[string]any{})`)
+# evades — the same alias hole single-canonical-role-gate closed with AST.
+# The engine has no go/* type that inspects Unmarshal's second-argument type,
+# so the check stays lexical, but the Unmarshal arm is now qualifier-free:
+# any `Unmarshal(…, …any|interface{}|map…any)` spelling fires, aliased or not.
+# The Decode arm was already qualifier-free (`.Decode(&any)`); it stays.
+#
+# preprocess: decomment-go so a commented-out weak decode (or a doc comment
+# quoting the forbidden shape as an anti-pattern) cannot false-fire.
+#
+# Green at authoring: zero in-scope hits on the real tree (grep-verified for
+# Unmarshal/Decode into any/interface{}/map[…]any outside tests); the only
+# package-local Unmarshal is boqmeta.Unmarshal into *domainv1.BoqMetadata —
+# typed, not weak, so the target arm does not match.
+#
+# Documented residuals (#10861 triage):
+#  - var-then-decode: `var v any; json.Unmarshal(data, &v)` carries no type
+#    token at the call site and is out of lexical reach;
+#  - a helper that wraps Unmarshal into any and is called from many sites
+#    needs the helper itself to trip this rule (it does, if the helper
+#    spells the weak target) — dataflow across helpers is out of engine reach;
+#  - a non-json Unmarshal with a weak target (e.g. yaml.Unmarshal into any)
+#    is deliberately in scope of the widened Unmarshal arm: weak-target
+#    decode at a boundary is the invariant, not the codec brand.
+rules:
+- id: go-boundary-decoders-weak-target
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include:
+    - '**/*.go'
+    exclude:
+    # Engine-level: scan.Walk drops any directory named .formwork before rules
+    # run (tools/formwork/internal/scan/scan.go:19,125). Declared here so this
+    # rule's written scope equals its scanned scope. The skip is load-bearing —
+    # .formwork/fixtures holds 1,449 FIRE fixtures whose job is to contain the
+    # violation this rule bans. Pinned by formwork-engine-skip-declared.
+    - '.formwork/**'
+    - "tools/formwork/**"  # vendored engine source, not TakeoffQS code
+    - '**/*_test.go'
+    - '**/vendor/**'  # preventative: vendor trees are not always present on disk
+    - '**/gen/**'  # preventative: generated Go trees may be absent
+    - '**/generated/**'
+    - '**/internal/vendorjson/**'
+    - '**/internal/proto/**'
+    - '**/*.pb.go'  # preventative: generated Go; pinned by pass-pb (#10797)
+    - '**/zz_generated_*.go'  # preventative: generated Go artifacts may be absent
+    - '**/*_generated.go'  # preventative: generated Go artifacts may be absent
+  preprocess: decomment-go
+  params:
+    # Qualifier-free Unmarshal so import aliases cannot evade; Decode was
+    # already bare. Target arm requires the weak type at the call site.
+    pattern: \b(?:\w+\.)?Unmarshal\([^,]+,\s*&?(map\[[^]]+\]\s*)?(any|interface\{\s*\})|\.Decode\(\s*&?(map\[[^]]+\]\s*)?(any|interface\{\s*\})
+  cure: "Decode into a typed struct (proto-generated or hand-rolled where permitted), then propagate the typed value inward \u2014 never Unmarshal/Decode into any / interface{} / map[...]any."
+  origin: stdlib/generic
+  tags:
+  - none

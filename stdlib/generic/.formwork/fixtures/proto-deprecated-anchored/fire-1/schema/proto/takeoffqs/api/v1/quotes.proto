@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package takeoffqs.api.v1;
+
+message Quote {
+  // Legacy percentage total. Kept around indefinitely with no pointer to what
+  // writers should target instead — a permanent zombie wire surface.
+  string legacy_total_pct = 1 [deprecated = true]; // want: proto-deprecated-anchored
+}

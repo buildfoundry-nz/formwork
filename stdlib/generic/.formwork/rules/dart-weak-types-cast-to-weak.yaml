@@ -1,0 +1,35 @@
+rules:
+- id: dart-weak-types-cast-to-weak
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include:
+    - '**/*.dart'
+    exclude:
+    # Engine-level: scan.Walk drops any directory named .formwork before rules
+    # run (tools/formwork/internal/scan/scan.go:19,125). Declared here so this
+    # rule's written scope equals its scanned scope. The skip is load-bearing —
+    # .formwork/fixtures holds 1,449 FIRE fixtures whose job is to contain the
+    # violation this rule bans. Pinned by formwork-engine-skip-declared.
+    - '.formwork/**'
+    - "tools/formwork/**"  # vendored engine source, not TakeoffQS code
+    - '**/*.g.dart'
+    - '**/*.freezed.dart'
+    - '**/*.gr.dart'  # preventative: generated router files may be absent
+    - '**/*.config.dart'  # preventative: generated config dart may be absent
+    - '**/*.pb.dart'
+    - '**/*.pbjson.dart'  # preventative: generated protobuf dart variants may be absent for some packages
+    - '**/*.pbenum.dart'
+    - '**/*.pbserver.dart'  # preventative: generated protobuf dart variants may be absent for some packages
+    - '**/*.pbgrpc.dart'  # preventative: generated protobuf dart variants may be absent for some packages
+    - '**/generated/**'
+    - shared/generated/**
+    - '**/node_modules/**'  # preventative: node_modules is gitignored and may be absent
+    - '**/build/**'  # preventative: build output is gitignored and may be absent
+    - '**/.dart_tool/**'  # preventative: .dart_tool is gitignored and may be absent
+  params:
+    pattern: \bas[[:space:]]+(dynamic|Object\?|Object|Function)\b
+  cure: Do not launder a value through a weak top-type cast. Declare the actual class / sealed union, use a Freezed value object, or narrow the wire shape via fromJson before propagating a typed value inward.
+  origin: stdlib/generic
+  tags:
+  - dart

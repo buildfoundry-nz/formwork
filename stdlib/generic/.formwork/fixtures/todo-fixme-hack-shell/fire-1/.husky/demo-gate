@@ -1,0 +1,15 @@
+# demo-gate — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml.
+#
+# Every marker below sits in a `#` comment. None is in annotation position
+# (the leading token right after the opener), which is the whole point: the
+# marker is caught wherever it sits on the line.
+#
+# Carried on an extensionless .husky/ hook path (#14888 zero-.sh campaign):
+# the git hooks are the shell surface this rule survives to guard, so the
+# specimens live where the surviving shell does.
+set -euo pipefail
+
+# notes on the parser, then TODO: rework it            # want: todo-fixme-hack-shell
+rm -rf "${dir}"   # FIXME: deletes more than intended  # want: todo-fixme-hack-shell
+# lower case is the same escape, so hack: rework       # want: todo-fixme-hack-shell
+echo ok           # trailing prose then XXX, at EOL    # want: todo-fixme-hack-shell

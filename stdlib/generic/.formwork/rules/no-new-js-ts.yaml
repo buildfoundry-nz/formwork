@@ -1,0 +1,29 @@
+# Ban new JavaScript/TypeScript sources. A Go+Dart (or Go-only) repo that
+# has chosen not to grow a JS tree uses this so the decision cannot rot
+# one file at a time.
+rules:
+  - id: no-new-js-ts
+    type: file-naming
+    severity: error
+    scope:
+      include:
+        - "**"
+      exclude:
+        - ".formwork/**"
+        - "**/node_modules/**"  # preventative: gitignored install tree, may be absent
+        - "**/.dart_tool/**"    # preventative: gitignored pub tool tree, may be absent
+    params:
+      forbid_ext:
+        - .js
+        - .jsx
+        - .ts
+        - .tsx
+        - .mjs
+        - .cjs
+        - .cts
+        - .mts
+    cure: >-
+      This pack assumes a Go and/or Dart tree. Write Go or Dart; remove the
+      JS/TS file. Override locally if the repo has a sanctioned JS surface.
+    origin: stdlib/generic
+    tags: [always]

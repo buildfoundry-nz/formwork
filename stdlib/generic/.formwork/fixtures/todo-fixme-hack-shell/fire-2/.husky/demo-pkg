@@ -1,0 +1,8 @@
+# demo-pkg — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml.
+# See .husky/demo-hook in this fixture for what fire-2 pins.
+#
+# Lower case is the same escape, and gluing a lower-cased marker was two
+# escapes stacked in one token.
+set -euo pipefail
+# package notes, then hack-around the codegen step           # want: todo-fixme-hack-shell
+echo ok

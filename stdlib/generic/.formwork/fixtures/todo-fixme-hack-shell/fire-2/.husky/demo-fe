@@ -1,0 +1,9 @@
+# demo-fe — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml.
+# See .husky/demo-hook in this fixture for what fire-2 pins.
+#
+# A slash glues as readily as a hyphen, so the shape below was exempt too. The
+# path shapes the exemption exists for — pkg/todo/x — all carry a separator
+# BEFORE the marker; this one does not, which is the whole distinction.
+set -euo pipefail
+# shell notes, then TODO/rework the bundler step             # want: todo-fixme-hack-shell
+echo ok

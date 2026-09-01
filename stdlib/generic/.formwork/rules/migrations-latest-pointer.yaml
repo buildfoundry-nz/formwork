@@ -1,0 +1,21 @@
+rules:
+  - id: migrations-latest-pointer
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "**/LATEST_MIGRATION"
+        - "**/*.up.sql"
+    params:
+      a:
+        files: ["**/LATEST_MIGRATION"]
+        pattern: '^([0-9]{4,14}_[A-Za-z0-9_]+)\s*$'
+        group: 1
+      b:
+        files: ["**/*.up.sql"]
+        pattern: '^--\s*([0-9]{4,14}_[A-Za-z0-9_]+)'
+        group: 1
+      relation: subset
+    cure: Bump LATEST_MIGRATION to the new migration stem.
+    origin: stdlib/generic
+    tags: [always]

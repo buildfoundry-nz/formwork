@@ -1,0 +1,10 @@
+# demo-gate — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml.
+# See .husky/demo-hook in this fixture for what fire-2 pins.
+#
+# The plainest form of the one-character bypass: a hyphen running into a word
+# used to glue the marker into a "compound token" and exempt it, which is how
+# an annotation carrying a suffix walked past a ban whose cure text says it
+# has no allowlist.
+set -euo pipefail
+# integration harness notes, then FIXME-later: rework the reset  # want: todo-fixme-hack-shell
+echo ok

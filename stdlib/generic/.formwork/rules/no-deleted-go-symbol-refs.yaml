@@ -1,0 +1,18 @@
+rules:
+- id: no-deleted-go-symbol-refs
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include:
+    - '**/*.go'
+    exclude:
+    - '**/*_test.go'
+    - '**/vendor/**'  # preventative: vendor trees are not always present on disk
+  params:
+    # Documented ghosts from audit-2 #13 (and common rename class).
+    pattern: '//.*\b(geometry_handler|worker_types)\.go\b'
+  cure: >-
+    The cited .go file was renamed or deleted — keep the behavioural prose, drop
+    the dead filename token (audit-2 #13).
+  tags:
+  - always

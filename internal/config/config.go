@@ -40,6 +40,12 @@ type Rule struct {
 	Allowlist   *Allowlist // loaded except.allowlist, nil when absent
 	ExceptPaths []string   // except.paths carve-out globs (read-only after construction)
 
+	// Library is the pack name this rule was loaded from (e.g. "generic").
+	// Empty means the rule was declared in the adopting repo. Lint's
+	// fixture-coverage check skips library-sourced rules: their fixtures
+	// live in the pack and are proven by `formwork test -C stdlib/<name>`.
+	Library string
+
 	include  []string
 	exclude  []string
 	minFiles int
@@ -310,6 +316,9 @@ type Config struct {
 	// got before this key existed.
 	Gitignore *GitignoreEntry
 	Rules     []*Rule
+	// Library is the pack names declared in formwork.yaml, in declaration
+	// order. Empty when the key is absent or the list is empty.
+	Library []string
 	// RuleFiles is how many .formwork/rules/*.yaml files were read, whatever
 	// they declared. It exists so a zero-rule refusal can name the actual
 	// cause: no rule files at all is a different mistake from rule files that
@@ -394,6 +403,7 @@ func (c *Config) RulesForLane(name string) ([]*Rule, error) {
 type rootSpec struct {
 	Version int                 `yaml:"version"`
 	Engine  string              `yaml:"engine"`
+	Library []string            `yaml:"library"`
 	Lanes   map[string]laneSpec `yaml:"lanes"`
 	Scope   scopeConfigSpec     `yaml:"scope"`
 	Scan    scanSpec            `yaml:"scan"`
@@ -508,61 +518,6 @@ func ReadEnvelope(repoRoot string) (*Envelope, error) {
 		}
 	}
 	return &Envelope{dir: dir, root: root, Version: root.Version, Engine: root.Engine, EngineConstraint: engineConstraint}, nil
-}
-
-// LoadRules parses the lanes, scope, and .formwork/rules/*.yaml rule files
-// against the envelope ReadEnvelope already read — the exact same bytes any
-// gate the caller ran between ReadEnvelope and LoadRules evaluated — and
-// returns the compiled Config.
-func (e *Envelope) LoadRules() (*Config, error) {
-	lanes, err := compileLanes(e.root.Lanes)
-	if err != nil {
-		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
-	}
-	scope, err := compileScope(e.root.Scope)
-	if err != nil {
-		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
-	}
-	ignore, err := compileIgnore(e.root.Scan.Ignore)
-	if err != nil {
-		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
-	}
-	gitignore, err := compileGitignore(e.root.Scan.Gitignore)
-	if err != nil {
-		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
-	}
-
-	ruleFiles, err := filepath.Glob(filepath.Join(e.dir, "rules", "*.yaml"))
-	if err != nil {
-		return nil, fmt.Errorf("config: listing rules: %w", err)
-	}
-	sort.Strings(ruleFiles)
-
-	cfg := &Config{Version: e.Version, Engine: e.Engine, EngineConstraint: e.EngineConstraint, Lanes: lanes, Scope: scope, Ignore: ignore, Gitignore: gitignore, RuleFiles: len(ruleFiles)}
-	seen := map[string]string{} // rule id -> file it was defined in
-	for _, rf := range ruleFiles {
-		data, err := os.ReadFile(rf)
-		if err != nil {
-			return nil, fmt.Errorf("config: reading %s: %w", rf, err)
-		}
-		var fs fileSpec
-		if err := strictUnmarshal(data, &fs); err != nil {
-			return nil, fmt.Errorf("config: %s: %w", rf, err)
-		}
-		for _, spec := range fs.Rules {
-			rule, err := compile(spec, e.dir)
-			if err != nil {
-				return nil, fmt.Errorf("config: %s: %w", rf, err)
-			}
-			if prev, dup := seen[rule.ID]; dup {
-				return nil, fmt.Errorf("config: %s: duplicate rule id %q (already defined in %s)", rf, rule.ID, prev)
-			}
-			seen[rule.ID] = rf
-			cfg.Rules = append(cfg.Rules, rule)
-		}
-	}
-	sort.Slice(cfg.Rules, func(i, j int) bool { return cfg.Rules[i].ID < cfg.Rules[j].ID })
-	return cfg, nil
 }
 
 // Load reads .formwork/formwork.yaml and .formwork/rules/*.yaml under

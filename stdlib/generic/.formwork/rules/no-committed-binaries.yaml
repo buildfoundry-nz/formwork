@@ -1,0 +1,21 @@
+# No NUL in the first 8KiB of a tracked-looking file. Weaker than a git-index
+# blob walk (NUL past 8KiB, Mach-O renamed .png, 20MiB cap) — those need a
+# git-index detector. This is the portable floor.
+rules:
+  - id: no-committed-binaries
+    type: binary-content
+    severity: error
+    scope:
+      include:
+        - "**"
+      exclude:
+        - ".formwork/**"
+        - "**/node_modules/**"
+        - "**/.git/**"
+    params:
+      forbid_binary: true
+    cure: >-
+      Do not commit native executables or binary blobs; gitignore build
+      outputs. Override locally for sanctioned assets (png/pdf) via except.paths.
+    origin: stdlib/generic
+    tags: [always]

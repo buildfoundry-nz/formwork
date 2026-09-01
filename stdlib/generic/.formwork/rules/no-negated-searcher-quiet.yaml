@@ -1,0 +1,21 @@
+# A negated searcher (`grep -v`, `rg -v`) that discards stdout is how a
+# mismatch becomes a silent pass. Ban piping those to /dev/null or using -q
+# together with -v.
+rules:
+  - id: no-negated-searcher-quiet
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.sh"
+        - "**/*.bash"
+        - ".husky/*"
+        - "**/*.yml"
+        - "**/*.yaml"
+    params:
+      pattern: '(grep|rg|egrep|fgrep)[^\n]*-[^\n]*v[^\n]*-[^\n]*q|(grep|rg)[^\n]*-[^\n]*q[^\n]*-[^\n]*v'
+    cure: >-
+      Do not combine -v and -q on grep/rg. A negated quiet search cannot tell
+      "matched" from "tool failed". Check the inverted condition in the open.
+    origin: stdlib/generic
+    tags: [always]

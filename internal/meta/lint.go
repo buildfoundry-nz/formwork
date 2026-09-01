@@ -295,6 +295,9 @@ func lintTree(cfg *config.Config, root string, w io.Writer, fset *scan.FileSet, 
 			byID[r.ID] = r
 		}
 		for _, id := range RulesMatchingNoFiles(cfg.Rules, fset.Files) {
+			if r, ok := byID[id]; ok && r.Library != "" {
+				continue
+			}
 			msg := id + ": scope matches no files in this repo"
 			// Say WHY when the answer is the engine skip set (#56). Without
 			// this, a correct-looking glob under .formwork/ matches nothing and
@@ -522,6 +525,9 @@ func exemptionHygiene(cfg *config.Config, fset *scan.FileSet, findings []finding
 
 	var problems []string
 	for _, r := range cfg.Rules {
+		if r.Library != "" {
+			continue
+		}
 		if al := r.Allowlist; al != nil {
 			for _, e := range al.Entries {
 				switch {

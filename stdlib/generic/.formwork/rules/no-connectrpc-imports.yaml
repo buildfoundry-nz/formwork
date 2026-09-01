@@ -1,0 +1,33 @@
+# No Go source under api-factory/ imports connectrpc.com/connect (ported from
+# scripts/check-no-connectrpc-imports.sh; BE-ARCH-3).
+#
+# CLAUDE.md's stack table used to read "Connect-go + Chi router" while every
+# handler in the tree was a hand-rolled Chi + protojson seam. The stated stack
+# and the actual stack had diverged, so the documentation was actively
+# misleading anyone choosing how to add a route. BE-ARCH-3 corrected the table
+# to "Chi router" and pins the decision here, so the next handler cannot
+# quietly re-open the question by importing the library the docs no longer
+# name.
+#
+# Rationale and the revisit condition live in
+# docs/plans/phase-6-decisions-log.md under "BE-ARCH-3 — Chi router (not
+# Connect-go)": route count crossing ~250 AND a separate Connect-go decision
+# landing for the FE wire surface. Until both hold, this is a decision record
+# with teeth, not a taste preference.
+#
+# *_test.go is exempt so a test may reference the module path.
+rules:
+- id: no-connectrpc-imports
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include:
+    - '**/*.go'
+    exclude:
+    - '**/*_test.go'
+  params:
+    pattern: '"connectrpc\.com/connect[^"]*"'
+  cure: Replace the Connect-go handler with a Chi handler + protojson encode/decode (BE-ARCH-3).
+  origin: stdlib/generic
+  tags:
+  - always

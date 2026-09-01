@@ -1,0 +1,15 @@
+rules:
+- id: update-proto-uses-optional
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include:
+    - '**/*.proto'
+  params:
+    syntax: regexp2
+    multiline: true
+    pattern: message Update\w*Request \{[^}]*?\n[ \t]*(?:string|int32|int64|uint32|uint64|sint32|sint64|fixed32|fixed64|float|double|bool|bytes)[ \t]+(?!(?:id|target_page_ids|new_value|password|email|name|outcome|status|slug|location|base_role|type)[ \t]*=)(?!\w*_ids?[ \t]*=)\w+[ \t]*=
+  cure: Mark the scalar field `optional` so the Go handler can call HasField(...) to tell 'absent' from 'cleared to zero'. For float/int/Timestamp that must express an explicit clear, add the canonical field path to UpdateProjectRequest.clear_fields (audit NEW-5). Row-addressing keys (*_id) and inherently-required names (name/slug/status) are exempt.
+  origin: stdlib/generic
+  tags:
+  - always

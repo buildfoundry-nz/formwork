@@ -1,0 +1,49 @@
+# A ListView / GridView carrying BOTH shrinkWrap: true and
+# NeverScrollableScrollPhysics is eager by construction while advertising
+# laziness — banned in non-generated Dart library source.
+#
+# That pair disables the outer scroll AND forces the inner list to lay out
+# every child to compute its extent, so `.builder` is a fig-leaf: nothing is
+# lazy. BoqSectionedView shipped exactly this shape under each section card and
+# mounted every line of every visible section on the first frame (#7485; the
+# fire fixture is that widget). The cure is not a flag — small bounded panels
+# become an honest Column/Wrap, large ones become a viewport-owned
+# ListView/SliverList. No per-file carve-out (ported from
+# scripts/check-dart-no-eager-nested-lists.sh).
+#
+# The pattern needs regexp2 rather than RE2 for the `//` negative lookbehind,
+# and it has to accept the two properties in EITHER order inside ONE
+# constructor. The `(?:(?!\b(?:ListView|GridView)\b).)*?` fences are what stop
+# a match spanning two sibling lists — an outer scrollable followed by an inner
+# NeverScrollable one is legitimate and must not fire. `prefilter:
+# NeverScrollableScrollPhysics` keeps the backtracking engine off the Dart
+# source that cannot match at all. Generated trees (*.g.dart, *.freezed.dart,
+# *.pb*.dart, *.gr.dart, generated/**) are excluded: codegen output is not
+# where a hand-written layout decision lives.
+rules:
+- id: dart-no-eager-nested-lists
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include:
+    - frontend/lib/**/*.dart
+    - frontend/admin_app/lib/**/*.dart
+    - packages/*/lib/**/*.dart
+    exclude:
+    - '**/generated/**'
+    - '**/.dart_tool/**'  # preventative: .dart_tool is gitignored and may be absent
+    - '**/*.g.dart'
+    - '**/*.freezed.dart'
+    - '**/*.pb.dart'
+    - '**/*.pbenum.dart'
+    - '**/*.pbjson.dart'  # preventative: generated protobuf dart variants may be absent for some packages
+    - '**/*.gr.dart'  # preventative: generated router files may be absent
+  params:
+    syntax: regexp2
+    multiline: true
+    pattern: (?s)(?<!//[^\n]*)\b(?:ListView|GridView)(?:\.\w+)?\s*\((?:(?!\b(?:ListView|GridView)\b).)*?(?:shrinkWrap:\s*true(?:(?!\b(?:ListView|GridView)\b).)*?NeverScrollableScrollPhysics|NeverScrollableScrollPhysics(?:(?!\b(?:ListView|GridView)\b).)*?shrinkWrap:\s*true)
+    prefilter: NeverScrollableScrollPhysics
+  cure: Small bounded panels become an honest Column/Wrap; large ones become a viewport-owned ListView/SliverList. No per-file carve-out (#7485).
+  origin: stdlib/generic
+  tags:
+  - dart

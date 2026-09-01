@@ -1,0 +1,14 @@
+# pre-commit — pass fixture for awk-posix-portable, .husky/* arm.
+#
+# bash-3.2 safe: indexed accumulation via a while-read loop, no associative
+# array, no gawk extension.
+set -uo pipefail
+
+staged=""
+while IFS= read -r path; do
+  staged="${staged} ${path}"
+done <<EOF
+a.go
+b.go
+EOF
+echo "${staged}"

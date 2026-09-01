@@ -1,0 +1,15 @@
+rules:
+  - id: migrations-unique-versions
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "**/LATEST_MIGRATION"
+    params:
+      pattern: '^[0-9]{4,14}_'
+      mode: every-file
+    cure: >-
+      Keep LATEST_MIGRATION pointing at a versioned migration stem so parallel
+      PRs conflict at merge rather than silently skipping a version.
+    origin: stdlib/generic
+    tags: [always]

@@ -1,0 +1,30 @@
+rules:
+- id: go-weak-types-json-rawmessage
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include:
+    - '**/*.go'
+    exclude:
+    # Engine-level: scan.Walk drops any directory named .formwork before rules
+    # run (tools/formwork/internal/scan/scan.go:19,125). Declared here so this
+    # rule's written scope equals its scanned scope. The skip is load-bearing —
+    # .formwork/fixtures holds 1,449 FIRE fixtures whose job is to contain the
+    # violation this rule bans. Pinned by formwork-engine-skip-declared.
+    - '.formwork/**'
+    - "tools/formwork/**"  # vendored engine source, not TakeoffQS code
+    - '**/vendor/**'  # preventative: vendor trees are not always present on disk
+    - '**/gen/**'  # preventative: generated Go trees may be absent
+    - '**/generated/**'
+    - '**/internal/proto/**'
+    - '**/internal/vendorjson/**'
+    - '**/_examples/**'  # preventative: example trees are not always present
+    - '**/*.pb.go'  # preventative: generated Go; pinned by pass-pb (#10797)
+    - '**/zz_generated_*.go'  # preventative: generated Go artifacts may be absent
+    - '**/*_generated.go'  # preventative: generated Go artifacts may be absent
+  params:
+    pattern: \bjson\.RawMessage\b
+  cure: Decode the wire shape into a typed struct/proto at the boundary; do not propagate json.RawMessage past the decode boundary.
+  origin: stdlib/generic
+  tags:
+  - none

@@ -1,0 +1,17 @@
+# Flutter CI jobs must cache pub. A cold `flutter pub get` on every run is
+# how CI time silently doubles.
+rules:
+  - id: flutter-workflows-cache-pub
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/**/*.yml"
+    params:
+      pattern: 'pub-cache|PUB_CACHE|flutter pub get'
+      mode: exists
+    cure: >-
+      Cache ~/.pub-cache (or set PUB_CACHE and cache that path) in any
+      workflow that runs Flutter. Override locally if the repo has no Flutter CI.
+    origin: stdlib/generic
+    tags: [dart]

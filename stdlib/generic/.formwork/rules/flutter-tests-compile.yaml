@@ -1,0 +1,17 @@
+rules:
+  - id: flutter-tests-compile
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*_test.dart"
+    params:
+      cmd: [flutter, test, --no-pub]
+      when:
+        paths_changed: ["**/*.dart"]
+      expect:
+        exit: 0
+    cure: "Keep Flutter tests compiling. A test that does not compile is not coverage."
+    origin: stdlib/generic
+    tags: [dart]
+    fixture_exempt: "requires the Flutter SDK on PATH; pack CI is Go-only"

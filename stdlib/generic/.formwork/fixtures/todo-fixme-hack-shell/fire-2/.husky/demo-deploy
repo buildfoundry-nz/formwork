@@ -1,0 +1,9 @@
+# demo-deploy — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml.
+# See .husky/demo-hook in this fixture for what fire-2 pins.
+#
+# A marker suffixed with its issue number is this repo's own idiom for an
+# annotation that cites its ticket, so the bypass was one keystroke from
+# being used by accident.
+set -euo pipefail
+# weight export notes, then XXX-9272 unbounded retry loop    # want: todo-fixme-hack-shell
+echo ok

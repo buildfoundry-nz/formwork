@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `library: [generic]` in `.formwork/formwork.yaml` opts into a rule pack
+  shipped inside the binary. The `generic` pack is the full portable
+  Go/Dart/SQL/shell/proto hygiene inventory (`stdlib/generic/` — weak types,
+  format/analyze, migrations, no committed binaries, no `skip:` in tests,
+  and the rest of the inventory-generic set), proven by
+  `formwork test -C stdlib/generic`. Local rules override pack rules by id.
+  Unknown pack names are exit 2. `LoadRules` lives in `internal/config/library.go`
+  so `config.go` stays under the 750-line vendor cap.
+
 ## 0.5.0
 
 ### Breaking

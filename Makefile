@@ -287,7 +287,7 @@ check:
 ## selftest: run every rule against its fixtures — repo self-host + each examples/ corpus (must exit 0)
 selftest:
 	@$(call GO_RUN,./cmd/formwork,test)
-	@fail=0; for d in examples/*/; do \
+	@fail=0; for d in examples/*/ stdlib/*/; do \
 		echo "==> formwork test -C $$d"; \
 		go run ./cmd/formwork test -C "$$d" || fail=1; \
 	done; exit $$fail
@@ -330,7 +330,7 @@ selftest:
 # four`, on a board written `1/1`, and on `707 rules`.
 lint:
 	@$(call GO_RUN,./cmd/formwork,lint)
-	@fail=0; for d in examples/*/; do \
+	@fail=0; for d in examples/*/ stdlib/*/; do \
 		echo "==> formwork lint -C $$d"; \
 		go run ./cmd/formwork lint -C "$$d" || fail=1; \
 	done; exit $$fail

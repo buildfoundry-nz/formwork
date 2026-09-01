@@ -1,0 +1,8 @@
+jobs:
+  flutter:
+    steps:
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.PUB_CACHE }}
+          key: pub-cache
+      - run: flutter pub get

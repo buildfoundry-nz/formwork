@@ -1,0 +1,18 @@
+# `cmd | head` / `cmd | grep -q` can SIGPIPE the producer and the pipeline
+# still exits 0. Ban the shape in shell gates.
+rules:
+  - id: no-sigpipe-producer-grep
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.sh"
+        - "**/*.bash"
+        - ".husky/*"
+    params:
+      pattern: '\|\s*(head|grep\s+-q|rg\s+-q)\b'
+    cure: >-
+      Do not pipe a producer into head or grep -q in a gate. The producer can
+      die SIGPIPE and the pipeline still exits 0. Capture output, then test it.
+    origin: stdlib/generic
+    tags: [always]

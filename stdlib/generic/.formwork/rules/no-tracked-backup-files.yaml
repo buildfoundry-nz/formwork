@@ -1,0 +1,21 @@
+rules:
+  - id: no-tracked-backup-files
+    type: file-naming
+    severity: error
+    scope:
+      include:
+        - "**"
+      exclude:
+        - ".formwork/**"
+    params:
+      forbid_ext:
+        - .bak
+        - .orig
+        - .rej
+      require_match: "[^~]$"
+    cure: >-
+      Delete the backup/conflict blob: git rm --cached <path> && rm <path>.
+      A .bak/~ is a stale second definition; a .orig carries rejected merge
+      content; a .rej is a hunk that never applied.
+    origin: stdlib/generic
+    tags: [always]

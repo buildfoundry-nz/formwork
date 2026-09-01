@@ -1,0 +1,21 @@
+# Never // ignore use_build_context_synchronously — guard with if (!mounted).
+rules:
+  - id: dart-no-build-context-suppressions
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.dart"
+      exclude:
+        - ".formwork/**"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+    params:
+      pattern: '//[[:space:]]*ignore(_for_file)?:[^/\n]*use_build_context_synchronously'
+    cure: >-
+      Never // ignore use_build_context_synchronously — guard post-await
+      context use with if (!mounted) return; (or the equivalent mounted
+      check for your widget type).
+    origin: stdlib/generic
+    tags: [dart]

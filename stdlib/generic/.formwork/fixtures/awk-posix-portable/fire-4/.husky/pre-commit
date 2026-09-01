@@ -1,0 +1,11 @@
+# pre-commit — fire fixture for awk-posix-portable, .husky/* arm.
+#
+# The repo's git hooks have NO extension, so the `.husky/**/*.sh` glob this
+# fixture replaces matched zero files: the coverage the rule's own comment
+# claimed for .husky was inert. Keyed on the directory, so a newly added hook
+# is in scope the day it lands.
+set -uo pipefail
+
+declare -A staged  # want: awk-posix-portable
+staged[foo]=bar
+echo "${staged[foo]}"

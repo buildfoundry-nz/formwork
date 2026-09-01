@@ -1,0 +1,19 @@
+rules:
+  - id: migration-dedup-before-unique-index
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.up.sql"
+    params:
+      multiline: true
+      pattern: '(?m)^[ \t]*UPDATE[ \t]+\S[\s\S]*?^[ \t]*CREATE[ \t]+UNIQUE[ \t]+INDEX'
+      require_absent:
+        - '(?m)^[ \t]*DELETE[ \t]+FROM'
+        - '(?m)^[ \t]*MERGE[ \t]+INTO'
+    cure: >-
+      Insert a DELETE FROM or MERGE INTO dedup step between a canonicalising
+      UPDATE and CREATE UNIQUE INDEX so pre-existing duplicates are resolved
+      before the index rejects them (SQLSTATE 23505).
+    origin: stdlib/generic
+    tags: [go]

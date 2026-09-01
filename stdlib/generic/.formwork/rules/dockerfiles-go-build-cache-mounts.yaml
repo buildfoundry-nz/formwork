@@ -1,0 +1,41 @@
+# Go-building Dockerfiles must use BuildKit module + build cache mounts.
+rules:
+  - id: dockerfiles-go-build-cache-mounts
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "**/Dockerfile"
+    params:
+      pattern: '--mount=type=cache,target=/root/\.cache/go-build'
+      mode: every-file
+    cure: >-
+      Add BuildKit cache mounts: RUN --mount=type=cache,target=/root/.cache/go-build
+      --mount=type=cache,target=/go/pkg/mod ... go build ..., plus
+      # syntax=docker/dockerfile:1
+    origin: stdlib/generic
+    tags: [always]
+  - id: dockerfiles-go-build-cache-mounts-mod
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "**/Dockerfile"
+    params:
+      pattern: '--mount=type=cache,target=/go/pkg/mod'
+      mode: every-file
+    cure: "Add --mount=type=cache,target=/go/pkg/mod on go mod download and go build RUNs."
+    origin: stdlib/generic
+    tags: [always]
+  - id: dockerfiles-go-build-cache-mounts-syntax
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "**/Dockerfile"
+    params:
+      pattern: '^#\s*syntax=docker/dockerfile:1'
+      mode: every-file
+    cure: "Add `# syntax=docker/dockerfile:1` on the first line."
+    origin: stdlib/generic
+    tags: [always]

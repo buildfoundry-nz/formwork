@@ -1,0 +1,19 @@
+rules:
+- id: claude-md-paths-exist
+  type: doc-path-exists
+  severity: error
+  # Scope widened 2026-08-06 (#12285): the ghost-path risk followed the content.
+  # The floor moved to AGENTS.md and the surface scars to .claude/rules/, so a
+  # map that sends an agent to a directory that no longer exists can now be
+  # written in any of the three. All three are held.
+  scope:
+    include:
+    - CLAUDE.md
+    - AGENTS.md
+    - .claude/rules/*.md
+  params:
+    pattern: ((?:frontend|packages|api-factory|scripts|docs|schema|shared|\.github|\.husky|\.claude)(?:/[A-Za-z0-9_.-]*[A-Za-z0-9][A-Za-z0-9_.-]*)*?)(?:/(?:(?:build|out|dist)(?:/[A-Za-z0-9_.-]+)*|[A-Za-z0-9_.-]*(?:generated|coverage|node_modules|dart_tool)[A-Za-z0-9_.-]*(?:/[A-Za-z0-9_.-]+)*))?(?:[\s)\]},.:;"'|`]|$)
+  cure: 'Update CLAUDE.md to the real location. A ghost path in the map sends agents to grep the wrong subtree (the #4607 frontend trap: FE code is in packages/, NOT frontend/lib/features). Fix the doc; do not create the directory to satisfy the gate.'
+  origin: stdlib/generic
+  tags:
+  - always

@@ -1,0 +1,5 @@
+set -uo pipefail
+
+declare -A seen  # want: awk-posix-portable
+seen[foo]=bar
+echo "${seen[foo]}"

@@ -160,6 +160,14 @@ codebase spells that `unproven`, `unknown`, or exit 2, never a quiet 0.
 - Boundaries: `scan` knows nothing about rules; rule types know nothing about
   lanes, git, or output formats; `report` owns all formatting.
 
+## Stdlib packs (`stdlib/`, committed)
+
+`stdlib/generic/` is the portable hygiene pack (Go/Dart/SQL rules that are not
+product-specific). Adopters opt in with `library: [generic]` in
+`.formwork/formwork.yaml` (requires `engine: ">= 0.6.0"`). Local rules override
+pack rules by id. `make selftest` and `make lint` loop `stdlib/*/` the same way
+they loop `examples/*/`. Spec: `docs/specs/2026-09-02-stdlib-library.md`.
+
 ## Example corpora (`examples/`, committed)
 
 `make selftest` loops over `examples/*/` and runs `formwork test -C` on each, so

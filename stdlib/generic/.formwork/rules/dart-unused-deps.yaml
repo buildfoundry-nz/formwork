@@ -1,0 +1,17 @@
+rules:
+  - id: dart-unused-deps
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/pubspec.yaml"
+    params:
+      cmd: [dart, pub, deps]
+      when:
+        paths_changed: ["**/pubspec.yaml", "**/*.dart"]
+      expect:
+        exit: 0
+    cure: "Remove unused pub dependencies. dart pub deps must succeed."
+    origin: stdlib/generic
+    tags: [dart]
+    fixture_exempt: "requires dart SDK; pack CI is Go-only"

@@ -1,0 +1,17 @@
+rules:
+  - id: relocation-commit-is-pure
+    type: git-diff
+    severity: error
+    scope:
+      include:
+        - "**"
+    params:
+      range: "HEAD~1..HEAD"
+      forbid_added: "."
+    cure: >-
+      A relocation commit must only move files (git mv), not add new content.
+      Override locally with the detector that inspects the index if this
+      git-diff floor is too coarse.
+    origin: stdlib/generic
+    tags: [always]
+    fixture_exempt: "judges git history; a fixture tree has no commit range"

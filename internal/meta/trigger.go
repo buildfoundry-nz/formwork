@@ -84,6 +84,9 @@ func anyTriggerGated(rls []*config.Rule) bool {
 // criterion is that a gate no file in the repo can arm FAILS lint.
 func commandTriggerProblems(rls []*config.Rule, files []*scan.File) (problems []string) {
 	for _, r := range rls {
+		if r.Library != "" {
+			continue
+		}
 		trigger, ok := triggerGlobsOf(r.Checker)
 		if !ok {
 			continue

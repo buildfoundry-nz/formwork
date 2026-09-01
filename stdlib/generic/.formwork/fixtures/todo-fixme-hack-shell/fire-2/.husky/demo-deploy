@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # demo-deploy — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml.
 # See .husky/demo-hook in this fixture for what fire-2 pins.
 #

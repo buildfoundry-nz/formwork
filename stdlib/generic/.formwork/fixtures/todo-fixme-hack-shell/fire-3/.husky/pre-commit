@@ -1,4 +1,3 @@
-#!/bin/sh
 # pre-commit — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml, .husky/* arm.
 #
 # The repo's git hooks are shell scripts with NO .sh extension, so an

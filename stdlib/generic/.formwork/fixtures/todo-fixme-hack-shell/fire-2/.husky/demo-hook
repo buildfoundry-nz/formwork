@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # demo-hook — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml.
 #
 # fire-2 spreads five files across five hook NAMES under the single

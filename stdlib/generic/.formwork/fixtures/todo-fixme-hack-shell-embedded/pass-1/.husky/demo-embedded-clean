@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # demo-embedded-clean — pass fixture for the todo-fixme-hack-shell-embedded
 # rule in .formwork/rules/todo-fixme-hack-shell.yaml.
 #

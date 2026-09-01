@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # pre-commit — pass fixture for awk-posix-portable, .husky/* arm.
 #
 # bash-3.2 safe: indexed accumulation via a while-read loop, no associative

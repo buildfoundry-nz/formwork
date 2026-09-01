@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # ci-helper — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml,
 # hook-name arm.
 #

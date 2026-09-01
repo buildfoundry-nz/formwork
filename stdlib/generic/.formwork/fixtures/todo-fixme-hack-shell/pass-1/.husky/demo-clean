@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # demo-clean — pass fixture for .formwork/rules/todo-fixme-hack-shell.yaml.
 #
 # Nothing here is an annotation marker IN SHELL. Every line is a shape a

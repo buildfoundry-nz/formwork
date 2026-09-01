@@ -1,9 +1,11 @@
 // orphan_test.go — a fixture directory matching no rule id is unreachable by
 // the per-rule discovery loop: no run ever opens it, so the proof tree it
 // holds is dead weight that reads as green (#58). These tests pin the
-// fail-closed counterpart of the loud unrecognized-subdir error two lines
-// into that loop: an orphan at the fixtures root is an error naming every
-// orphan, and --rule scoping must not manufacture false orphans.
+// fail-closed counterpart of the loud unrecognized-subdir error inside that
+// loop: an orphan at the fixtures root is a FAIL verdict naming every
+// orphan, sibling rules still run, and --rule scoping must not manufacture
+// false orphans. The check stays; the blackout (aborting the whole run
+// before any rule executes) does not.
 package fixturetest_test
 
 import (
@@ -49,15 +51,22 @@ func TestOrphanFixtureDirIsError(t *testing.T) {
 		".formwork/fixtures/no-such-rule/fire-1/f.txt": "a banana here\n",
 	})
 	var sb strings.Builder
-	_, err := fixturetest.Run(cfg, fullIDs(cfg), root, 2, &sb)
-	if err == nil {
-		t.Fatal("a fixture dir matching no rule id must be an error, not a silent pass")
+	failed, err := fixturetest.Run(cfg, fullIDs(cfg), root, 2, &sb)
+	if err != nil {
+		t.Fatalf("orphan must not abort the run (err is exit 2; this is a FAIL verdict): %v", err)
 	}
-	if !strings.Contains(err.Error(), "no-such-rule") {
-		t.Fatalf("error must name the orphan dir, got: %v", err)
+	out := sb.String()
+	if !strings.Contains(out, "[fruit-free] OK") {
+		t.Fatalf("live sibling rule must still run:\n%s", out)
 	}
-	if !strings.Contains(err.Error(), "no rule id") {
-		t.Fatalf("error must say the dir matches no rule id, got: %v", err)
+	if !strings.Contains(out, "[no-such-rule] FAIL") {
+		t.Fatalf("orphan must be named as a FAIL verdict:\n%s", out)
+	}
+	if !strings.Contains(out, "no rule id") {
+		t.Fatalf("FAIL must say the dir matches no rule id:\n%s", out)
+	}
+	if failed < 1 {
+		t.Fatalf("failed=%d, orphan must count as a failure\n%s", failed, out)
 	}
 }
 
@@ -67,17 +76,92 @@ func TestOrphanErrorListsAllOrphansSorted(t *testing.T) {
 		".formwork/fixtures/aa-orphan/pass-1/f.txt": "x\n",
 	})
 	var sb strings.Builder
-	_, err := fixturetest.Run(cfg, fullIDs(cfg), root, 2, &sb)
-	if err == nil {
-		t.Fatal("expected an orphan error")
+	failed, err := fixturetest.Run(cfg, fullIDs(cfg), root, 2, &sb)
+	if err != nil {
+		t.Fatalf("orphans are FAIL verdicts, not a run abort: %v", err)
 	}
-	msg := err.Error()
-	ai, zi := strings.Index(msg, "aa-orphan"), strings.Index(msg, "zz-orphan")
+	out := sb.String()
+	if failed < 2 {
+		t.Fatalf("failed=%d, each orphan must count\n%s", failed, out)
+	}
+	ai, zi := strings.Index(out, "aa-orphan"), strings.Index(out, "zz-orphan")
 	if ai < 0 || zi < 0 {
-		t.Fatalf("error must list every orphan in one message (not stop at the first), got: %v", err)
+		t.Fatalf("verdicts must name every orphan (not stop at the first):\n%s", out)
 	}
 	if ai > zi {
-		t.Fatalf("orphans must be listed sorted for deterministic output, got: %v", err)
+		t.Fatalf("orphans must be listed sorted for deterministic output:\n%s", out)
+	}
+	if !strings.Contains(out, "[aa-orphan] FAIL") || !strings.Contains(out, "[zz-orphan] FAIL") {
+		t.Fatalf("each orphan must be a FAIL verdict:\n%s", out)
+	}
+}
+
+// TestOrphanDoesNotPreventSiblingFixtureExecution is the load-bearing half
+// of the blackout fix: an unreachable fixture dir must not stop a different
+// rule's fire/pass trees from being evaluated. fruit-free's fire fixture is
+// written to FAIL (want-marker on a banana-free line) so a skip would not
+// look like a pass — we have to see the fixture problem itself.
+func TestOrphanDoesNotPreventSiblingFixtureExecution(t *testing.T) {
+	cfg, root := loadRepo(t, map[string]string{
+		".formwork/fixtures/fruit-free/fire-1/f.txt":   "clean want: fruit-free\n",
+		".formwork/fixtures/fruit-free/pass-1/f.txt":   "all clean\n",
+		".formwork/fixtures/no-such-rule/fire-1/f.txt": "x\n",
+	})
+	var sb strings.Builder
+	failed, err := fixturetest.Run(cfg, fullIDs(cfg), root, 2, &sb)
+	if err != nil {
+		t.Fatalf("orphan must not abort sibling fixture execution: %v", err)
+	}
+	out := sb.String()
+	if !strings.Contains(out, "[fruit-free] FAIL") {
+		t.Fatalf("fruit-free's fixtures must still execute (fire-1 should FAIL — no banana on the want line):\n%s", out)
+	}
+	if !strings.Contains(out, "fire-1:") {
+		t.Fatalf("fruit-free's fire-1 must have been evaluated, not skipped:\n%s", out)
+	}
+	if !strings.Contains(out, "[no-such-rule] FAIL") {
+		t.Fatalf("orphan must still be reported:\n%s", out)
+	}
+	if failed < 2 {
+		t.Fatalf("failed=%d, want at least 2 (live-rule fixture failure + orphan)\n%s", failed, out)
+	}
+}
+
+// TestScopedRunStillReportsTrueOrphans pins the --rule half of the new
+// contract: sibling LIVE rules stay non-orphans (#58), but a dir matching
+// no rule in the full corpus is still a FAIL finding, and the selected
+// rule still runs.
+func TestScopedRunStillReportsTrueOrphans(t *testing.T) {
+	cfg, root := loadRepo(t, map[string]string{
+		".formwork/fixtures/fruit-free/fire-1/f.txt":   "a banana here want: fruit-free\n",
+		".formwork/fixtures/has-anchor/pass-1/a.md":    "the anchor\n",
+		".formwork/fixtures/no-such-rule/fire-1/f.txt": "x\n",
+	})
+	all := fullIDs(cfg)
+	scoped := *cfg
+	scoped.Rules = nil
+	for _, r := range cfg.Rules {
+		if r.ID == "fruit-free" {
+			scoped.Rules = append(scoped.Rules, r)
+		}
+	}
+	var sb strings.Builder
+	failed, err := fixturetest.Run(&scoped, all, root, 2, &sb)
+	if err != nil {
+		t.Fatalf("true orphan must not abort a scoped run: %v", err)
+	}
+	out := sb.String()
+	if !strings.Contains(out, "[fruit-free] OK") {
+		t.Fatalf("selected rule must still run:\n%s", out)
+	}
+	if strings.Contains(out, "[has-anchor]") {
+		t.Fatalf("sibling LIVE rule must not execute under --rule:\n%s", out)
+	}
+	if !strings.Contains(out, "[no-such-rule] FAIL") {
+		t.Fatalf("dir matching no rule in the full corpus is still an orphan finding:\n%s", out)
+	}
+	if failed < 1 {
+		t.Fatalf("failed=%d, true orphan must count\n%s", failed, out)
 	}
 }
 

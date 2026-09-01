@@ -637,13 +637,17 @@ The validating target's synth-test discipline, built into the engine:
   silently matches nothing is the same misconfigured-rule-passes hazard the
   exit-code contract exists to prevent. (`--lane` narrows the analogous way on
   `check`, §6.)
-- Fixture discovery is likewise **fail-closed in the other direction** (#58): a
-  directory under `.formwork/fixtures/` whose name matches no rule id is an
-  error listing every such directory — a fixture tree the per-rule loop can
+- Fixture discovery is likewise **fail-closed in the other direction** (#58, #9): a
+  directory under `.formwork/fixtures/` whose name matches no rule id is a FAIL
+  verdict naming every such directory — a fixture tree the per-rule loop can
   never reach is a proof that never executes, which reads as green while
   proving nothing (the symmetric counterpart of the unrecognized `fire-*`/
-  `pass-*` subdir error). `--rule` runs validate against the FULL corpus id
-  set, so scoping never turns sibling rules' fixtures into orphans.
+  `pass-*` subdir error). Other rules still run; the orphan fails the run
+  (exit 1) rather than aborting it (exit 2). `--rule` runs validate against
+  the FULL corpus id set, so scoping never turns sibling rules' fixtures into
+  orphans. A dir matching no rule in that full set is still reported. Zero
+  rules configured + orphan dirs remains exit 2 and still names the dead
+  trees. (0.5.0: was a repo-wide abort at exit 2 whenever any orphan existed.)
 - The engine's own rule-type implementations are additionally unit-tested in
   the formwork repo; fixture tests in adopting repos test *configurations*.
 - Repo-scoped `except.allowlist` entries do not apply inside fixture trees

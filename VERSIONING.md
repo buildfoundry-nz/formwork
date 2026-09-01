@@ -151,3 +151,13 @@ When something API must go:
 A change that cannot follow this — because strict decoding leaves no room for a
 soft landing — is called out as breaking in the release notes, with the
 migration written down.
+
+## 0.5.0
+
+**Breaking.** `formwork test`: a `.formwork/fixtures/<id>/` directory matching
+no live rule id is a FAIL verdict (exit 1) rather than a repo-wide abort
+(exit 2), when at least one rule is configured. Other rules still run. Zero
+rules configured plus orphan dirs remains exit 2 and still names the dead
+trees. Symlink refusals and unreadable dirs remain exit 2.
+
+See [CHANGELOG.md](CHANGELOG.md).

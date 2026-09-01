@@ -6,8 +6,17 @@ import (
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	_ "github.com/buildfoundry-nz/formwork/internal/preprocess"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/binarycontent"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/command"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/dartscan"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/docpathexists"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/filenaming"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/gitdiff"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/goast"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/pairconsistency"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/pattern"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/patterncount"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/setrelation"
 )
 
 func TestLoadLibraryMergesGenericPack(t *testing.T) {

@@ -1,0 +1,21 @@
+# Every Go package in the current tree compiles. The full git-range
+# every-commit-builds gate is a heavier detector; this pack ships the
+# portable floor (the working tree builds).
+rules:
+  - id: commits-build
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+        - "**/go.mod"
+    params:
+      cmd: [go, test, -c, -o, /dev/null, ./...]
+      when:
+        paths_changed: ["**/*.go", "**/go.mod"]
+      expect:
+        exit: 0
+    cure: "go test ./... must compile. Fix the package named in the output."
+    origin: stdlib/generic
+    tags: [go]
+    fixture_exempt: "compiles the adopting module; a fixture tree is not that module"

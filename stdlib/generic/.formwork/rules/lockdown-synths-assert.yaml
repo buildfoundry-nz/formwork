@@ -1,0 +1,16 @@
+# A lockdown synthetic must actually assert. `func Test` with no t.Fatal/Error
+# is not a proof.
+rules:
+  - id: lockdown-synths-assert
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*lockdown*_test.go"
+        - "**/*synth*_test.go"
+    params:
+      pattern: 't\.(Fatal|Fatalf|Error|Errorf|FailNow)\('
+      mode: every-file
+    cure: "A synthetic lockdown test must fail the test on violation (t.Fatal/Error), not just construct state."
+    origin: stdlib/generic
+    tags: [go]

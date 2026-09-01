@@ -1,0 +1,15 @@
+# Ban rolling a second state manager. Competing packages in pubspec.yaml.
+rules:
+  - id: dart-no-handrolled-state
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/pubspec.yaml"
+    params:
+      pattern: '^\s+(provider|get|redux|flutter_redux|mobx|flutter_bloc|scoped_model):'
+    cure: >-
+      Pick one state manager and pin it. This pack's default ban list is the
+      common competitors; override locally if the repo's choice is one of them.
+    origin: stdlib/generic
+    tags: [dart]

@@ -1,0 +1,21 @@
+rules:
+  - id: partition-parents-have-ci-default
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "**/*.sql"
+        - "**/schema.snapshot.sql"
+    params:
+      a:
+        files: ["**/*.sql"]
+        pattern: 'ALTER TABLE ONLY ([a-z0-9_]+\.[a-z0-9_]+) ATTACH PARTITION [a-z0-9_.]+ FOR VALUES FROM'
+        group: 1
+      b:
+        files: ["**/*.sql"]
+        pattern: 'ALTER TABLE ONLY ([a-z0-9_]+\.[a-z0-9_]+) ATTACH PARTITION [a-z0-9_.]+ DEFAULT'
+        group: 1
+      relation: subset
+    cure: Every range-partitioned table must have a DEFAULT partition.
+    origin: stdlib/generic
+    tags: [always]

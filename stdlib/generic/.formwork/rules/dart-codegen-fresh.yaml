@@ -1,0 +1,18 @@
+rules:
+  - id: dart-codegen-fresh
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*.dart"
+        - "**/pubspec.yaml"
+    params:
+      cmd: [dart, run, build_runner, build, --delete-conflicting-outputs]
+      when:
+        paths_changed: ["**/*.dart", "**/pubspec.yaml"]
+      expect:
+        exit: 0
+    cure: "Re-run dart run build_runner build --delete-conflicting-outputs and commit generated files."
+    origin: stdlib/generic
+    tags: [dart]
+    fixture_exempt: "requires dart SDK + build_runner; pack CI is Go-only"

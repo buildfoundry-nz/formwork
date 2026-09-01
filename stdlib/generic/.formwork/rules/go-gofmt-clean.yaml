@@ -1,0 +1,19 @@
+# Whole-tree gofmt. `gofmt -l` prints paths that differ; any output is a finding.
+rules:
+  - id: go-gofmt-clean
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+    params:
+      cmd: [gofmt, -l, .]
+      when:
+        paths_changed: ["**/*.go"]
+      expect:
+        exit: 0
+        output_forbid: "."
+    cure: "gofmt -w the listed files."
+    origin: stdlib/generic
+    tags: [go]
+    fixture_exempt: "gofmt -l over the adopting tree; a fixture sandbox is not the repo gofmt sees"

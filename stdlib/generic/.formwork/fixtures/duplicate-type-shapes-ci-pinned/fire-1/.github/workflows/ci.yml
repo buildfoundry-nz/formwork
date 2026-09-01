@@ -1,0 +1,5 @@
+name: CI
+jobs:
+  arch:
+    steps:
+      - run: echo no-duplicate-shapes-pin

@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package takeoffqs.api.v1;
+
+message Quote {
+  // Deprecated — superseded by total_cents (int64); the audit-15 closeout
+  // moved all writers to the canonical column.
+  string legacy_total_pct = 1 [deprecated = true];
+}

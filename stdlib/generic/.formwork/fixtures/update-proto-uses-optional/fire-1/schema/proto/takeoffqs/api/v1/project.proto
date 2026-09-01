@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package takeoffqs.api.v1;
+
+message UpdateProjectRequest { // want: update-proto-uses-optional
+  string project_id = 1;
+  string notes = 2;
+  optional double floor_area = 3;
+}

@@ -1,0 +1,17 @@
+# CI must invoke formwork. The engine skip set never scans .formwork/, so
+# this cannot look at formwork.yaml itself — it looks at workflows.
+rules:
+  - id: lockdown-scripts-are-wired
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - ".github/workflows/**/*.yml"
+    params:
+      pattern: "formwork"
+      mode: exists
+    cure: >-
+      A CI workflow must run formwork (check or test) so every pack rule is
+      reachable. Override locally if CI invokes the binary under another name.
+    origin: stdlib/generic
+    tags: [always]

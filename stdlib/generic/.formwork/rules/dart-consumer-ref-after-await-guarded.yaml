@@ -1,0 +1,18 @@
+rules:
+  - id: dart-consumer-ref-after-await-guarded
+    type: dart/ref-after-await
+    severity: error
+    scope:
+      include:
+        - "**/*.dart"
+      exclude:
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb.dart"
+    params:
+      method: "."
+    cure: >-
+      After await, do not touch ref.read/ref.watch unless mounted (or the
+      equivalent guard) is checked on that line or the immediately preceding if.
+    origin: stdlib/generic
+    tags: [dart]

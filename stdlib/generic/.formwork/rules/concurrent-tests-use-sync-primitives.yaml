@@ -1,0 +1,20 @@
+rules:
+- id: concurrent-tests-use-sync-primitives
+  type: pair-consistency
+  severity: error
+  scope:
+    include:
+    - '**/*_test.go'
+    exclude:
+    - '**/internal/lockdowntests/**'
+  params:
+    # Package-collective (#12249 §B): the *Concurrent* test is the trigger;
+    # the go/WaitGroup/chan lives in a sibling helper (raceCancel). same-func
+    # false-fires on the two cancel-race tests (2 findings).
+    where: same-dir
+    trigger: func Test[A-Za-z0-9_]*Concurrent[A-Za-z0-9_]*\(
+    requires: 'go\s+func|sync\.WaitGroup|make\(chan|pgxtest\.|StartRivalCapture|audit-16-#5-concurrent-allowlist:'
+  cure: 'A *Concurrent* test must exercise real concurrency: launch a `go func`, coordinate with `sync.WaitGroup`/`make(chan`, or call a shared interleave helper (`pgxtest.`, `StartRivalCapture`). To opt out, add an inline `// audit-16-#5-concurrent-allowlist: <reason>` comment in the test body. DECLARED RESIDUAL (#9874 F15, the "a regex is not a parser" family): `requires` matches the mere PRESENCE of a helper NAME on any line, so a caller that names `StartRivalCapture` but drops the interleave coordination it returns (e.g. never receives/awaits `rivalDone`, so the two transactions no longer actually race) satisfies this rule while proving nothing. All current callers do receive and block on it (verified), so this is latent, not live; closing it needs data-flow analysis RE2 cannot do — the same limit no-test-seams-in-production records for its own trigger.'
+  origin: stdlib/generic
+  tags:
+  - none

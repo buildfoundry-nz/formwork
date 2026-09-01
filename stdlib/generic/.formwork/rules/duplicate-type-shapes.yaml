@@ -1,0 +1,19 @@
+rules:
+# WITHDRAWN (#10083): `duplicate-type-shapes` asserted `func |type |duplicate`
+# existed inside scripts/dev/find-duplicate-type-shapes.go — its own detector's
+# source. Every Go file on earth satisfies that, and the detector's real verdict
+# is produced by the ci.yml step the rule below pins. Withdrawn rather than
+# narrowed: there is no invariant over the detector's TEXT worth holding when its
+# BEHAVIOUR is executed on every run.
+- id: duplicate-type-shapes-ci-pinned
+  type: required-pattern
+  severity: error
+  scope:
+    include:
+    - .github/workflows/**/*.yml
+  params:
+    pattern: 'find-duplicate-type-shapes\.go'
+    mode: exists
+  cure: CI must keep go run scripts/dev/find-duplicate-type-shapes.go scripts/dev/finderlib.go .
+  tags:
+  - none

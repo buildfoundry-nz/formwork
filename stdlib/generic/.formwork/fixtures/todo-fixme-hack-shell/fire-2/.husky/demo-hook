@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# demo-hook — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml.
+#
+# fire-2 spreads five files across five hook NAMES under the single
+# directory-keyed `.husky/*` glob, and gives each one a DIFFERENT head-glued
+# marker shape. It therefore pins two things at once: that the glob is keyed
+# on the directory rather than a hand-listed set of hook names (a hook named
+# something new is in scope the day it lands), and that a `.`/`-`/`/` running
+# into alphanumerics exempts a marker only in the INTERIOR of a compound
+# token. Every marker in this directory walked past the gate until that
+# second condition landed. (These specimens were five .sh files at five
+# directory depths under `**/*.sh` until the #14888 zero-.sh campaign
+# re-carried them onto the hook surface the rule survives to guard.)
+#
+# This file pins one more thing nothing else does. The `[[ =~ ]]` line below is
+# lifted from the shape live in .claude/hooks/block-raw-code-search.sh: a
+# backslash-escaped quote sitting in UNQUOTED shell text. A destring lexer that
+# honours backslash escapes only INSIDE double quotes reads that `\"` as a
+# string opener, runs to the next quote or to EOF, and blanks every comment
+# after it — so the marker below goes unseen and the gate reports OK on a
+# governance-protected hook.
+set -euo pipefail
+
+targets_go() {
+  [[ "$1" =~ \.go([[:space:]\"\'\/]|$) ]] && return 0
+  return 1
+}
+
+# hook notes, then TODO-9272: rework the detector           # want: todo-fixme-hack-shell
+targets_go "$1"

@@ -1,0 +1,8 @@
+#!/bin/sh
+# pre-commit — pass fixture for .formwork/rules/todo-fixme-hack-shell.yaml, .husky/* arm.
+#
+# A clean hook: prose that names the retired gate check-todo-fixme-hack.sh, a
+# path like pkg/todo/x and an identifier like todoList are compound tokens, not
+# annotations, and must never fire.
+set -e
+echo "Running pre-commit checks..."

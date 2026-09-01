@@ -1,0 +1,19 @@
+# Operator docs name the engine. The TQS spelling enumerated shell gates on
+# disk against CLAUDE.md; the portable floor is that CLAUDE.md or AGENTS.md
+# exists and mentions formwork.
+rules:
+  - id: claude-md-lockdown-enumeration
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "CLAUDE.md"
+        - "AGENTS.md"
+    params:
+      pattern: "formwork"
+      mode: exists
+    cure: >-
+      Name formwork in CLAUDE.md or AGENTS.md so the lockdown surface is
+      discoverable. Override locally if the repo uses a different operator doc.
+    origin: stdlib/generic
+    tags: [docs]

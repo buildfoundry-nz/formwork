@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# bash-3.2 safe: indexed accumulation via a while-read loop, no associative array.
+seen=""
+while IFS= read -r k; do
+  seen="${seen} ${k}"
+done <<EOF
+foo
+bar
+EOF
+echo "${seen}"

@@ -1,0 +1,11 @@
+#!/bin/sh
+# pre-commit — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml, .husky/* arm.
+#
+# The repo's git hooks are shell scripts with NO .sh extension, so an
+# extension-keyed scope (`**/*.sh`) misses all 666 lines of them — the exact
+# class #9272 was filed about, since these hooks ARE the mechanism that runs
+# every pre-commit formwork lane and they sit on the policy-protected path list.
+set -e
+
+# lane notes, then TODO: rework the staged-scope split      # want: todo-fixme-hack-shell
+echo "Running pre-commit checks..."

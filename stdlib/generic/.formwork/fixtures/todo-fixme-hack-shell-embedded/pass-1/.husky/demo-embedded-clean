@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# demo-embedded-clean — pass fixture for the todo-fixme-hack-shell-embedded
+# rule in .formwork/rules/todo-fixme-hack-shell.yaml.
+#
+# Two kinds of line here and both must stay silent, which is what makes this
+# fixture pin `preprocess: strings-only-sh` rather than merely exercise it.
+#
+# First, shell's OWN comments — markers and all. They are the SIBLING rule's
+# subject, and this rule must not see them: swap this preprocessor for
+# destring-sh, or drop it, and the two lines below turn the fixture red.
+#
+# Second, embedded program text carrying no annotation. The marker-boundary
+# rules apply inside a program exactly as they do outside it, so an interior
+# compound token stays exempt in here too.
+set -euo pipefail
+
+# a shell comment carrying a real annotation: TODO: rework the caller
+rm -rf "${dir}"   # FIXME: deletes more than intended
+
+awk '
+  # see scripts/check-todo-fixme-hack.sh and pkg/todo/x for the retired gate
+  # the todoList field, the hackathon build and 0xXXXf are identifiers
+  { print $1 }
+' /dev/null

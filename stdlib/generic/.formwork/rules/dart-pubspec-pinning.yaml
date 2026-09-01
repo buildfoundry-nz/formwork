@@ -1,0 +1,34 @@
+rules:
+- id: dart-pubspec-pinning
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include:
+    - '**/pubspec.yaml'
+    exclude:
+    - '**/node_modules/**'  # preventative: node_modules is gitignored and may be absent
+    # Worktree checkouts. scan.ignore (.formwork/formwork.yaml) now prunes these
+    # paths before any rule is offered a file, so this entry is unreachable in
+    # practice. RETAINED, not dead-stripped: #10797 fixture-pinned every
+    # surviving worktree exclude so a re-spelling reddens `formwork test`, and
+    # fixture runs deliberately cannot see scan.ignore (upstream
+    # TestFixtureRunsAreScanIgnoreFree), so deleting this also deletes
+    # pass-worktrees — the only mechanical guard on the glob's spelling.
+    # Retiring it is #11677's open decision, not a mechanical follow-on.
+    # Anchoring: the old note called this "root-anchored (#10625/#10797)" against
+    # a committable nested tree. That premise was never true for this spelling —
+    # `.worktrees/` carries no internal slash, so git has ignored it at ANY depth
+    # since 787fb98e36 (2026-04-22). Pinned by pass-worktrees + fire-nested-worktrees.
+    - '.worktrees/**'
+    - '**/.git/**'  # preventative: .git is walk-skipped and never a scanned tree
+    - '**/.dart_tool/**'  # preventative: .dart_tool is gitignored and may be absent
+    - '**/build/**'  # preventative: build output is gitignored and may be absent
+    - '**/vendor/**'  # preventative: vendor trees are not always present on disk
+    - '**/.claude/**'
+    - '**/.codex/**'
+  params:
+    pattern: '^\s+(provider|get|redux|flutter_redux|mobx|flutter_bloc|scoped_model):'
+  cure: Remove the competing state-manager dependency; the codebase must pick one, and it is Riverpod 3.x (flutter_riverpod ^3.2 / riverpod_annotation ^4). provider/get/redux/flutter_redux/mobx/flutter_bloc/scoped_model conflict with that posture.
+  origin: stdlib/generic
+  tags:
+  - always

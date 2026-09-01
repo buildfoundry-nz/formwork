@@ -1,0 +1,51 @@
+# Ported from TakeoffQS scripts/check-no-unbounded-children-in-virtualized-rows.sh
+# (#7487 lockdown).
+#
+# A Dart library file that builds a viewport-virtualized list via
+# ListView.builder / SliverList.builder must NOT also allocate unbounded child
+# widgets in a typed `children: <Widget>[ for … ]` collection-for. Both shapes
+# co-present in ONE file is the #7487 bug: a virtualized ROW that itself eagerly
+# allocates every child.
+#
+# PORT MAPPING: the .sh is a file-level co-occurrence — host.search AND
+# eager.search over one comment/string-blanked file, order-independent, reported
+# on the eager line. Ported as a multiline regexp2 forbidden-pattern that fires
+# on the eager `children: <Widget>[ for` token only when a virtualized host
+# builder is also present in the file (asserted via a lookbehind OR a lookahead
+# so either textual order fires, exactly like the .sh's two independent
+# searches). `(?<![A-Za-z])` is the .sh's non-identifier guard on the host
+# constructor. preprocess: decomment-go blanks the // and /* */ comment tails
+# (Dart shares Go comments) so the idiom quoted in a doc comment never fires —
+# the .sh additionally blanks strings, which formwork has no preprocessor for,
+# so the comment-strip is the faithful subset.
+rules:
+  - id: no-unbounded-children-in-virtualized-rows
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "frontend/lib/**/*.dart"
+        - "packages/*/lib/**/*.dart"
+      exclude:
+        - "**/*_test.dart"
+        - "**/*.g.dart"
+        - "**/*.freezed.dart"
+        - "**/*.pb*.dart"
+        - "**/generated/**"
+    preprocess: decomment-go
+    params:
+      # The eager `children: <Widget>[ for …]` comprehension is the trigger; the
+      # enclosing ListView/SliverList.builder is a whole-file require_present guard.
+      # This is the origin's two-signal co-occurrence and replaces a regexp2 pattern
+      # whose nested variable-length lookbehind (?<=builder\([\s\S]*) backtracked
+      # ~25ms/file over 1361 dart files (34s). Multiline RE2: \s* crosses the
+      # newline between `<Widget>[` and `for` (linear, no backtracking); FindLine
+      # anchors on the `children:` line (fixture want-marker). \b replaces the
+      # (?<![A-Za-z]) word-guard against MyListView.builder.
+      pattern: 'children:\s*<Widget>\[\s*for\s+'
+      require_present:
+        - '\b(?:ListView|SliverList)\.builder\s*\('
+      multiline: true
+    cure: "Emit each child as its own ListView.builder / SliverList.builder row. The row unit of a virtualized list must itself be bounded; an unbounded sub-collection belongs as sibling rows of the host builder, not eagerly allocated inside one row (#7487)."
+    origin: stdlib/generic
+    tags: [dart]

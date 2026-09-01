@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# bash-3.2 + BSD-awk safe: an indexed accumulation via a while-read loop, with
+# no bash-4 associative arrays and no gawk-only extensions anywhere.
+registry=""
+while IFS= read -r k; do
+  registry="${registry} ${k}"
+done <<EOF
+foo
+bar
+EOF
+echo "${registry}"

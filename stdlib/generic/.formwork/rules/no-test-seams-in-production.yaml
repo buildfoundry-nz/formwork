@@ -1,0 +1,19 @@
+rules:
+  - id: no-test-seams-in-production
+    type: pair-consistency
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+      exclude:
+        - "**/*_test.go"
+    params:
+      obligation: countable
+      trigger: '^var\s+[A-Za-z_][A-Za-z0-9_]*(\s+func\(|\s*=\s*&?[A-Za-z_][A-Za-z0-9_]*\s*(//.*)?$)'
+      requires: '//go:build\s+.*production'
+    cure: >-
+      A mutable module-global var that exists so tests can override production
+      behaviour is a test seam. Move it into a //go:build !production file and
+      add a //go:build production sibling, or remove the seam.
+    origin: stdlib/generic
+    tags: [go]

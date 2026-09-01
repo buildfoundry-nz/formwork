@@ -55,6 +55,9 @@ func prefilterLoadBearing(cfg *config.Config, root string, fset *scan.FileSet, m
 	prefilterID := map[string]bool{}
 	literal := map[string]string{}
 	for _, r := range cfg.Rules {
+		if r.Library != "" {
+			continue
+		}
 		lit, ok := rules.PrefilterOf(r.Checker)
 		if !ok {
 			continue

@@ -1,0 +1,17 @@
+rules:
+  - id: lockdown-synth-test-coverage
+    type: required-pattern
+    severity: error
+    scope:
+      include:
+        - "AGENTS.md"
+        - "CLAUDE.md"
+        - "README.md"
+    params:
+      pattern: "formwork"
+      mode: exists
+    cure: >-
+      Operator docs must name formwork so fixture-coverage / formwork test is
+      discoverable. Override locally if the repo documents the engine elsewhere.
+    origin: stdlib/generic
+    tags: [always]

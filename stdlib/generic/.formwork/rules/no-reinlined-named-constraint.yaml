@@ -1,0 +1,15 @@
+# Residual: package constraint-shape match → ban [T interface{ comparable ... }].
+rules:
+- id: no-reinlined-named-constraint
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include: ['**/*.go']
+    exclude: ['**/*_test.go']
+  preprocess: decomment-go
+  params:
+    pattern: '\[[^\]]*(interface\s*\{[^}]*comparable[^}]*\})'
+    prefilter: comparable
+  cure: "Use the named constraint (e.g. [J JobMessage]) — DUP-3."
+  origin: stdlib/generic
+  tags: [go]

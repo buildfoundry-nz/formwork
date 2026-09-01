@@ -1,0 +1,17 @@
+rules:
+  - id: dart-file-reachability
+    type: command
+    severity: error
+    scope:
+      include:
+        - "**/*.dart"
+    params:
+      cmd: [dart, analyze, --fatal-infos]
+      when:
+        paths_changed: ["**/*.dart"]
+      expect:
+        exit: 0
+    cure: "Every Dart file in scope must be reachable from a package. Delete orphans or import them."
+    origin: stdlib/generic
+    tags: [dart]
+    fixture_exempt: "requires dart SDK; pack CI is Go-only"

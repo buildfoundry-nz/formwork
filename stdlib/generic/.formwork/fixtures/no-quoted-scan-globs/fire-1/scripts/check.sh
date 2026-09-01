@@ -1,0 +1,2 @@
+#!/bin/sh
+rg foo "**/*.go" # want: no-quoted-scan-globs

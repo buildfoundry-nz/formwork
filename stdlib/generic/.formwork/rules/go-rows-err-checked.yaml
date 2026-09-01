@@ -1,0 +1,20 @@
+rules:
+  - id: go-rows-err-checked
+    type: go/per-func-count-relation
+    severity: error
+    scope:
+      include:
+        - "**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "**/*.pb.go"
+        - "**/gcs/**"
+        - "**/blobstore/**"
+    params:
+      left: '\.Next$'
+      right: '\.Err$'
+      relation: <=
+      require_symbol: left
+    cure: After iterating pgx.Rows, check rows.Err() before using the results — a silent scan error otherwise reads as an empty/partial result set.
+    origin: stdlib/generic
+    tags: [go]

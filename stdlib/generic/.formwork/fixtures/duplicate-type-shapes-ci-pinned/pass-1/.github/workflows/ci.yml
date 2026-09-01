@@ -1,0 +1,5 @@
+name: CI
+jobs:
+  arch:
+    steps:
+      - run: go run scripts/dev/find-duplicate-type-shapes.go scripts/dev/finderlib.go .

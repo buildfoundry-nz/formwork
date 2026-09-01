@@ -1,0 +1,39 @@
+rules:
+- id: awk-posix-portable
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include:
+    # The last four product shells were ported to Go and deleted in #15103, so
+    # this glob now matches nothing. It STAYS: no-shell-files-anywhere and
+    # tracked-sh-shrink-only make the class permanently closed, and the glob is
+    # what covers a .sh on the day one returns rather than after someone
+    # remembers to re-add it.
+    # glob-dead: tracked *.sh is ZERO (#14888 / #15103); the class is closed by ban, not by absence
+    - '**/*.sh'
+    - '**/*.awk'
+    # .claude/hooks/** runs under exactly the bash this rule defends against.
+    # Every Claude Code PreToolUse/SessionStart hook is `#!/usr/bin/env bash`,
+    # which on a stock macOS machine resolves to /bin/bash 3.2 — Homebrew's
+    # bash 5 loses PATH resolution to it. .husky/ likewise, and both were
+    # outside a rule whose whole subject is "must work on bash 3.2".
+    # The git hooks are shell scripts with NO extension (pre-commit,
+    # pre-merge-commit, pre-push), so the `.husky/**/*.sh` this replaces
+    # matched zero files and the coverage claimed above was inert. Keyed on
+    # the directory, not a hand-listed set of hook names, so a newly added
+    # hook is in scope the day it lands — pinned by fire-4.
+    - .husky/*
+    exclude:
+    # Markdown in .husky/ is documentation, not a hook: a `#` there opens a
+    # heading, not a shell comment, so the `^[^#]*` comment-immunity guard the
+    # pattern relies on does not hold and prose naming `declare -A` would
+    # false-positive. Typed exclusion, matching how every include above is
+    # typed by extension — pinned by pass-4.
+    - .husky/*.md
+  preprocess: destring-sh
+  params:
+    pattern: ^[^#]*(?:declare[[:space:]]+-A[[:space:]]|\bmapfile\b|\breadarray\b|\bgensub[[:space:]]*\(|\bpatsplit[[:space:]]*\(|\basort[[:space:]]*\(|\basorti[[:space:]]*\(|\bstrtonum[[:space:]]*\(|\btypeof[[:space:]]*\(|\bFIELDWIDTHS\b|\bFPAT\b|\bBEGINFILE\b|\bENDFILE\b|\bPROCINFO\b|\bmatch[[:space:]]*\([^)]*,[^)]*,[^)]*\)|\$\{[A-Za-z_][A-Za-z0-9_]*(?:\^\^?|,,?)\})
+  cure: 'This construct parses only under bash 4+/gawk; on a macOS dev machine (bash 3.2 + BSD awk) the gate it lives in silently exits 0 (#6379). Port it: declare -A / mapfile -> indexed array + while-read loop; 3-arg match() -> 2-arg match() + RSTART/RLENGTH + substr(); gensub() -> sub()/gsub(); ${v^^} -> tr. See check-dart-unused-deps.sh.'
+  origin: stdlib/generic
+  tags:
+  - always

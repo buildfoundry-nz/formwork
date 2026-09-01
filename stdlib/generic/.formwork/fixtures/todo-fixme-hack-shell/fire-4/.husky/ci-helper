@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# ci-helper — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml,
+# hook-name arm.
+#
+# A hook whose name is nobody's hand-listed entry: the `.husky/*` glob is
+# keyed on the directory, so a helper hook with an arbitrary name is in scope
+# the day it lands. (Until the #14888 zero-.sh campaign this pinned the same
+# fail-closed property for the whole-tree `**/*.sh` glob, as a script under
+# .github/ — an unenumerated TREE.)
+set -euo pipefail
+
+# job wiring, then FIXME: this retry loop swallows the exit code  # want: todo-fixme-hack-shell
+echo "helping"

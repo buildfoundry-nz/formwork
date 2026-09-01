@@ -1,0 +1,16 @@
+rules:
+- id: go-no-data-conditional-skip
+  type: go/guard-precedes-call
+  severity: error
+  scope:
+    include:
+    - '**/*_integration_test.go'
+    - '**/*_test.go'
+  params:
+    funcs: ^Test
+    guard: ^(os\.Getenv|exec\.LookPath)$
+    sink: ^t\.Skip(f|Now)?$
+  cure: "A missing DB / seed under //go:build integration is a hard error, not a silent skip \u2014 replace t.Skip(...) with t.Fatal(...). Permitted guards: runtime.GOOS, exec.LookPath, os.Getenv only (T4.5 / #7452)."
+  origin: stdlib/generic
+  tags:
+  - go

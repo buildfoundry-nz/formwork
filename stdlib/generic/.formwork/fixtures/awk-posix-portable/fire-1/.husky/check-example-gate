@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+declare -A registry  # want: awk-posix-portable
+registry[foo]=bar
+echo "${registry[foo]}"

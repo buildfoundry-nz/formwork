@@ -1,0 +1,19 @@
+# Quoted globs in a find/rg argv do not expand. `rg "**/*.go"` searches a
+# literal filename.
+rules:
+  - id: no-quoted-scan-globs
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "**/*.sh"
+        - "**/*.bash"
+        - ".husky/*"
+        - "**/*.go"
+    params:
+      pattern: '(find|rg|grep)[^\n]*"[^"\n]*\*\*[^"\n]*"'
+    cure: >-
+      Do not quote a glob that the tool must expand. Pass the glob unquoted
+      (or as a tool-native glob flag), never as a quoted literal **.
+    origin: stdlib/generic
+    tags: [always]

@@ -1,0 +1,19 @@
+rules:
+- id: proto-deprecated-anchored
+  type: pair-consistency
+  severity: error
+  scope:
+    include:
+    - schema/proto/**/*.proto
+  preprocess: raw
+  params:
+    # Unit is one proto message/enum/rpc block (#12195). File grain let the
+    # first deprecated field's successor comment buy every later [deprecated
+    # = true] in that file.
+    where: same-func
+    trigger: \[deprecated\s*=\s*true\]
+    requires: (?i)(replaced\s+(by|with)|superseded\s+by|removed\s+in\s+(commit\s+)?[0-9a-f]{7,}|\buse\s+the\s+\w+\s+(field|column|message)|moved\s+to\s+\w+|canonical\s+(column|field|model))
+  cure: "Give every [deprecated = true] field a concrete anchor in its comment: `// Deprecated \u2014 superseded by <successor>` or `// Deprecated \u2014 removed in <commit-sha>` (audit-15 #23)."
+  origin: stdlib/generic
+  tags:
+  - proto

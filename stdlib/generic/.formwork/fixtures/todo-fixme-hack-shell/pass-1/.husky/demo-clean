@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# demo-clean — pass fixture for .formwork/rules/todo-fixme-hack-shell.yaml.
+#
+# Nothing here is an annotation marker IN SHELL. Every line is a shape a
+# lexer-free comment-opener regex gets wrong in one direction or the other, so
+# each one is load-bearing: this fixture fails the moment the rule loses its
+# preprocessor or its marker-boundary rules.
+#
+# Two lines below pin the PREPROCESSOR specifically — they carry a marker
+# after a space-preceded `#`, so the marker-boundary rules alone do not
+# suppress them and only `preprocess: destring-sh` can. One sits in a
+# double-quoted string, one in a heredoc body, which are the two blanking
+# mechanisms the rule's comment claims. Without them the preprocessor could be
+# deleted with every fixture still green (the whole-tree scan stays clean too),
+# which is exactly the state this fixture was in when it was written.
+set -euo pipefail
+
+# See issue #9272; the retired gate was scripts/check-todo-fixme-hack.sh — a
+# marker in the INTERIOR of a compound token is not an annotation, because a
+# `.`/`-`/`/` sits on BOTH sides of it: pkg/todo/x, chromedriver-e2e.XXXXXX.log.
+# A word character glues just as well, on either side: todoList, todo_list,
+# hackathon, 0xXXXf, and the Go convention name `func TestXxx`.
+#
+# A marker at the HEAD of a word has no such glue and IS an annotation, so
+# naming a file whose name starts with one means writing its path — which is
+# what the first line of this comment does, and what every such reference in
+# the repo already does. fire-2 carries the head-glued shapes.
+
+# A gate's own pattern table is string DATA, not a comment.
+PAT='# TODO: annotation marker'
+MSG="a HACK named inside a double-quoted message"
+HELP="run the gate, then grep the tree for # FIXME in comments"
+
+# A heredoc body is template DATA. The emitted .sql is scanned as .sql by the
+# sibling rule, which is where a forgotten placeholder gets caught.
+cat > out.sql <<'SQLTPL'
+-- TODO: describe the schema change and WHY (cite the issue/PR).
+SQLTPL
+
+# A heredoc that emits SHELL. The `#` below opens no comment in THIS file, so
+# destring-sh must blank it and this rule must stay silent — that is the pin.
+# It is not unread: it is exactly what the -embedded sibling in that same
+# rule file reads, over the complementary projection, and it is a FIRE case
+# there. The two rules meet on this line and disagree by design.
+cat > out.sh <<'SHTPL'
+# TODO: fill in the generated step
+SHTPL
+
+# `#` opens a comment only at a word start; these are parameter syntax.
+n=${#arr[@]}
+b=${0##*/}
+printf '%s %s %s %s\n' "${n}" "${b}" "$#" "${PAT}"
+printf '%s %s\n' "${MSG}" "${HELP}"

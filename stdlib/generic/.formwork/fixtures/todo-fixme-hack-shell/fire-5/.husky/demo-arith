@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# demo-arith — fire fixture for .formwork/rules/todo-fixme-hack-shell.yaml.
+#
+# Three shapes that made the destring-sh lexer read a `<<` as a heredoc opener,
+# queue a body, and blank every remaining line looking for a terminator that
+# does not exist. The failure is SILENT: a blanked comment produces no finding,
+# so the gate reports OK on the whole rest of the file.
+#
+# All three markers must fire. They cannot be split across files: each door
+# blinds everything after it, so a single file is what proves the later ones
+# are still reachable.
+set -euo pipefail
+
+n=8
+
+# `(( ... ))` is bash's arithmetic COMMAND. Only the `$(( ... ))` EXPANSION was
+# tracked as an arithmetic span, so the `<<` here read as an opener named `n`.
+(( mask = 1 << n ))
+# after an arithmetic command, then TODO: bound the shift    # want: todo-fixme-hack-shell
+
+# Every argument of `let` is an arithmetic expression, and none of it was
+# tracked at all.
+let other=1<<n
+# after a let expression, then FIXME: bound the shift        # want: todo-fixme-hack-shell
+
+printf '%s %s\n' "${mask}" "${other}"
+
+# The general net under both: a heredoc whose terminator never arrives is not a
+# heredoc. Blanking it to EOF is the blindness; reading it as shell can only
+# ever produce a LOUD false positive, so that is the fail-closed direction.
+# Keep this last — everything below it is the unterminated body.
+cat <<NOPE
+a body line whose terminator never arrives
+# inside an unterminated heredoc, then XXX: bound it         # want: todo-fixme-hack-shell

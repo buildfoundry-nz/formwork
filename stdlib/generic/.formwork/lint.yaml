@@ -15,3 +15,8 @@ skip:
       With no source tree every scope.exclude is dead by construction. The
       pack's excludes are preventative (generated, vendor, .formwork) and are
       justified in the adopting-repo skip of library rules, not here.
+  - check: command-trigger-armable
+    reason: >-
+      This pack has no source tree, so no file can arm a when.paths_changed
+      trigger. The command rules are proven in adopting repos that have Go/Dart
+      files; here they are fixture-exempt toolchain gates.

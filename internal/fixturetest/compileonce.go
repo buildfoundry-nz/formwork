@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
@@ -61,9 +62,18 @@ func parseGoRunShape(cmd []string) (goRunShape, bool) {
 		buildArgs = []string{rest[0]}
 		progArgs = rest[1:]
 	}
-	treePaths := append([]string(nil), buildArgs...)
+	// Fingerprint what go build actually reads. With -C, buildArgs are relative
+	// to chDir — resolve them to arm-relative paths. Do NOT substitute the whole
+	// chDir tree: that both misses inputs outside chDir (../file.go) and falsely
+	// mismatches when unrelated payload .go files differ under a wide -C root.
+	treePaths := make([]string, 0, len(buildArgs))
 	if chDir != "" {
-		treePaths = []string{chDir}
+		for _, a := range buildArgs {
+			joined := filepath.Join(filepath.FromSlash(chDir), filepath.FromSlash(a))
+			treePaths = append(treePaths, filepath.ToSlash(filepath.Clean(joined)))
+		}
+	} else {
+		treePaths = append(treePaths, buildArgs...)
 	}
 	return goRunShape{chDir: chDir, buildArgs: buildArgs, progArgs: progArgs, treePaths: treePaths}, true
 }
@@ -97,10 +107,12 @@ func ruleCommandCmd(r *config.Rule) ([]string, bool) {
 
 // treeDigest returns a stable fingerprint of the detector paths under arm.
 // A mismatch across arms is an engine error — never a silent fallthrough to
-// a binary built from a different tree.
-func treeDigest(arm string, paths []string) (string, error) {
+// a binary built from a different tree. Hashing errors are returned to the
+// caller, which falls back to cold go run (same as build failure).
+func treeDigest(arm string, shape goRunShape) (string, error) {
 	h := sha256.New()
-	for _, rel := range paths {
+	seenDir := map[string]bool{}
+	for _, rel := range shape.treePaths {
 		root := filepath.Join(arm, filepath.FromSlash(rel))
 		info, err := os.Lstat(root)
 		if err != nil {
@@ -110,11 +122,12 @@ func treeDigest(arm string, paths []string) (string, error) {
 			return "", fmt.Errorf("detector path %s is a symlink — refused", root)
 		}
 		if !info.IsDir() {
-			if err := hashFile(h, rel, root); err != nil {
+			if err := hashGoBuildFile(h, arm, rel, root); err != nil {
 				return "", err
 			}
 			continue
 		}
+		seenDir[filepath.Clean(rel)] = true
 		err = filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
 			if err != nil {
 				return err
@@ -135,26 +148,42 @@ func treeDigest(arm string, paths []string) (string, error) {
 			if err != nil {
 				return err
 			}
-			return hashFile(h, filepath.ToSlash(relPath), path)
+			return hashGoBuildFile(h, arm, filepath.ToSlash(relPath), path)
 		})
 		if err != nil {
 			return "", err
 		}
-		// Local module replaces are part of what go build reads.
-		if replaces, err := localReplaceDirs(root); err != nil {
+	}
+	// Local module replaces are part of what go build reads. Prefer the -C
+	// module directory (the go.mod go build actually loads); also fold replaces
+	// declared beside any walked package directory.
+	modDirs := map[string]bool{}
+	if shape.chDir != "" {
+		modDirs[filepath.Clean(shape.chDir)] = true
+	}
+	for d := range seenDir {
+		modDirs[d] = true
+	}
+	modList := make([]string, 0, len(modDirs))
+	for d := range modDirs {
+		modList = append(modList, d)
+	}
+	sort.Strings(modList)
+	for _, modRel := range modList {
+		replaces, err := localReplaceDirs(filepath.Join(arm, filepath.FromSlash(modRel)))
+		if err != nil {
 			return "", err
-		} else {
-			for _, rep := range replaces {
-				repRel, err := filepath.Rel(arm, rep)
-				if err != nil {
-					return "", err
-				}
-				sub, err := treeDigest(arm, []string{filepath.ToSlash(repRel)})
-				if err != nil {
-					return "", err
-				}
-				io.WriteString(h, "replace:"+filepath.ToSlash(repRel)+"="+sub+"\n")
+		}
+		for _, rep := range replaces {
+			repRel, err := filepath.Rel(arm, rep)
+			if err != nil {
+				return "", err
 			}
+			sub, err := treeDigest(arm, goRunShape{treePaths: []string{filepath.ToSlash(repRel)}})
+			if err != nil {
+				return "", err
+			}
+			io.WriteString(h, "replace:"+filepath.ToSlash(repRel)+"="+sub+"\n")
 		}
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
@@ -186,8 +215,90 @@ func hashFile(h io.Writer, rel, abs string) error {
 	return nil
 }
 
-// localReplaceDirs returns absolute directories named by replace => ../rel
-// directives in dir/go.mod, when present.
+// hashGoBuildFile fingerprints a go-build input. For .go files it also folds
+// //go:embed patterns in that file (relative to the source dir) so an embed-only
+// change across arms cannot silently reuse the wrong binary. Glob/all: forms are
+// hashed when filepath.Glob can expand them; exotic embed patterns that Glob
+// cannot express are a documented residual — prefer identical embed trees.
+func hashGoBuildFile(h io.Writer, arm, rel, abs string) error {
+	if err := hashFile(h, rel, abs); err != nil {
+		return err
+	}
+	if strings.ToLower(filepath.Ext(abs)) != ".go" {
+		return nil
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(abs)
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "//go:embed") {
+			continue
+		}
+		rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "//go:embed"))
+		// Strip the optional all: prefix (Go 1.18+); patterns follow.
+		fields := strings.Fields(rest)
+		for _, pat := range fields {
+			pat = strings.TrimPrefix(pat, "all:")
+			if pat == "" {
+				continue
+			}
+			matches, err := filepath.Glob(filepath.Join(dir, filepath.FromSlash(pat)))
+			if err != nil {
+				return fmt.Errorf("go:embed pattern %q in %s: %w", pat, rel, err)
+			}
+			sort.Strings(matches)
+			for _, m := range matches {
+				info, err := os.Lstat(m)
+				if err != nil {
+					return err
+				}
+				if info.Mode()&os.ModeSymlink != 0 {
+					return fmt.Errorf("go:embed path %s is a symlink — refused", m)
+				}
+				if info.IsDir() {
+					err = filepath.Walk(m, func(path string, fi os.FileInfo, err error) error {
+						if err != nil {
+							return err
+						}
+						if fi.Mode()&os.ModeSymlink != 0 || fi.IsDir() {
+							if fi.Mode()&os.ModeSymlink != 0 {
+								return fmt.Errorf("go:embed path %s is a symlink — refused", path)
+							}
+							return nil
+						}
+						relPath, err := filepath.Rel(arm, path)
+						if err != nil {
+							return err
+						}
+						io.WriteString(h, "embed:")
+						return hashFile(h, filepath.ToSlash(relPath), path)
+					})
+					if err != nil {
+						return err
+					}
+					continue
+				}
+				relPath, err := filepath.Rel(arm, m)
+				if err != nil {
+					return err
+				}
+				io.WriteString(h, "embed:")
+				if err := hashFile(h, filepath.ToSlash(relPath), m); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// localReplaceDirs returns absolute directories named by replace => ./rel or
+// replace => ../rel directives in dir/go.mod, when present. Module-path and
+// versioned targets (replace m => github.com/x/y v1.2.3) are not filesystem
+// paths and must not be walked.
 func localReplaceDirs(dir string) ([]string, error) {
 	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
 	if err != nil {
@@ -218,6 +329,10 @@ func localReplaceDirs(dir string) ([]string, error) {
 		if filepath.IsAbs(target) || strings.Contains(target, "://") {
 			continue
 		}
+		// Go's local-replace grammar: "." or a relative path beginning with ./ or ../.
+		if target != "." && !strings.HasPrefix(target, "./") && !strings.HasPrefix(target, "../") {
+			continue
+		}
 		out = append(out, filepath.Clean(filepath.Join(dir, target)))
 	}
 	return out, nil
@@ -238,24 +353,40 @@ func buildDetectorOnce(arm string, shape goRunShape, outBin string) error {
 	return nil
 }
 
+func runArmsCold(r *config.Rule, ruleDir string, arms []armEntry, workers int) (problems []string, count int, err error) {
+	for _, a := range arms {
+		count++
+		ps, err := runFixture(r, filepath.Join(ruleDir, a.name), a.isFire, workers)
+		if err != nil {
+			return nil, count, err
+		}
+		for _, p := range ps {
+			problems = append(problems, a.name+": "+p)
+		}
+	}
+	return problems, count, nil
+}
+
 // runCommandFixturesCompileOnce builds a go-run detector once for the rule and
-// reuses the binary across every arm. On build failure it falls back to the
-// cold go-run path so the arm still surfaces the compile error. A detector-tree
-// mismatch across arms is an engine error (exit 2), never a silent fallthrough.
+// reuses the binary across every arm. On hash or build failure it falls back to
+// the cold go-run path so the arm still surfaces the toolchain/path error. Only
+// a detector-tree digest mismatch across arms is an engine error (exit 2).
 func runCommandFixturesCompileOnce(r *config.Rule, ruleDir string, arms []armEntry, shape goRunShape, workers int) (problems []string, count int, err error) {
 	if len(arms) == 0 {
 		return nil, 0, nil
 	}
 	first := filepath.Join(ruleDir, arms[0].name)
-	wantDigest, err := treeDigest(first, shape.treePaths)
+	wantDigest, err := treeDigest(first, shape)
 	if err != nil {
-		return nil, 0, fmt.Errorf("fixtures: %s: hashing detector tree: %w", first, err)
+		// Same posture as build failure: incomplete/broken detector trees are
+		// per-arm findings via cold go run, not a suite-wide abort.
+		return runArmsCold(r, ruleDir, arms, workers)
 	}
 	for _, a := range arms[1:] {
 		armPath := filepath.Join(ruleDir, a.name)
-		got, err := treeDigest(armPath, shape.treePaths)
+		got, err := treeDigest(armPath, shape)
 		if err != nil {
-			return nil, 0, fmt.Errorf("fixtures: %s: hashing detector tree: %w", armPath, err)
+			return runArmsCold(r, ruleDir, arms, workers)
 		}
 		if got != wantDigest {
 			return nil, 0, fmt.Errorf("fixtures: rule %s: detector tree for %v differs between %s and %s — compile-once requires byte-identical detector copies across arms (diff the paths and restore them, or split the rule)",
@@ -268,21 +399,13 @@ func runCommandFixturesCompileOnce(r *config.Rule, ruleDir string, arms []armEnt
 		return nil, 0, err
 	}
 	defer os.RemoveAll(cacheDir)
-	bin := filepath.Join(cacheDir, "detector")
+	// Basename is not "detector" — tests must not key compile counts off it
+	// (go build -o sets cmd.Dir for -C shapes, so -C never appears on argv).
+	bin := filepath.Join(cacheDir, "oncebin")
 	if err := buildDetectorOnce(first, shape, bin); err != nil {
 		// Fall back to cold go run so a broken detector still fails the arm
 		// with the toolchain's own message rather than a silent pass.
-		for _, a := range arms {
-			count++
-			ps, err := runFixture(r, filepath.Join(ruleDir, a.name), a.isFire, workers)
-			if err != nil {
-				return nil, count, err
-			}
-			for _, p := range ps {
-				problems = append(problems, a.name+": "+p)
-			}
-		}
-		return problems, count, nil
+		return runArmsCold(r, ruleDir, arms, workers)
 	}
 
 	for _, a := range arms {

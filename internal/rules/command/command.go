@@ -59,6 +59,18 @@ type command struct {
 	whenGlobs    []string // non-nil ⇒ run only if a scanned file matched one
 	expectExit   int
 	outputForbid *regexp.Regexp
+	// workDir, when non-empty, is the subprocess working directory. Fixture
+	// compile-once rewrites a `go -C <dir> run` argv to a prebuilt binary and
+	// must keep the program cwd at <arm>/<dir>; the check path never sets this
+	// and keeps cmd.Dir = ctx.Root.
+	workDir string
+	// collapseExitLikeGoRun makes FinalizeErr treat the subprocess the way
+	// `go run` does: any non-zero program exit becomes observed exit 1, and
+	// CombinedOutput gains an "exit status N" line. WithCompiledBinary sets
+	// this so formwork test agrees with formwork check (cold go run). Without
+	// it, a detector exiting 2 makes expect.exit 2 pass under compile-once and
+	// fire under check — fixtures that lie about production.
+	collapseExitLikeGoRun bool
 
 	sawTrigger atomic.Bool
 	// skipped records that FinalizeErr took the when: early return. It is a
@@ -273,6 +285,9 @@ func (c *command) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) 
 	}
 	cmd := exec.Command(c.cmd[0], c.cmd[1:]...)
 	cmd.Dir = ctx.Root
+	if c.workDir != "" {
+		cmd.Dir = c.workDir
+	}
 	out, err := cmd.CombinedOutput()
 	exit := 0
 	if err != nil {
@@ -282,6 +297,15 @@ func (c *command) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) 
 		} else {
 			return nil, fmt.Errorf("command %v: %w", c.cmd, err)
 		}
+	}
+	if c.collapseExitLikeGoRun && exit != 0 {
+		// Parity with `go run`: it prints "exit status N" to stderr and the
+		// process exits 1 for any non-zero program exit. A raw binary keeps N.
+		if len(out) > 0 && out[len(out)-1] != '\n' {
+			out = append(out, '\n')
+		}
+		out = append(out, fmt.Sprintf("exit status %d\n", exit)...)
+		exit = 1
 	}
 	if exit != c.expectExit {
 		return []rules.Match{{Message: fmt.Sprintf("command %v exited %d, want %d%s", c.cmd, exit, c.expectExit, snippet(out))}}, nil
@@ -482,6 +506,31 @@ func snippet(out []byte) string {
 	tail := s[tailStart:]
 
 	return ": " + head + mid + tail
+}
+
+// WithCompiledBinary returns a checker that runs binary with progArgs instead
+// of the original go-run argv. workDir, when non-empty, overrides FinalizeContext.Root
+// as the subprocess cwd (needed for go -C shapes). Returns false when c is not
+// a command checker — callers fall back to the original argv.
+//
+// Used only by fixturetest compile-once. The formwork check path never calls
+// this, so production evaluation keeps cold go-run semantics. The returned
+// checker collapses non-zero exits to match `go run` (exit 1 + "exit status N"
+// on CombinedOutput) so formwork test and formwork check observe the same codes.
+func WithCompiledBinary(c rules.Checker, binary string, progArgs []string, workDir string) (rules.Checker, bool) {
+	orig, ok := c.(*command)
+	if !ok {
+		return c, false
+	}
+	// Build a fresh value — do not copy atomic.Bool fields (vet: copies lock).
+	return &command{
+		cmd:                   append([]string{binary}, progArgs...),
+		whenGlobs:             orig.whenGlobs,
+		expectExit:            orig.expectExit,
+		outputForbid:          orig.outputForbid,
+		workDir:               workDir,
+		collapseExitLikeGoRun: true,
+	}, true
 }
 
 func init() {

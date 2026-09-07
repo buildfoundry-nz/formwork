@@ -91,3 +91,80 @@ func TestLocalReplaceDirsSkipsModulePathTargets(t *testing.T) {
 		}
 	}
 }
+
+func TestTreeDigestReplaceCycleErrors(t *testing.T) {
+	// A⇄B local replaces must not stack-overflow; hash error → cold fallback.
+	arm := t.TempDir()
+	a := filepath.Join(arm, "a")
+	b := filepath.Join(arm, "b")
+	for _, dir := range []string{a, b} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(a, "go.mod"), []byte("module example.com/a\n\ngo 1.22\n\nreplace example.com/b => ../b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(a, "main.go"), []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(b, "go.mod"), []byte("module example.com/b\n\ngo 1.22\n\nreplace example.com/a => ../a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(b, "b.go"), []byte("package b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := treeDigest(arm, goRunShape{treePaths: []string{"a"}})
+	if err == nil || !strings.Contains(err.Error(), "replace cycle") {
+		t.Fatalf("want replace cycle error, got %v", err)
+	}
+}
+
+func TestTreeDigestReplaceEscapingArmErrors(t *testing.T) {
+	arm := t.TempDir()
+	pkg := filepath.Join(arm, "pkg")
+	if err := os.MkdirAll(pkg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// replace => ../../outside escapes the arm root.
+	mod := "module example.com/pkg\n\ngo 1.22\n\nreplace example.com/shared => ../../outside\n"
+	if err := os.WriteFile(filepath.Join(pkg, "go.mod"), []byte(mod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkg, "main.go"), []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := treeDigest(arm, goRunShape{treePaths: []string{"pkg"}})
+	if err == nil || !strings.Contains(err.Error(), "escapes arm root") {
+		t.Fatalf("want escapes-arm error, got %v", err)
+	}
+}
+
+func TestTreeDigestSkipsGoToolIgnoredDirs(t *testing.T) {
+	arm := t.TempDir()
+	pkg := filepath.Join(arm, "pkg")
+	if err := os.MkdirAll(filepath.Join(pkg, "testdata"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkg, "main.go"), []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkg, "testdata", "extra.go"), []byte("package testdata\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d1, err := treeDigest(arm, goRunShape{treePaths: []string{"pkg"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Changing testdata must not change the digest (go build ignores it).
+	if err := os.WriteFile(filepath.Join(pkg, "testdata", "extra.go"), []byte("package testdata\nconst X = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d2, err := treeDigest(arm, goRunShape{treePaths: []string{"pkg"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d1 != d2 {
+		t.Fatalf("testdata/.go changes must not affect digest")
+	}
+}

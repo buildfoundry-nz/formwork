@@ -110,6 +110,10 @@ func ruleCommandCmd(r *config.Rule) ([]string, bool) {
 // a binary built from a different tree. Hashing errors are returned to the
 // caller, which falls back to cold go run (same as build failure).
 func treeDigest(arm string, shape goRunShape) (string, error) {
+	return treeDigestRec(arm, shape, map[string]bool{})
+}
+
+func treeDigestRec(arm string, shape goRunShape, seenReplace map[string]bool) (string, error) {
 	h := sha256.New()
 	seenDir := map[string]bool{}
 	for _, rel := range shape.treePaths {
@@ -136,6 +140,12 @@ func treeDigest(arm string, shape goRunShape) (string, error) {
 				return fmt.Errorf("detector path %s is a symlink — refused", path)
 			}
 			if fi.IsDir() {
+				// Mirror go tool ignore rules so payload under these dirs
+				// cannot trip a compile-once mismatch the compiler never reads.
+				base := fi.Name()
+				if path != root && (base == "testdata" || strings.HasPrefix(base, "_") || strings.HasPrefix(base, ".")) {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			// Only fingerprint what go build reads as source. Fixture payload
@@ -157,6 +167,8 @@ func treeDigest(arm string, shape goRunShape) (string, error) {
 	// Local module replaces are part of what go build reads. Prefer the -C
 	// module directory (the go.mod go build actually loads); also fold replaces
 	// declared beside any walked package directory.
+	// File-list shapes (go run file.go) leave modDirs empty — arm-root go.mod
+	// is not fingerprinted; only matters for non-stdlib detectors that read it.
 	modDirs := map[string]bool{}
 	if shape.chDir != "" {
 		modDirs[filepath.Clean(shape.chDir)] = true
@@ -175,11 +187,23 @@ func treeDigest(arm string, shape goRunShape) (string, error) {
 			return "", err
 		}
 		for _, rep := range replaces {
-			repRel, err := filepath.Rel(arm, rep)
+			abs := filepath.Clean(rep)
+			if seenReplace[abs] {
+				return "", fmt.Errorf("replace cycle at %s", abs)
+			}
+			repRel, err := filepath.Rel(arm, abs)
 			if err != nil {
 				return "", err
 			}
-			sub, err := treeDigest(arm, goRunShape{treePaths: []string{filepath.ToSlash(repRel)}})
+			// Keep the hashed tree self-contained: a replace that escapes the
+			// arm (e.g. ../../shared) must not fingerprint files outside both
+			// fixture roots — hash error → cold go-run fallback.
+			if !filepath.IsLocal(repRel) {
+				return "", fmt.Errorf("replace %s escapes arm root", abs)
+			}
+			seenReplace[abs] = true
+			sub, err := treeDigestRec(arm, goRunShape{treePaths: []string{filepath.ToSlash(repRel)}}, seenReplace)
+			delete(seenReplace, abs)
 			if err != nil {
 				return "", err
 			}

@@ -59,6 +59,11 @@ type command struct {
 	whenGlobs    []string // non-nil ⇒ run only if a scanned file matched one
 	expectExit   int
 	outputForbid *regexp.Regexp
+	// workDir, when non-empty, is the subprocess working directory. Fixture
+	// compile-once rewrites a `go -C <dir> run` argv to a prebuilt binary and
+	// must keep the program cwd at <arm>/<dir>; the check path never sets this
+	// and keeps cmd.Dir = ctx.Root.
+	workDir string
 
 	sawTrigger atomic.Bool
 	// skipped records that FinalizeErr took the when: early return. It is a
@@ -273,6 +278,9 @@ func (c *command) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) 
 	}
 	cmd := exec.Command(c.cmd[0], c.cmd[1:]...)
 	cmd.Dir = ctx.Root
+	if c.workDir != "" {
+		cmd.Dir = c.workDir
+	}
 	out, err := cmd.CombinedOutput()
 	exit := 0
 	if err != nil {
@@ -482,6 +490,28 @@ func snippet(out []byte) string {
 	tail := s[tailStart:]
 
 	return ": " + head + mid + tail
+}
+
+// WithCompiledBinary returns a checker that runs binary with progArgs instead
+// of the original go-run argv. workDir, when non-empty, overrides FinalizeContext.Root
+// as the subprocess cwd (needed for go -C shapes). Returns false when c is not
+// a command checker — callers fall back to the original argv.
+//
+// Used only by fixturetest compile-once. The formwork check path never calls
+// this, so production evaluation keeps cold go-run semantics.
+func WithCompiledBinary(c rules.Checker, binary string, progArgs []string, workDir string) (rules.Checker, bool) {
+	orig, ok := c.(*command)
+	if !ok {
+		return c, false
+	}
+	// Build a fresh value — do not copy atomic.Bool fields (vet: copies lock).
+	return &command{
+		cmd:          append([]string{binary}, progArgs...),
+		whenGlobs:    orig.whenGlobs,
+		expectExit:   orig.expectExit,
+		outputForbid: orig.outputForbid,
+		workDir:      workDir,
+	}, true
 }
 
 func init() {

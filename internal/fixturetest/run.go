@@ -18,6 +18,12 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 )
 
+// armEntry is one fire-* or pass-* directory under a rule's fixture tree.
+type armEntry struct {
+	name   string
+	isFire bool
+}
+
 // Run evaluates every rule's fixtures under root/.formwork/fixtures and
 // writes verdicts to w. It returns the number of failing verdicts (rules
 // whose fixtures misbehaved, plus fixture dirs matching no rule id).
@@ -79,8 +85,7 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 			return 0, fmt.Errorf("fixtures: reading %s: %w", ruleDir, err)
 		}
 
-		var problems []string
-		count := 0
+		var arms []armEntry
 		for _, e := range entries {
 			// The same refusal the fixtures-root loop above makes, for the same
 			// reason, one level down (#143 row 4). DirEntry.IsDir is lstat-based,
@@ -106,13 +111,30 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 				return 0, fmt.Errorf("fixtures: %s: unrecognized fixture dir %q, expected fire-* or pass-*",
 					ruleDir, name)
 			}
-			count++
-			ps, err := runFixture(r, filepath.Join(ruleDir, name), isFire, workers)
-			if err != nil {
-				return 0, err
+			arms = append(arms, armEntry{name: name, isFire: isFire})
+		}
+
+		var problems []string
+		count := 0
+		if cmd, ok := ruleCommandCmd(r); ok {
+			if shape, ok := parseGoRunShape(cmd); ok && len(arms) > 0 {
+				ps, n, err := runCommandFixturesCompileOnce(r, ruleDir, arms, shape, workers)
+				if err != nil {
+					return 0, err
+				}
+				problems, count = ps, n
 			}
-			for _, p := range ps {
-				problems = append(problems, name+": "+p)
+		}
+		if count == 0 {
+			for _, a := range arms {
+				count++
+				ps, err := runFixture(r, filepath.Join(ruleDir, a.name), a.isFire, workers)
+				if err != nil {
+					return 0, err
+				}
+				for _, p := range ps {
+					problems = append(problems, a.name+": "+p)
+				}
 			}
 		}
 
@@ -220,6 +242,11 @@ func runFixture(r *config.Rule, dir string, isFire bool, workers int) ([]string,
 	if err != nil {
 		return nil, err
 	}
+	return judgeFixture(r, dir, isFire, findings, fset)
+}
+
+// judgeFixture compares findings against the fixture's declared expectations.
+func judgeFixture(r *config.Rule, dir string, isFire bool, findings []finding.Finding, fset *scan.FileSet) ([]string, error) {
 	findings = finding.Unsuppressed(findings)
 	expected, err := collectExpectations(fset, dir, r.ID)
 	if err != nil {

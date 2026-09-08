@@ -28,6 +28,9 @@ func TestDecommentDart(t *testing.T) {
 		{"unterminated-block", "call(); /*gone\nmore", "call();       \n    "},
 		{"crlf", "//gone\r\ncall();", "       \ncall();"},
 		{"unicode", "é//é\n", "é    \n"},
+		{"comment-after-nested-brace", "'${{'x': {}} /*gone*/}'//gone\n", "'${{'x': {}}         }'      \n"},
+		{"partial-triple-close", "'''a''//literal\nb'''//gone\n", "'''a''//literal\nb'''      \n"},
+		{"empty-literal", "''//gone\n", "''      \n"},
 		{"empty", "", ""},
 		{"trailing-escape", "'x\\", "'x\\"},
 	}

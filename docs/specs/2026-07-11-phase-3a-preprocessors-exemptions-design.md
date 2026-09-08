@@ -19,6 +19,18 @@ New package `internal/preprocess`: a registry of pure transforms
 - **`decomment-go`** — blanks `//` line comments and `/* */` block comments.
   Comment markers inside interpreted strings (`"//x"`), raw strings, and rune
   literals are not comments. Unterminated block comment runs to EOF (blanked).
+- **`decomment-dart`** (#15) — blanks only Dart line and nested block
+  comments, including comments inside `${...}` expressions. All other bytes
+  survive: literal text, quote delimiters, raw/triple strings and executable
+  interpolation. An iterative context stack tracks nested interpolation and
+  its brace depth; quote/comment markers inside strings cannot hide subsequent
+  code. Output owns its storage and preserves byte offsets and CR/LF positions.
+  Line comments end at CR or LF. Unterminated block comments run to EOF;
+  a non-triple string ends at a bare CR or LF, but newlines inside its
+  interpolation remain in the code context.
+  Existing projection contracts are unchanged. This additive mode is needed
+  because neither Go quoting nor removing Dart literal contents implements
+  comment-only matching over executable Dart interpolation.
 - **`strings-only-go`** — inverse view: keeps only the contents of interpreted
   and raw string literals; all other text (code, comments, the quotes
   themselves) is blanked. Used by SQL-in-strings style rules.

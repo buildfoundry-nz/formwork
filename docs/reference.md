@@ -39,7 +39,7 @@ grammar), and enumerating those exceptions would be a list that itself rots.
 Prose accuracy inside an entry is likewise not mechanically checkable; a
 handful of facts too easy to get wrong are pinned individually.
 
-Counts at the time of writing: **27 rule types, 14 preprocessors.** If your
+Counts at the time of writing: **27 rule types, 15 preprocessors.** If your
 binary reports different numbers, believe your binary and file an issue against
 this document.
 
@@ -979,7 +979,7 @@ runs over everything.
 
 ## Preprocessors
 
-14 registered preprocessors. Declared per rule as `preprocess:`, computed once
+15 registered preprocessors. Declared per rule as `preprocess:`, computed once
 per file and cached, so several rules sharing a variant pay for it once.
 
 | name | what the rule sees |
@@ -993,6 +993,7 @@ per file and cached, so several rules sharing a variant pay for it once.
 | `destring-sh` | shell with string contents removed |
 | `destring-decomment-sh` | shell with both removed |
 | `strings-only-sh` | only shell string contents |
+| `decomment-dart` | Dart with only comments removed; literal text and executable interpolation retained |
 | `code-only-dart` | Dart with comments and string contents removed |
 | `comments-only-dart` | only Dart comments |
 | `comments-only-sql` | only SQL comments |
@@ -1005,6 +1006,11 @@ does not trip it. A rule about what comments claim wants `comments-only-go`.
 
 Note the direction: a `*-only-*` variant blanks everything else, so a rule
 reading inside a Dart string literal cannot fire under `code-only-dart`.
+For Dart rules that must retain executable `${...}` interpolation, use
+`decomment-dart`. It tracks nested interpolation, raw/single/double/triple
+strings and nested block comments, and removes actual comments inside
+interpolation too. Literal text is deliberately retained; this is not a
+code-only projection. `decomment-go` implements Go quoting, not Dart quoting.
 
 ---
 

@@ -264,9 +264,7 @@ not affect `formwork scope`.
                                        # generated, vendor; plus raw globs
     min_files: 0                       # optional floor: fail if the scope
                                        # selects fewer than N files (0 = off)
-  preprocess: decomment-go             # raw (default) | decomment-go |
-                                       # strings-only-go | destring-sh |
-                                       # destring-decomment-sh
+  preprocess: decomment-go             # raw (default), or a registered transform
   params:                              # type-specific, strictly validated
     pattern: 'pgxpool\.New(WithConfig)?\('
   except:
@@ -278,6 +276,12 @@ not affect `formwork scope`.
 
 Fixtures are located by convention (`.formwork/fixtures/<rule-id>/`), not
 declared in YAML.
+
+The preprocessor vocabulary is registry-defined (`formwork list preprocessors`).
+The additive `decomment-dart` projection retains executable interpolation and
+literal text while removing only Dart comments; its lexical contract is in
+§1 of `2026-07-11-phase-3a-preprocessors-exemptions-design.md`. Existing
+projection contracts remain unchanged.
 
 **`scope.min_files`** (#23) is the arming end of the empty-scope disclosure §9
 describes. A rule whose scope selects nothing is *reported* and still passes,

@@ -24,7 +24,7 @@ func TestLookupFindsRegisteredTransform(t *testing.T) {
 func TestNamesListsAllTransformsSorted(t *testing.T) {
 	want := []string{
 		"code-only-dart", "comments-only-awk", "comments-only-dart", "comments-only-go", "comments-only-sql",
-		"decomment-destring-go", "decomment-go", "decomment-sh", "destring-decomment-sh", "destring-sh",
+		"decomment-dart", "decomment-destring-go", "decomment-go", "decomment-sh", "destring-decomment-sh", "destring-sh",
 		"qualify-proto-go-alias", "raw", "strings-only-go", "strings-only-sh",
 	}
 	got := Names()

@@ -15,6 +15,8 @@ func TestDartCommentProjectionThroughEngine(t *testing.T) {
 	}{
 		{"code", "// explanation\nFORBIDDEN();\n", 2},
 		{"comment", "// FORBIDDEN();\n", 0},
+		// Finding lines follow scan.File's LF-based original-file view.
+		{"cr-terminated-comment", "// explanation\rFORBIDDEN();\n", 1},
 		{"literal", "// explanation\n'FORBIDDEN';\n", 2},
 		{"interpolation", "// explanation\n'${'//'.length}${FORBIDDEN()}';\n", 2},
 		{"interpolation-comment", "'${(/* FORBIDDEN */ 3)}';\n", 0},

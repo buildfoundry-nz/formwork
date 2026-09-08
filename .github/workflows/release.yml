@@ -70,7 +70,7 @@ jobs:
           # failure must red-gate them rather than ship behind a linux green.
           # Leaving darwin here is a fine outcome; deleting it is not.
           - platform: darwin
-            runner: macos-latest
+            runner: blacksmith-6vcpu-macos-14
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

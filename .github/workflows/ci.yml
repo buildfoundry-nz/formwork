@@ -143,8 +143,14 @@ jobs:
           # to prevent: GoReleaser publishes darwin tarballs, and a darwin-only
           # failure must red-gate them rather than ship behind a linux green.
           # Leaving darwin here is a fine outcome; deleting it is not.
+          #
+          # #17 labeled this leg blacksmith-6vcpu-macos-14 anyway, a runner
+          # that does not exist — every darwin verify since has sat queued
+          # forever, including PR #18's (admin-merged around it) — and its own
+          # CI run was cancelled, so the mislabel never surfaced. Restored to
+          # the GitHub-hosted label this comment describes.
           - platform: darwin
-            runner: blacksmith-6vcpu-macos-14
+            runner: macos-14
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

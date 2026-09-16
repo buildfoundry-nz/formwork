@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/engine"
@@ -189,50 +190,6 @@ func scopeToRule(cfg *config.Config, id string) (scoped *config.Config, ok bool)
 // It lives here rather than inline because the first cut of this guard went into
 // runCheck alone, and runScope — same file, same flag, same fallback — kept the
 // old behaviour, so the two commands gave opposite answers to identical input.
-// A shared helper is what stops a third caller diverging again.
-func rangeValueUsable(fs *flag.FlagSet, rangeSpec, fallback string, stderr io.Writer) bool {
-	given := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "range" {
-			given = true
-		}
-	})
-	if given && rangeSpec == "" {
-		fmt.Fprintf(stderr, "formwork: --range was given an empty value — refusing to fall back to %s; pass a real range (e.g. origin/main..HEAD) or drop the flag\n", fallback)
-		return false
-	}
-	return true
-}
-
-// workersValueUsable reports whether --workers is safe to act on, printing the
-// refusal itself when it is not. Same shape as rangeValueUsable above and for
-// the same reason: a supplied flag whose value the run cannot honour must not
-// quietly become a different run.
-//
-// engine.Run reads `workers <= 0` as GOMAXPROCS, which is the right default for
-// an ABSENT flag and is left exactly as it is. What that seam cannot see is
-// whether the number it was handed is a default or a value the CLI declined to
-// honour — a width is all it receives — so the distinction is drawn here, at the
-// seam that knows the flag exists and can name it in the refusal. Both commands
-// that declare the flag call this before doing anything with the value; `test`
-// spends it one hop further away (fixturetest.Run forwards it to engine.Run,
-// run.go:155), which is exactly why the guard is not left to the engine.
-//
-// No fs.Visit, unlike the --range guard, and the difference is in the values
-// rather than in the shape: both declaration sites default this flag to 0 (the
-// `fs.Int("workers", 0, ...)` calls in runCheck and runTest), and 0 is also a
-// legal supplied value meaning the same thing — so absent and supplied-0 are
-// genuinely indistinguishable AND genuinely identical, while a NEGATIVE value
-// can only have been typed. Refusing 0 would exit 2 on every ordinary
-// invocation, which is a worse bug than the one this guard closes.
-func workersValueUsable(workers int, stderr io.Writer) bool {
-	if workers < 0 {
-		fmt.Fprintf(stderr, "formwork: --workers %d is not a worker count — refusing to fall back to GOMAXPROCS, which is the opposite of the throttle you asked for; pass a positive count, or drop the flag\n", workers)
-		return false
-	}
-	return true
-}
-
 // noRulesReason explains a rule set that is empty, naming the cause rather than
 // guessing at it. consequence is the caller's half of the sentence — what this
 // particular command would have done with nothing to run.
@@ -266,6 +223,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	rangeSpec := fs.String("range", "", "scan only files changed in a git range, e.g. origin/main..HEAD")
 	skipEscapes := fs.Bool("skip-escapes", false, "skip heavy command/git-diff escapes (they re-scan the whole tree regardless of --staged; run them in CI, not local hooks)")
 	format := fs.String("format", "human", "output format: human | json | github")
+	progress := fs.Bool("progress", false, "stream one line per finalizer to stderr as it completes (rule id + cumulative ms) — liveness for long whole-corpus runs; never affects stdout or the verdict")
 	cfg, ok := parseAndLoad(fs, args, root, stderr)
 	if !ok {
 		return 2
@@ -461,6 +419,16 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		Prunes:          meta.PruneChannels(cfg, fset.Ignored, gi),
 		UnfollowedLinks: meta.UnfollowedLinks(fset.Ignored),
 	}
+	// Per-rule wall-clock accounting for whole-tree runs, where a lane can hold
+	// thousands of rules and minutes of silence. File-set modes keep their
+	// 0.6.1 shape (no timing, no progress). Neither reaches stdout or the verdict.
+	timing := map[string]time.Duration{}
+	onProgress := func(string, time.Duration) {}
+	if *progress {
+		onProgress = func(id string, d time.Duration) {
+			fmt.Fprintf(stderr, "formwork: progress rule=%s elapsed_ms=%d\n", id, d.Milliseconds())
+		}
+	}
 	// The file set an armed scope floor is measured against. Whole-tree mode
 	// counts the walk — that is exactly what the engine scanned — and the
 	// file-set branch narrows it to the tracked tree below.
@@ -575,11 +543,13 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		}
 	} else {
 		summary.RulesMatchingNoFiles = meta.RulesMatchingNoFiles(rls, fset.Files)
-		findings, err = engine.Run(rls, fset, *workers)
+		var runTiming engine.Timing
+		findings, runTiming, err = engine.RunTimed(rls, fset, *workers, onProgress)
 		if err != nil {
 			fmt.Fprintln(stderr, "formwork:", err)
 			return 2
 		}
+		timing = map[string]time.Duration(runTiming)
 	}
 	// A rule that ARMED scope.min_files and matched fewer files than it declared
 	// fails the run (#23). This is the arming end of the vacuity RulesMatchingNoFiles
@@ -627,7 +597,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	// join each finding's cure: from it by rule id (#107), so passing a
 	// filtered slice would silently render cure-less annotations. Both
 	// engine.Run branches above draw findings from this same rls.
-	if err := report.Render(*format, stdout, rls, findings, summary); err != nil {
+	if err := report.Render(*format, stdout, rls, findings, summary, timing); err != nil {
 		fmt.Fprintln(stderr, "formwork:", err)
 		return 2
 	}

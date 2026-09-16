@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
@@ -39,7 +40,7 @@ func ValidFormat(format string) error {
 // that drops it (#151). -format github used to write zero bytes for a run with
 // no findings, which made it the surface where a scan that looked at nothing
 // was most invisible and the surface adopters most often read.
-func Render(format string, w io.Writer, rls []*config.Rule, findings []finding.Finding, scan ScanSummary) error {
+func Render(format string, w io.Writer, rls []*config.Rule, findings []finding.Finding, scan ScanSummary, timing map[string]time.Duration) error {
 	if err := ValidFormat(format); err != nil {
 		return err
 	}
@@ -47,7 +48,7 @@ func Render(format string, w io.Writer, rls []*config.Rule, findings []finding.F
 	case "", "human":
 		Human(w, rls, findings, scan)
 	case "json":
-		JSON(w, rls, findings, scan)
+		JSON(w, rls, findings, scan, timing)
 	case "github":
 		GitHub(w, rls, findings, scan)
 	default:
@@ -122,6 +123,12 @@ type jsonReport struct {
 	Suppressed []jsonSuppressed `json:"suppressed"`
 	Scan       jsonScan         `json:"scan"`
 	Summary    jsonSummary      `json:"summary"`
+	// Durations is per-rule total evaluation wall time in milliseconds (phase 1
+	// summed over files plus the phase-2 finalizer), collected by
+	// engine.RunTimed. It is observability for the slowest-rule question and
+	// never input to a verdict. Omitted when the caller passed nil (callers
+	// that never asked for timing keep their old bytes exactly).
+	Durations map[string]int64 `json:"durations,omitempty"`
 }
 
 // JSON emits a stable machine-readable report: the live (unsuppressed)
@@ -133,7 +140,10 @@ type jsonReport struct {
 // rls must be the complete loaded rule set the findings were produced from:
 // each live finding's cure joins from it by rule id (#107), so a nil or
 // filtered rls silently drops declared cures (and skews rules_total/passed).
-func JSON(w io.Writer, rls []*config.Rule, findings []finding.Finding, scan ScanSummary) {
+//
+// timing (may be nil) renders as the report's durations map; Go marshals map
+// keys sorted, so the output stays deterministic run to run.
+func JSON(w io.Writer, rls []*config.Rule, findings []finding.Finding, scan ScanSummary, timing map[string]time.Duration) {
 	live := finding.Unsuppressed(findings)
 	rep := jsonReport{
 		Findings:   make([]jsonFinding, 0, len(live)),
@@ -154,6 +164,12 @@ func JSON(w io.Writer, rls []*config.Rule, findings []finding.Finding, scan Scan
 			Rule: f.RuleID, Severity: string(f.Severity), Path: f.Path, Line: f.Line,
 			Message: f.Message, SuppressedBy: f.SuppressedBy,
 		})
+	}
+	if len(timing) > 0 {
+		rep.Durations = make(map[string]int64, len(timing))
+		for id, d := range timing {
+			rep.Durations[id] = d.Milliseconds()
+		}
 	}
 	rep.Scan = scan.toJSON()
 	rep.Summary = jsonSummary{

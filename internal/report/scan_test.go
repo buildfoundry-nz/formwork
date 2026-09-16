@@ -18,7 +18,7 @@ func TestJSONVacuousRuleListIsNotCapped(t *testing.T) {
 		ids[i] = string(rune('a'+i/10)) + string(rune('0'+i%10))
 	}
 	var sb strings.Builder
-	report.JSON(&sb, nil, nil, report.ScanSummary{FilesScanned: 3, RulesMatchingNoFiles: ids})
+	report.JSON(&sb, nil, nil, report.ScanSummary{FilesScanned: 3, RulesMatchingNoFiles: ids}, nil)
 	var rep struct {
 		Scan struct {
 			RulesMatchingNoFiles []string `json:"rules_matching_no_files"`
@@ -59,7 +59,7 @@ func TestEveryRendererNamesASelfSkippedRule(t *testing.T) {
 	}
 
 	var js strings.Builder
-	report.JSON(&js, nil, nil, sum)
+	report.JSON(&js, nil, nil, sum, nil)
 	var rep struct {
 		Scan struct {
 			SelfSkipped []struct {
@@ -90,7 +90,7 @@ func TestJSONSkipChannelsRoundTripDistinctly(t *testing.T) {
 			{RuleID: "dropped-gate", Channel: report.SkipChannelSkipEscapes, Reason: "did not run: --skip-escapes dropped this heavy command rule"},
 			{RuleID: "trigger-gate", Channel: report.SkipChannelSelf, Reason: "skipped: no file in this rule's scope matched when.paths_changed (db/**)"},
 		},
-	})
+	}, nil)
 	var rep struct {
 		Scan struct {
 			NotRun []struct {
@@ -168,7 +168,7 @@ func TestSelfSkipListIsCappedWithADisclosedOverflow(t *testing.T) {
 	}
 
 	var js strings.Builder
-	report.JSON(&js, nil, nil, sum)
+	report.JSON(&js, nil, nil, sum, nil)
 	var rep struct {
 		Scan struct {
 			SelfSkipped []struct{} `json:"rules_not_run"`
@@ -190,7 +190,7 @@ func TestJSONCarriesEveryScanSummaryField(t *testing.T) {
 	var sb strings.Builder
 	report.JSON(&sb, nil, nil, report.ScanSummary{
 		FilesScanned: 2, PathsRequested: 5, FileSetMode: "--staged", InvariantRules: 3,
-	})
+	}, nil)
 	var rep struct {
 		Scan struct {
 			FilesScanned   int    `json:"files_scanned"`

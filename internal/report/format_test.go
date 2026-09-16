@@ -23,7 +23,7 @@ func sampleFindings() []finding.Finding {
 
 func TestJSONReport(t *testing.T) {
 	var buf bytes.Buffer
-	report.JSON(&buf, []*config.Rule{rule("a"), rule("b")}, sampleFindings(), report.ScanSummary{})
+	report.JSON(&buf, []*config.Rule{rule("a"), rule("b")}, sampleFindings(), report.ScanSummary{}, nil)
 
 	var rep struct {
 		Findings []struct {
@@ -67,7 +67,7 @@ func TestJSONNamesSuppressedFindings(t *testing.T) {
 		{RuleID: "c", Severity: finding.SeverityError, Path: "z.go", Line: 9, Message: "waived", Suppressed: true, SuppressedBy: "allowlist:allow.txt:3"},
 	}
 	var buf bytes.Buffer
-	report.JSON(&buf, []*config.Rule{rule("a"), rule("b"), rule("c")}, fs, report.ScanSummary{})
+	report.JSON(&buf, []*config.Rule{rule("a"), rule("b"), rule("c")}, fs, report.ScanSummary{}, nil)
 
 	var rep struct {
 		Suppressed []struct {
@@ -103,7 +103,7 @@ func TestJSONSuppressedEmptyIsArrayNotNull(t *testing.T) {
 	var buf bytes.Buffer
 	report.JSON(&buf, []*config.Rule{rule("a")}, []finding.Finding{
 		{RuleID: "a", Severity: finding.SeverityError, Path: "x.go", Line: 3, Message: "bad thing"},
-	}, report.ScanSummary{})
+	}, report.ScanSummary{}, nil)
 	if !strings.Contains(buf.String(), `"suppressed": []`) {
 		t.Fatalf("suppressed must encode as [] when empty, got:\n%s", buf.String())
 	}
@@ -124,7 +124,7 @@ func TestJSONCarriesCure(t *testing.T) {
 		{ID: "b", Cure: "should never surface"},
 	}
 	var buf bytes.Buffer
-	report.JSON(&buf, rls, sampleFindings(), report.ScanSummary{})
+	report.JSON(&buf, rls, sampleFindings(), report.ScanSummary{}, nil)
 
 	var rep struct {
 		Findings []struct {
@@ -513,16 +513,16 @@ func TestGitHubEmitsScanSummaryWithNoFindings(t *testing.T) {
 func TestRenderDispatch(t *testing.T) {
 	rls := []*config.Rule{rule("a")}
 	var h, j, g bytes.Buffer
-	if err := report.Render("", &h, rls, nil, report.ScanSummary{}); err != nil || !strings.Contains(h.String(), "[a] OK") {
+	if err := report.Render("", &h, rls, nil, report.ScanSummary{}, nil); err != nil || !strings.Contains(h.String(), "[a] OK") {
 		t.Fatalf("human default: %v %q", err, h.String())
 	}
-	if err := report.Render("json", &j, rls, nil, report.ScanSummary{}); err != nil || !strings.Contains(j.String(), `"rules_total": 1`) {
+	if err := report.Render("json", &j, rls, nil, report.ScanSummary{}, nil); err != nil || !strings.Contains(j.String(), `"rules_total": 1`) {
 		t.Fatalf("json: %v %q", err, j.String())
 	}
-	if err := report.Render("github", &g, rls, sampleFindings(), report.ScanSummary{}); err != nil {
+	if err := report.Render("github", &g, rls, sampleFindings(), report.ScanSummary{}, nil); err != nil {
 		t.Fatalf("github: %v", err)
 	}
-	if err := report.Render("xml", &bytes.Buffer{}, rls, nil, report.ScanSummary{}); err == nil {
+	if err := report.Render("xml", &bytes.Buffer{}, rls, nil, report.ScanSummary{}, nil); err == nil {
 		t.Fatal("unknown format must error")
 	}
 }

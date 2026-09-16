@@ -38,7 +38,7 @@ func TestEveryRendererNamesAnUnfollowedSymlink(t *testing.T) {
 	}
 
 	var js strings.Builder
-	report.JSON(&js, nil, nil, sum)
+	report.JSON(&js, nil, nil, sum, nil)
 	var rep struct {
 		Scan struct {
 			Unfollowed []string `json:"unfollowed_symlinks"`
@@ -72,7 +72,7 @@ func TestNoRendererInventsAnUnfollowedSymlink(t *testing.T) {
 	}
 
 	var js strings.Builder
-	report.JSON(&js, nil, nil, sum)
+	report.JSON(&js, nil, nil, sum, nil)
 	// Present and empty, never absent or null: a consumer distinguishing "none"
 	// from "this build does not report it" should not have to.
 	if !strings.Contains(js.String(), `"unfollowed_symlinks": []`) {
@@ -109,7 +109,7 @@ func TestUnfollowedSymlinkCapIsDisclosedAndJSONIsNotCapped(t *testing.T) {
 	}
 
 	var js strings.Builder
-	report.JSON(&js, nil, nil, sum)
+	report.JSON(&js, nil, nil, sum, nil)
 	var rep struct {
 		Scan struct {
 			Unfollowed []string `json:"unfollowed_symlinks"`
@@ -135,7 +135,7 @@ func TestUnfollowedSymlinkIsNotReportedAsADeclaredChannel(t *testing.T) {
 	report.JSON(&sb, nil, nil, report.ScanSummary{
 		FilesScanned:    1,
 		UnfollowedLinks: []string{"src/Program.cs"},
-	})
+	}, nil)
 	var rep struct {
 		Scan struct {
 			Prunes []struct {

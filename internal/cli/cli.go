@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/engine"
@@ -266,6 +267,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	rangeSpec := fs.String("range", "", "scan only files changed in a git range, e.g. origin/main..HEAD")
 	skipEscapes := fs.Bool("skip-escapes", false, "skip heavy command/git-diff escapes (they re-scan the whole tree regardless of --staged; run them in CI, not local hooks)")
 	format := fs.String("format", "human", "output format: human | json | github")
+	progress := fs.Bool("progress", false, "stream one line per finalizer to stderr as it completes (rule id + cumulative ms) — liveness for long whole-corpus runs; never affects stdout or the verdict")
 	cfg, ok := parseAndLoad(fs, args, root, stderr)
 	if !ok {
 		return 2
@@ -461,6 +463,17 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		Prunes:          meta.PruneChannels(cfg, fset.Ignored, gi),
 		UnfollowedLinks: meta.UnfollowedLinks(fset.Ignored),
 	}
+	// Per-rule wall-clock accounting, merged across whatever engine passes the
+	// run makes (file-set mode partitions rules into per-file and invariant
+	// passes). Nil progress keeps RunTimed silent; -progress renders one stderr
+	// line per completed finalizer. Neither reaches stdout or the verdict.
+	timing := map[string]time.Duration{}
+	var onProgress func(string, time.Duration)
+	if *progress {
+		onProgress = func(id string, elapsed time.Duration) {
+			fmt.Fprintf(stderr, "formwork: progress rule=%s elapsed_ms=%d\n", id, elapsed.Milliseconds())
+		}
+	}
 	// The file set an armed scope floor is measured against. Whole-tree mode
 	// counts the walk — that is exactly what the engine scanned — and the
 	// file-set branch narrows it to the tracked tree below.
@@ -540,10 +553,13 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		summary.FileSetMode = flagName
 		summary.InvariantRules = len(invariant)
 		if len(perFile) > 0 {
-			perFindings, perErr := engine.Run(perFile, changedFset, *workers)
+			perFindings, perTiming, perErr := engine.RunTimed(perFile, changedFset, *workers, onProgress)
 			if perErr != nil {
 				fmt.Fprintln(stderr, "formwork:", perErr)
 				return 2
+			}
+			for id, d := range perTiming {
+				timing[id] += d
 			}
 			findings = append(findings, perFindings...)
 		}
@@ -566,19 +582,26 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 			floorFiles = trackedFset.Files
 		}
 		if len(invariant) > 0 {
-			invFindings, invErr := engine.Run(invariant, trackedFset, *workers)
+			invFindings, invTiming, invErr := engine.RunTimed(invariant, trackedFset, *workers, onProgress)
 			if invErr != nil {
 				fmt.Fprintln(stderr, "formwork:", invErr)
 				return 2
+			}
+			for id, d := range invTiming {
+				timing[id] += d
 			}
 			findings = append(findings, invFindings...)
 		}
 	} else {
 		summary.RulesMatchingNoFiles = meta.RulesMatchingNoFiles(rls, fset.Files)
-		findings, err = engine.Run(rls, fset, *workers)
+		var runTiming engine.Timing
+		findings, runTiming, err = engine.RunTimed(rls, fset, *workers, onProgress)
 		if err != nil {
 			fmt.Fprintln(stderr, "formwork:", err)
 			return 2
+		}
+		for id, d := range runTiming {
+			timing[id] += d
 		}
 	}
 	// A rule that ARMED scope.min_files and matched fewer files than it declared
@@ -627,7 +650,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	// join each finding's cure: from it by rule id (#107), so passing a
 	// filtered slice would silently render cure-less annotations. Both
 	// engine.Run branches above draw findings from this same rls.
-	if err := report.Render(*format, stdout, rls, findings, summary); err != nil {
+	if err := report.Render(*format, stdout, rls, findings, summary, timing); err != nil {
 		fmt.Fprintln(stderr, "formwork:", err)
 		return 2
 	}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/finding"
@@ -108,7 +109,31 @@ func earlierVisit(aFile, aRule, bFile, bRule int) bool {
 // workers <= 0 means GOMAXPROCS. Findings come back deterministically sorted
 // and include suppressed findings (spec §5 exemptions): callers that gate on
 // findings must filter with finding.Unsuppressed.
+// Timing records per-rule total evaluation wall time: phase 1 sums the rule's
+// per-file evaluations, phase 2 adds its finalizer. It is observability, never
+// input to a verdict — no finding, sort order, or exit code reads it.
+type Timing map[string]time.Duration
+
+// Run evaluates every rule against every in-scope file, then finalizers.
+// workers <= 0 means GOMAXPROCS. Findings come back deterministically sorted
+// and include suppressed findings (spec §5 exemptions): callers that gate on
+// findings must filter with finding.Unsuppressed.
 func Run(rls []*config.Rule, fset *scan.FileSet, workers int) ([]finding.Finding, error) {
+	findings, _, err := RunTimed(rls, fset, workers, nil)
+	return findings, err
+}
+
+// RunTimed is Run plus per-rule wall-clock accounting, and an optional
+// completion callback: progress (may be nil) is invoked under the findings
+// mutex as each finalizer finishes, with the rule's ID and its accumulated
+// total — the hook behind `check -progress`. That flag exists because a
+// whole-corpus lane can run for minutes with no output (every report format
+// writes at the end), and an operator staring at a silent job cannot tell a
+// slow rule from a hung one. Phase 1 cannot report per-rule completion the
+// same way (a rule is complete only once every file has been visited), so the
+// callback is finalizer-only; Timing covers both phases either way.
+func RunTimed(rls []*config.Rule, fset *scan.FileSet, workers int, progress func(ruleID string, elapsed time.Duration)) ([]finding.Finding, Timing, error) {
+	timing := make(Timing, len(rls))
 	if workers <= 0 {
 		workers = runtime.GOMAXPROCS(0)
 	}
@@ -149,8 +174,10 @@ func Run(rls []*config.Rule, fset *scan.FileSet, workers int) ([]finding.Finding
 						if !pr.rule.Applies(f.Path()) {
 							continue
 						}
+						t0 := time.Now()
 						fds, err := evalFile(pr.rule, f, ex)
 						mu.Lock()
+						timing[pr.rule.ID] += time.Since(t0)
 						if err != nil {
 							if firstErr == nil || earlierVisit(fi, pr.idx, firstErrFile, firstErrRule) {
 								firstErr, firstErrFile, firstErrRule = err, fi, pr.idx
@@ -236,7 +263,7 @@ func Run(rls []*config.Rule, fset *scan.FileSet, workers int) ([]finding.Finding
 		phase1.Wait()
 	}
 	if firstErr != nil {
-		return nil, firstErr
+		return nil, timing, firstErr
 	}
 
 	// Phase 2: finalizers (cross-file joins plus the command/git-diff escapes).
@@ -289,6 +316,7 @@ func Run(rls []*config.Rule, fset *scan.FileSet, workers int) ([]finding.Finding
 			matches []rules.Match
 			err     error
 		)
+		t0 := time.Now()
 		switch fin := r.Checker.(type) {
 		case rules.ErrFinalizer:
 			matches, err = finalizeErr(r, fin, rules.FinalizeContext{Root: fset.Root})
@@ -296,6 +324,10 @@ func Run(rls []*config.Rule, fset *scan.FileSet, workers int) ([]finding.Finding
 			matches, err = finalize(r, fin)
 		}
 		mu.Lock()
+		timing[r.ID] += time.Since(t0)
+		if progress != nil {
+			progress(r.ID, timing[r.ID])
+		}
 		if err != nil {
 			if finErr == nil || i < finErrIdx {
 				finErr, finErrIdx = err, i
@@ -383,11 +415,11 @@ func Run(rls []*config.Rule, fset *scan.FileSet, workers int) ([]finding.Finding
 	}
 	finWg.Wait()
 	if finErr != nil {
-		return nil, finErr
+		return nil, timing, finErr
 	}
 
 	finding.Sort(findings)
-	return findings, nil
+	return findings, timing, nil
 }
 
 // heavyPoolWidths shares --workers across the analyzer-class pool and the

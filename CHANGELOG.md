@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## 0.6.2
+
+### Added
+
+- `check` reports per-rule wall-clock timing. `engine.RunTimed` is `Run` plus
+  per-rule durations (phase 1 summed over files, plus the phase-2 finalizer)
+  and an optional per-finalizer completion callback; `Run` is an unchanged
+  wrapper, so every existing caller sees identical findings and no caller is
+  forced onto the new signature. `-format json` renders the timings as a
+  top-level `durations` object (rule id → whole milliseconds; `omitempty`,
+  so consumers that never asked keep their exact old shape), and the new
+  `check -progress` flag streams one stderr line per completed finalizer
+  (rule id + cumulative ms) — liveness for whole-corpus runs that otherwise
+  sit silent for minutes. Timing is observability only: no finding, sort
+  order, or exit code reads it. Whole-tree runs only; `--staged`/`--range`
+  keep their 0.6.1 shape.
+
+### Fixed
+
+- `internal/cli/cli.go` exceeded the vendored 750-line cap at 764 (the
+  dogfood `make check` gate, added and violated by the same commit, which the
+  branch's cancelled CI run never surfaced). `rangeValueUsable` and
+  `workersValueUsable` moved to `internal/cli/flags.go` — pure code motion.
+
+## Unreleased (carried)
+
 ### Added
 
 - `library: [generic]` in `.formwork/formwork.yaml` opts into a rule pack

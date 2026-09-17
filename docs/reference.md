@@ -433,6 +433,20 @@ quietly cites the wrong thing.
 | `where` | the unit: `same-file` (default), `same-dir`, `same-func` |
 | `also_present` | gate: the obligation applies only to units also matching this |
 | `obligation` | `presence` (default) or `countable` |
+| `syntax` | `re2` (default) or `regexp2`, exactly as the pattern types spell it |
+| `multiline` | match over the unit's whole text rather than line by line |
+
+`syntax` and `multiline` mean what they mean for `forbidden-pattern`. They were
+accepted there and refused here until the matcher became shared, which made
+converting a `forbidden-pattern` rule into a pair a lossy edit: the params had
+to be dropped, and dropping `multiline` leaves a rule that still loads, still
+reports OK, and no longer matches anything, because `same-file` scans per line
+and the trigger spans lines. Prefer converting with the params intact.
+
+`multiline` changes nothing for `same-func` / `same-dir`: their unit is a span
+and has always matched across the lines inside it. It exists for `same-file`,
+whose unit is scanned line by line. Under `multiline` a finding still anchors on
+the line the match starts on, not the top of the file.
 
 `also_present` needs a unit holding a text span, so it is accepted for
 `same-file` and `same-func` and refused for `same-dir`, whose unit is a

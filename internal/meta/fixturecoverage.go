@@ -106,13 +106,14 @@ func fixtureCoverage(cfg *config.Config, root string, w io.Writer, failed, total
 	return nil
 }
 
-// isExternalTool reports whether r is a heavy, whole-run external-tool rule
-// (command, git-diff): heavy rules shell out to tools/git and are tracked as
-// escape hatches, not by fixtures or empty-scope rot. Keying on cost (not the
-// ErrFinalizer interface) lets fast rules that merely need the repo root —
-// doc-path-exists, baseline — use ErrFinalizer without being exempted.
+// isExternalTool reports whether r is a whole-run external-tool rule
+// (command, git-diff) of any class but fast (#22): such rules shell out to
+// tools/git and are tracked as escape hatches, not by fixtures or
+// empty-scope rot. Keying on cost (not the ErrFinalizer interface) lets fast
+// rules that merely need the repo root — doc-path-exists, baseline — use
+// ErrFinalizer without being exempted.
 func isExternalTool(r *config.Rule) bool {
-	return r.Cost() == rules.CostHeavy
+	return r.Cost() != rules.CostFast
 }
 
 func fixtureCounts(ruleDir string) (fire, pass int, err error) {

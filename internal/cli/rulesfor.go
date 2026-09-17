@@ -108,13 +108,13 @@ func runRulesFor(args []string, stdout, stderr io.Writer) int {
 	if !ok {
 		return 2
 	}
-	// External-tool rules (command/git-diff — the CostHeavy class) exec
+	// External-tool rules (command/git-diff — every class but fast, #22) exec
 	// whole-tree tools that re-scan on their own: a NOT SCANNED answer that
 	// omitted them would deny enforcement check actually performs (#119
 	// review finding 2).
 	externalTools := []string{}
 	for _, r := range cfg.Rules {
-		if r.Cost() == rules.CostHeavy {
+		if r.Cost() != rules.CostFast {
 			externalTools = append(externalTools, r.ID)
 		}
 	}

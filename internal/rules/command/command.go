@@ -43,6 +43,11 @@ type commandParams struct {
 	Cmd    []string   `yaml:"cmd"`
 	When   *whenSpec  `yaml:"when"`
 	Expect expectSpec `yaml:"expect"`
+	// Cost is the declared class: range | tree | heavy (#22). Absent is
+	// heavy, so a corpus written before the field loads and runs exactly as
+	// it did. fast is refused: a command execs, and the one thing --skip-
+	// escapes must keep meaning is "no escape runs".
+	Cost string `yaml:"cost"`
 }
 
 type whenSpec struct {
@@ -71,6 +76,8 @@ type command struct {
 	// it, a detector exiting 2 makes expect.exit 2 pass under compile-once and
 	// fire under check — fixtures that lie about production.
 	collapseExitLikeGoRun bool
+	// cost is the declared class (#22); heavy when the rule declared none.
+	cost rules.Cost
 
 	sawTrigger atomic.Bool
 	// skipped records that FinalizeErr took the when: early return. It is a
@@ -89,9 +96,18 @@ func newCommand(params *yaml.Node) (rules.Checker, error) {
 	if len(p.Cmd) == 0 {
 		return nil, errors.New("command: params.cmd must be a non-empty argv list")
 	}
-	c := &command{cmd: p.Cmd, expectExit: 0}
+	c := &command{cmd: p.Cmd, expectExit: 0, cost: rules.CostHeavy}
 	if p.Expect.Exit != nil {
 		c.expectExit = *p.Expect.Exit
+	}
+	switch rules.Cost(p.Cost) {
+	case "":
+	case rules.CostRange, rules.CostTree, rules.CostHeavy:
+		c.cost = rules.Cost(p.Cost)
+	case rules.CostFast:
+		return nil, errors.New("command: cost: fast is not a class a command can declare — it execs; want range, tree or heavy")
+	default:
+		return nil, fmt.Errorf("command: invalid cost %q (want range, tree or heavy)", p.Cost)
 	}
 	if p.When != nil {
 		if len(p.When.PathsChanged) == 0 {
@@ -114,10 +130,11 @@ func newCommand(params *yaml.Node) (rules.Checker, error) {
 	return c, nil
 }
 
-// Cost marks command rules heavy (spec §8): they shell out and belong to
-// heavier lanes, not the fast per-commit path. --skip-escapes and
-// fixture-exemption key on this, not on ProcessBound.
-func (*command) Cost() rules.Cost { return rules.CostHeavy }
+// Cost is the rule's declared class (spec §8, #22): heavy unless the rule
+// said range or tree. Never fast — a command shells out. --skip-escapes and
+// fixture-exemption key on "not fast", not on ProcessBound; --cost-max keys
+// on the rank.
+func (c *command) Cost() rules.Cost { return c.cost }
 
 // analyzerAtCommandPosition matches a Dart/Flutter analyzer invocation inside a
 // shell script body: the word at a command position (start, after a newline, or

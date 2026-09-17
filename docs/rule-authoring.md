@@ -135,9 +135,23 @@ its output says so.
 
 ## Cost classes, and when `command` is a smell
 
-`command` and `git-diff` are `heavy`: they shell out, they are the slow half of
+`command` and `git-diff` are escapes: they shell out, they are the slow half of
 any lane, and they are the escape hatch reached for the highest-stakes
-invariants.
+invariants. A `command` rule declares which class of escape it is with
+`params.cost`, and the classes are ordered:
+
+| class | reads | typical wall time | where it can run |
+|---|---|---|---|
+| `fast` | one file at a time (declarative types only; a command cannot be fast) | ms | every hook |
+| `range` | only a commit range (`merge-base..HEAD`) | seconds | pre-push |
+| `tree` | the working tree once | seconds to a minute | pre-push, sparingly |
+| `heavy` | resolves an AST, replays fixtures, proves mutations | minutes | CI |
+
+Undeclared is `heavy`, the fail-closed answer: a rule nobody classified runs in
+CI and nowhere cheaper, which is where it ran before the field existed. A hook
+selects by class with `check --cost-max <class>`; `--skip-escapes` still drops
+every escape whatever it declared, so a corpus that never classifies loses
+nothing.
 
 **Legitimate:** the invariant genuinely needs a tool the engine does not have —
 a type checker, a real parser for a language with no built-in analyzer, a

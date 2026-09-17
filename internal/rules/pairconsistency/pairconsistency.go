@@ -16,12 +16,12 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/buildfoundry-nz/formwork/internal/rules"
+	"github.com/buildfoundry-nz/formwork/internal/rules/rxmatch"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"gopkg.in/yaml.v3"
 )
@@ -42,6 +42,25 @@ type pairParams struct {
 	// single companion (vacuity class V18). same-dir is refused
 	// under countable — that mode only accumulates presence today.
 	Obligation string `yaml:"obligation"`
+	// Syntax selects the regex backend, exactly as the pattern rule types spell
+	// it: "" / "re2" -> Go RE2; "regexp2" -> the PCRE2-capable engine for the
+	// lookaround a few ported shell gates need. Refused values are a config
+	// error (#17979).
+	//
+	// Until #17979 this type compiled with regexp.Compile directly, so a repo
+	// converting forbidden-pattern -> pair-consistency had to DROP `syntax:`,
+	// and a trigger carrying a lookaround then failed to compile — or worse,
+	// was rewritten without it and quietly matched something else.
+	Syntax string `yaml:"syntax"`
+	// Multiline matches the trigger and requires over the unit's whole text
+	// rather than line by line. It changes nothing for same-func / same-dir,
+	// which have always matched over the span; it exists for same-file, whose
+	// scan is per line, so a cross-line trigger could never match there.
+	//
+	// That was the sharp edge: dropping `multiline: true` during a conversion
+	// left a rule that still loaded, still reported OK, and no longer matched
+	// anything — a silently disabled guardrail (#17979).
+	Multiline bool `yaml:"multiline"`
 }
 
 const (
@@ -86,9 +105,10 @@ type dirState struct {
 }
 
 type pairConsistency struct {
-	trigger     *regexp.Regexp
-	requires    *regexp.Regexp
-	alsoPresent *regexp.Regexp // optional; nil when unset
+	trigger     rxmatch.Matcher
+	requires    rxmatch.Matcher
+	alsoPresent rxmatch.Matcher // optional; nil when unset
+	multiline   bool
 	where       string
 	obligation  string
 
@@ -140,17 +160,17 @@ func newPairConsistency(params *yaml.Node) (rules.Checker, error) {
 		return nil, fmt.Errorf("pair-consistency: obligation %q is not supported with where: %q (use %q or %q)",
 			obligationCountable, whereSameDir, whereSameFile, whereSameFunc)
 	}
-	trigger, err := regexp.Compile(p.Trigger)
+	trigger, err := rxmatch.Compile("trigger", p.Trigger, p.Syntax)
 	if err != nil {
 		return nil, fmt.Errorf("pair-consistency: invalid trigger: %w", err)
 	}
-	requires, err := regexp.Compile(p.Requires)
+	requires, err := rxmatch.Compile("requires", p.Requires, p.Syntax)
 	if err != nil {
 		return nil, fmt.Errorf("pair-consistency: invalid requires: %w", err)
 	}
-	var alsoPresent *regexp.Regexp
+	var alsoPresent rxmatch.Matcher
 	if p.AlsoPresent != "" {
-		alsoPresent, err = regexp.Compile(p.AlsoPresent)
+		alsoPresent, err = rxmatch.Compile("also_present", p.AlsoPresent, p.Syntax)
 		if err != nil {
 			return nil, fmt.Errorf("pair-consistency: invalid also_present: %w", err)
 		}
@@ -159,6 +179,7 @@ func newPairConsistency(params *yaml.Node) (rules.Checker, error) {
 		trigger:     trigger,
 		requires:    requires,
 		alsoPresent: alsoPresent,
+		multiline:   p.Multiline,
 		where:       where,
 		obligation:  obligation,
 		dirs:        map[string]*dirState{},
@@ -172,32 +193,75 @@ func newPairConsistency(params *yaml.Node) (rules.Checker, error) {
 // agree about what "in this file" means and neither can match across a line
 // boundary the other cannot.
 func (c *pairConsistency) fileCarriesAlsoPresent(f *scan.File) (bool, error) {
-	lines, err := f.Lines()
+	text, err := c.unitText(f)
 	if err != nil {
 		return false, err
 	}
-	for _, line := range lines {
-		if c.alsoPresent.MatchString(line) {
+	for _, s := range text {
+		ok, err := c.alsoPresent.MatchString(s)
+		if err != nil {
+			return false, err
+		}
+		if ok {
 			return true, nil
 		}
 	}
 	return false, nil
 }
 
+// unitText is the file's text in the grain this rule matches over: one entry
+// per line by default, or a single whole-content entry under multiline.
+//
+// same-file has always scanned per line, which is why a cross-line trigger
+// could not match there and why dropping `multiline: true` in a conversion
+// silently disabled the rule (#17979). Routing every same-file match through
+// here makes the two grains one decision instead of three copies of it.
+func (c *pairConsistency) unitText(f *scan.File) ([]string, error) {
+	if c.multiline {
+		content, err := f.Content()
+		if err != nil {
+			return nil, err
+		}
+		return []string{string(content)}, nil
+	}
+	return f.Lines()
+}
+
 func (c *pairConsistency) scanFile(f *scan.File) (triggerLine int, requiresMatched bool, nTrigger, nRequires int, err error) {
-	lines, err := f.Lines()
+	text, err := c.unitText(f)
 	if err != nil {
 		return 0, false, 0, 0, err
 	}
-	for i, line := range lines {
-		if c.trigger.MatchString(line) {
-			nTrigger++
+	for i, s := range text {
+		nt, err := c.trigger.CountMatches(s)
+		if err != nil {
+			return 0, false, 0, 0, err
+		}
+		if nt > 0 {
+			nTrigger += nt
 			if triggerLine == 0 {
-				triggerLine = i + 1
+				// Per line, the entry index IS the line. Under multiline the
+				// single entry is the whole file, so ask the matcher which line
+				// the first match starts on rather than reporting line 1.
+				if c.multiline {
+					ln, ok, err := c.trigger.FindLine(s)
+					if err != nil {
+						return 0, false, 0, 0, err
+					}
+					if ok {
+						triggerLine = ln
+					}
+				} else {
+					triggerLine = i + 1
+				}
 			}
 		}
-		if c.requires.MatchString(line) {
-			nRequires++
+		nr, err := c.requires.CountMatches(s)
+		if err != nil {
+			return 0, false, 0, 0, err
+		}
+		if nr > 0 {
+			nRequires += nr
 			requiresMatched = true
 		}
 	}
@@ -298,18 +362,34 @@ func (c *pairConsistency) checkFuncSpan(f *scan.File, content []byte, u funcUnit
 			f.Path(), u.name, u.start, u.end, len(content))
 	}
 	span := string(content[u.start:u.end])
-	nTrigger := len(c.trigger.FindAllStringIndex(span, -1))
+	// Span matching needs no multiline flag: the unit IS the span, and it has
+	// always matched across the lines inside it. Only same-file scans per line.
+	nTrigger, err := c.trigger.CountMatches(span)
+	if err != nil {
+		return nil, err
+	}
 	if nTrigger == 0 {
 		return nil, nil
 	}
-	if c.alsoPresent != nil && !c.alsoPresent.MatchString(span) {
-		return nil, nil
+	if c.alsoPresent != nil {
+		ok, err := c.alsoPresent.MatchString(span)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, nil
+		}
 	}
-	nRequires := len(c.requires.FindAllStringIndex(span, -1))
+	nRequires, err := c.requires.CountMatches(span)
+	if err != nil {
+		return nil, err
+	}
 	// Anchor on the first trigger line inside the span (1-based file line).
 	line := u.line
-	if loc := c.trigger.FindStringIndex(span); loc != nil {
-		line = u.line + strings.Count(span[:loc[0]], "\n")
+	if off, ok, err := c.trigger.FindIndex(span); err != nil {
+		return nil, err
+	} else if ok && off >= 0 {
+		line = u.line + strings.Count(span[:off], "\n")
 	}
 	if c.obligation == obligationCountable {
 		if nRequires < nTrigger {

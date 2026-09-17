@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.3
+
 ### Added
 
 - Cost classes are ordered, not binary (#22): `rules.Cost` gains `range` and

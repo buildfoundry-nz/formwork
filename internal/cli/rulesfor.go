@@ -66,6 +66,7 @@ type pathRules struct {
 func runRulesFor(args []string, stdout, stderr io.Writer) int {
 	fs, root := newFlagSet("rules-for", "repository root (default \".\")", stderr)
 	format := fs.String("format", "human", "output format: human | json")
+	brief := fs.Bool("brief", false, "human output only: one line per governing rule (id, severity, type), no cure text")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -365,7 +366,7 @@ func runRulesFor(args []string, stdout, stderr io.Writer) int {
 				line += "  (suppressed: " + g.SuppressedBy + ")"
 			}
 			fmt.Fprintln(stdout, line)
-			if g.Cure != "" {
+			if g.Cure != "" && !*brief {
 				fmt.Fprintf(stdout, "    cure: %s\n", g.Cure)
 			}
 		}

@@ -27,6 +27,93 @@ func TestRulesForListsGoverningRules(t *testing.T) {
 	}
 }
 
+func TestRulesForBriefOmitsCure(t *testing.T) {
+	// --brief keeps the id/severity/type row (with any suppression suffix)
+	// but drops the cure line entirely; the row stays a single tab-separated
+	// line, not a cure-indented follow-up.
+	code, out, _ := runCLI(t, "rules-for", "-C", filepath.Join("testdata", "toyrepo"), "--brief", "src/notes.txt")
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	if !strings.Contains(out, "no-todo-markers\terror") {
+		t.Fatalf("brief output must keep the id/severity/type row:\n%s", out)
+	}
+	for _, banned := range []string{"cure", "Resolve the item"} {
+		if strings.Contains(out, banned) {
+			t.Fatalf("brief output must not contain %q:\n%s", banned, out)
+		}
+	}
+	// Every governing-rule row is one line: exactly one tab-separated row,
+	// no indented follow-up line beneath it.
+	rows := 0
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.HasPrefix(ln, "  ") && strings.Contains(ln, "\t") {
+			rows++
+		}
+	}
+	if rows != 1 {
+		t.Fatalf("expected exactly one tab-separated governing-rule row, got %d:\n%s", rows, out)
+	}
+}
+
+func TestRulesForBriefAndDefaultListSameRules(t *testing.T) {
+	// --brief must not change WHICH rules govern a path, only how they are
+	// rendered: the id sets from default and --brief outputs are equal.
+	paths := []string{"README.md", "src/notes.txt"}
+	defaultArgs := append([]string{"rules-for", "-C", filepath.Join("testdata", "toyrepo")}, paths...)
+	briefArgs := append([]string{"rules-for", "-C", filepath.Join("testdata", "toyrepo"), "--brief"}, paths...)
+
+	code, out, _ := runCLI(t, defaultArgs...)
+	if code != 0 {
+		t.Fatalf("default exit %d:\n%s", code, out)
+	}
+	code, briefOut, _ := runCLI(t, briefArgs...)
+	if code != 0 {
+		t.Fatalf("--brief exit %d:\n%s", code, briefOut)
+	}
+
+	defIDs := governingRuleIDs(out)
+	briefIDs := governingRuleIDs(briefOut)
+	if len(defIDs) == 0 {
+		t.Fatalf("default output yielded no governing-rule ids:\n%s", out)
+	}
+	if !equalStringSets(defIDs, briefIDs) {
+		t.Fatalf("--brief and default disagree on governing rules:\n default: %v\n brief:   %v\n%s", defIDs, briefIDs, briefOut)
+	}
+}
+
+// governingRuleIDs extracts rule ids from rules-for human output: the lines
+// that start with two spaces and carry a tab (the id/severity/type rows).
+// Path headers, "(none)" and NOT SCANNED blocks never match that shape.
+func governingRuleIDs(out string) []string {
+	var ids []string
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.HasPrefix(ln, "  ") && strings.Contains(ln, "\t") {
+			ids = append(ids, strings.TrimSpace(strings.SplitN(ln, "\t", 2)[0]))
+		}
+	}
+	return ids
+}
+
+func equalStringSets(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := map[string]int{}
+	for _, s := range a {
+		seen[s]++
+	}
+	for _, s := range b {
+		seen[s]--
+	}
+	for _, n := range seen {
+		if n != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func TestRulesForRespectsExceptPaths(t *testing.T) {
 	// src/clean.txt is carved out via except.paths — the display must agree
 	// with the verdict Applies() would give, or guidance lies.

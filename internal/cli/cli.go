@@ -222,6 +222,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	staged := fs.Bool("staged", false, "scan only git-staged files (mutually exclusive with --range)")
 	rangeSpec := fs.String("range", "", "scan only files changed in a git range, e.g. origin/main..HEAD")
 	skipEscapes := fs.Bool("skip-escapes", false, "skip heavy command/git-diff escapes (they re-scan the whole tree regardless of --staged; run them in CI, not local hooks)")
+	costMax := fs.String("cost-max", "", "run only rules at or below this cost class: fast | range | tree | heavy (a pre-push hook can afford range; exclusive with --skip-escapes)")
 	format := fs.String("format", "human", "output format: human | json | github")
 	progress := fs.Bool("progress", false, "stream one line per finalizer to stderr as it completes (rule id + cumulative ms) — liveness for long whole-corpus runs; never affects stdout or the verdict")
 	cfg, ok := parseAndLoad(fs, args, root, stderr)
@@ -262,6 +263,19 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "formwork:", err)
 		return 2
 	}
+	// --cost-max and --skip-escapes both narrow by cost and would answer the
+	// same rule two ways; a supplied flag that is silently overridden is the
+	// shape the guards above refuse (#22).
+	if *costMax != "" {
+		if *skipEscapes {
+			fmt.Fprintln(stderr, "formwork: --cost-max and --skip-escapes are mutually exclusive (--skip-escapes is --cost-max fast for every escape regardless of its declared class)")
+			return 2
+		}
+		if !rules.ValidCost(*costMax) {
+			fmt.Fprintf(stderr, "formwork: --cost-max %q is not a cost class (want fast, range, tree or heavy)\n", *costMax)
+			return 2
+		}
+	}
 	// --lane selects which rules run; --staged/--range select which files.
 	// Unknown lane → config error (exit 2).
 	rls := cfg.Rules
@@ -289,30 +303,13 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	// dropping SOME must not be quieter than that. Lane selection deliberately
 	// gets no such line: a lane not choosing a rule is selection working as
 	// asked, not a rule being dropped out from under the run.
+	// Both narrowings and their disclosures live in costfilter.go (#22).
 	var droppedEscapes []report.SkippedRule
 	if *skipEscapes {
-		kept := rls[:0:0]
-		for _, r := range rls {
-			if r.Cost() != rules.CostHeavy {
-				kept = append(kept, r)
-				continue
-			}
-			reason := fmt.Sprintf("did not run: --skip-escapes dropped this heavy %s rule; the whole-tree CI run is its backstop", r.Type)
-			// The rule's scope floor goes with it, and that is disclosed rather
-			// than evaluated. The cost argument for the drop does not reach a
-			// floor — it is glob matching over a file set already in hand — but
-			// emitting its finding here would exit 1 having printed nothing:
-			// report.Human renders findings by iterating the rules it was handed,
-			// and this one is no longer among them. A silent failure is worse than
-			// a disclosed gap (#23, fix round 1).
-			if floor := r.MinFiles(); floor > 0 {
-				reason += fmt.Sprintf(" — its scope.min_files floor of %d went unevaluated with it", floor)
-			}
-			droppedEscapes = append(droppedEscapes, report.SkippedRule{
-				RuleID: r.ID, Channel: report.SkipChannelSkipEscapes, Reason: reason,
-			})
-		}
-		rls = kept
+		rls, droppedEscapes = dropEscapes(rls)
+	}
+	if *costMax != "" {
+		rls, droppedEscapes = dropAboveCost(rls, rules.Cost(*costMax))
 	}
 	// A run with NO RULES to run evaluates nothing, and the renderer's
 	// "0/0 rules passed, 0 finding(s)" reads exactly like a clean tree — the
@@ -339,11 +336,14 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 			reason = fmt.Sprintf("lane %q selects no rules — every rule was filtered out by the lane's tags/cost, so this run would check nothing (formwork lint's lane-nonempty check reports the same condition)", *lane)
 		case *skipEscapes:
 			reason = fmt.Sprintf("--skip-escapes dropped all %d selected rule(s) — every one is a heavy command/git-diff escape, so this run would check nothing; drop the flag, or wire a lane that carries at least one fast rule", selectedCount)
+		case *costMax != "":
+			reason = fmt.Sprintf("--cost-max %s dropped all %d selected rule(s) — every one is above that class, so this run would check nothing; raise the class, or wire a lane that carries at least one rule at or below it", *costMax, selectedCount)
 		default:
-			// Unreachable today: --skip-escapes is the only filter between
-			// selectedCount and here. Naming skip-escapes unconditionally would
-			// have been sound now and a confident lie the moment a third filter
-			// lands, which is how a message outlives the code it describes.
+			// Unreachable today: --skip-escapes and --cost-max are the only
+			// filters between selectedCount and here. Naming one of them
+			// unconditionally would have been sound now and a confident lie the
+			// moment a third filter lands, which is how a message outlives the
+			// code it describes.
 			reason = fmt.Sprintf("no rules are left to run: %d configured, %d selected, all filtered out before the scan", configured, selectedCount)
 		}
 		fmt.Fprintln(stderr, "formwork:", reason)

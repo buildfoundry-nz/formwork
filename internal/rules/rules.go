@@ -61,10 +61,24 @@ const (
 	CostHeavy Cost = "heavy"
 )
 
-// Rank orders the cost classes: fast < range < tree < heavy. An unknown
-// class ranks as heavy — the fail-closed answer, since a class the engine
-// cannot place must never be run somewhere cheaper than it belongs.
-func Rank(c Cost) int { panic("unimplemented") }
+// Rank orders the cost classes: fast < range < tree < heavy (#22). fast is a
+// per-file scan; range reads only a commit range (seconds; a pre-push hook
+// can afford it); tree reads the working tree once; heavy resolves an AST,
+// replays fixtures or proves mutations. An unknown class ranks as heavy —
+// the fail-closed answer, since a class the engine cannot place must never
+// be run somewhere cheaper than it belongs.
+func Rank(c Cost) int {
+	switch c {
+	case CostFast:
+		return 0
+	case CostRange:
+		return 1
+	case CostTree:
+		return 2
+	default:
+		return 3
+	}
+}
 
 // Coster is optionally implemented by a Checker to declare its cost class.
 type Coster interface {
@@ -211,7 +225,11 @@ func SkipReasonOf(c Checker) (reason string, skipped bool) {
 
 // ValidCost reports whether s names a cost class.
 func ValidCost(s string) bool {
-	return Cost(s) == CostFast || Cost(s) == CostHeavy
+	switch Cost(s) {
+	case CostFast, CostRange, CostTree, CostHeavy:
+		return true
+	}
+	return false
 }
 
 // WholeTreeInvariant is optionally implemented by a Checker whose verdict is a

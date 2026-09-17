@@ -149,6 +149,10 @@ func UnfollowedLinkLine(path string) string {
 const (
 	SkipChannelSelf        = "self-skip"
 	SkipChannelSkipEscapes = "skip-escapes"
+	// SkipChannelCostMax is the operator narrowing the run by cost class
+	// (check --cost-max, #22): the same kind of drop as --skip-escapes,
+	// carried on its own channel so a consumer can tell the two apart.
+	SkipChannelCostMax = "cost-max"
 )
 
 // SkippedRule is one rule that did not run, and why. Reason is the explanation

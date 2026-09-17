@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- Cost classes are ordered, not binary (#22): `rules.Cost` gains `range` and
+  `tree` between `fast` and `heavy`, with `rules.Rank`. A `command` rule
+  declares its class with `params.cost` (`range` | `tree` | `heavy`); absent
+  is `heavy`, so every existing corpus loads and runs unchanged, and `fast` is
+  refused because a command execs. `check --cost-max <class>` runs the rules
+  at or below that rank and discloses the dropped ones on the `cost-max`
+  skip channel; it is exclusive with `--skip-escapes`, which keeps dropping
+  every escape regardless of declared class. `rules-for` and lint's
+  fixture-exemption now key on "not fast" rather than "heavy", so a declared
+  `range` rule is still an external tool to both. A lane's `cost:` accepts
+  the four classes and stays an exact match.
+
+  Strict-decoding caveat (VERSIONING.md): a corpus that declares `cost:` on a
+  command rule fails to load on an older binary — raise the `engine:` floor
+  when you adopt it.
+
 ## 0.6.2
 
 ### Added

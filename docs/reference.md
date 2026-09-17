@@ -935,6 +935,7 @@ Runs an external program.
 | `cmd` | argv, run with the scan root as its working directory |
 | `when` | arming condition; its one key is `paths_changed`, a non-empty glob list, and the rule runs only when a matching in-scope file is in the changeset |
 | `expect` | the expected outcome: `exit` (the exit code to accept, default 0) and `output_forbid` (a regex whose match in the output is a violation) |
+| `cost` | the escape's class: `range` (reads only a commit range; seconds), `tree` (reads the working tree once) or `heavy` (resolves an AST, replays fixtures, proves mutations). Default `heavy`; `fast` is refused, a command execs. `check --cost-max <class>` keeps the rules at or below a class; `--skip-escapes` drops every command rule whatever it declares |
 
 `formwork lint`'s `command-trigger-armable` check reports a `when.paths_changed`
 that cannot intersect the rule's own `scope` — a gate that can never fire, in
@@ -1066,7 +1067,7 @@ Named selectors over rules, declared in `formwork.yaml`:
 lanes:
   pre-commit:
     tags: [fast]      # select by rule tag
-    cost: fast        # fast | heavy
+    cost: fast        # fast | range | tree | heavy — exact match on the rule's class
     ci: false
   ci:
     all: true

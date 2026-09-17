@@ -670,11 +670,18 @@ The validating target's synth-test discipline, built into the engine:
 
 Defined in `formwork.yaml`:
 
-- **Lanes** select rules by tags and intrinsic cost class (each rule type
-  declares fast/heavy; `command` rules are heavy by default) plus a file-set
-  mode. Expected mapping for the validating port: `pre-commit` = fast +
-  `--staged`; `pre-merge-commit` = binary backstops, full tree; `pre-push` =
-  heavy + push range; `ci` = everything. Heavy rules may declare
+- **Lanes** select rules by tags and cost class plus a file-set mode. The
+  classes are ordered, fast < range < tree < heavy (#22): declarative types are
+  fast; a `command` rule declares `params.cost` as `range` (reads only a commit
+  range, seconds), `tree` (the working tree once) or `heavy` (an AST, a fixture
+  replay, a mutation proof), and is heavy when it declares nothing — the
+  fail-closed default, since an unclassified escape must not run anywhere
+  cheaper than CI. `check --cost-max <class>` keeps the rules at or below a
+  class and discloses the dropped ones; `--skip-escapes` drops every escape
+  whatever it declares, and the two are exclusive. A lane's `cost:` is an exact
+  match on the class. Expected mapping for the validating port: `pre-commit` =
+  fast + `--staged`; `pre-merge-commit` = binary backstops, full tree;
+  `pre-push` = `--cost-max range` + push range; `ci` = everything. Heavy rules may declare
   `when: paths-changed: […]` (e.g. docker migration replay only when
   migrations changed).
 - **`--range` is one string, tokenized shell-style.** It carries revisions and,

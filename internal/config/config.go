@@ -552,7 +552,7 @@ func compileLanes(specs map[string]laneSpec) ([]Lane, error) {
 			return nil, fmt.Errorf("lane %s: name must be kebab-case (%s)", name, idRE)
 		}
 		if spec.Cost != "" && !rules.ValidCost(spec.Cost) {
-			return nil, fmt.Errorf("lane %s: invalid cost %q (want fast or heavy)", name, spec.Cost)
+			return nil, fmt.Errorf("lane %s: invalid cost %q (want fast, range, tree or heavy)", name, spec.Cost)
 		}
 		hasTags := len(spec.Tags) > 0
 		// Exactly one selector: all XOR tags. spec.All == hasTags is true when

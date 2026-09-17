@@ -56,8 +56,15 @@ type Cost string
 
 const (
 	CostFast  Cost = "fast"
+	CostRange Cost = "range"
+	CostTree  Cost = "tree"
 	CostHeavy Cost = "heavy"
 )
+
+// Rank orders the cost classes: fast < range < tree < heavy. An unknown
+// class ranks as heavy — the fail-closed answer, since a class the engine
+// cannot place must never be run somewhere cheaper than it belongs.
+func Rank(c Cost) int { panic("unimplemented") }
 
 // Coster is optionally implemented by a Checker to declare its cost class.
 type Coster interface {

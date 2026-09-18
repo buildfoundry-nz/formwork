@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 ### Changed (breaking)
 
@@ -20,8 +20,11 @@
     under a downstream mutation run); `{{repo}}` is the corpus's own tree, so a
     detector that lives in the repository stays reachable while judging a
     fixture. Canonical shape:
-    `go -C {{repo}}/scripts/dev/x run . --root {{root}}`. Quote a token in
-    YAML — a plain scalar cannot begin with a brace.
+    `go -C {{repo}}/scripts/dev/x run . --root {{root}}`. Both resolve to
+    ABSOLUTE paths, whatever the caller spelled — a relative one would be
+    resolved by the tool against its own working directory, which is the tree
+    under evaluation, so `{{repo}}` would point back at the fixture. Quote a
+    token in YAML — a plain scalar cannot begin with a brace.
   - **Isolated fixtures.** A command rule's fixture arm is copied to a temp
     directory, `git init`-ed with one commit, and that copy is evaluated. Git
     discovers a repository by walking UP, so a detector running `git rev-parse`

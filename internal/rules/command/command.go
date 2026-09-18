@@ -306,6 +306,15 @@ func (c *command) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) 
 	argv := substituteRoots(c.cmd, ctx.Root, ctx.Repo)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = ctx.Root
+	if ctx.Fixture {
+		// ADDED, never removed: the contract above is that this package takes
+		// nothing out of the tool's environment, and this takes nothing out.
+		// It states which plane the tool is in, because the tool cannot tell
+		// an isolated fixture from the live repository by looking — both are
+		// real git repositories — and the difference decides whether a
+		// commit-range plane can run at all (#28).
+		cmd.Env = append(cmd.Environ(), "FORMWORK_FIXTURE=1")
+	}
 	if c.workDir != "" {
 		cmd.Dir = c.workDir
 	}

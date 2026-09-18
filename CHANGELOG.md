@@ -31,7 +31,11 @@
     one still naming paths relative to its caller is asking for the
     arm-inside-the-repository layout, and its detector commonly resolves a
     repo-resident helper by walking up out of the arm, so isolating it first
-    would break a working fixture for no gain.
+    would break a working fixture for no gain. An isolated run sets
+    `FORMWORK_FIXTURE=1` in the tool's environment — the one fact a detector
+    cannot see for itself, since an isolated fixture is a real repository with
+    no upstream branch, so a commit-range plane can skip a fixture while
+    staying mandatory in CI.
   - **A `..` path segment in `cmd` is refused at load.** Once a rule can name
     its tree exactly, naming it relatively has no legitimate use, and a rule
     that does not load cannot read the wrong tree even once. The refusal is

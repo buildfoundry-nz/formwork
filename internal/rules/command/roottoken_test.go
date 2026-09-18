@@ -136,3 +136,29 @@ func TestNonPathDotsStillLoad(t *testing.T) {
 		}
 	}
 }
+
+// A detector judging a FIXTURE is told so, because some planes exist only in
+// the live repository and a fixture cannot fake them (#28). A commit-range
+// scan is the case: an isolated fixture is a real repository, so "is this a
+// git checkout" answers yes, but it has no upstream branch for a default
+// range to resolve against — and a detector that cannot tell the planes apart
+// either dies on the missing ref or skips the range in CI too, which is a
+// gate that fails open.
+func TestAFixtureRunIsDeclaredToTheDetector(t *testing.T) {
+	root, repo := t.TempDir(), t.TempDir()
+	out := filepath.Join(root, "seen.txt")
+	c := build(t, "cmd: [sh, -c, 'printf \"%s\" \"${FORMWORK_FIXTURE:-unset}\" > \"$1\"', sh, '"+out+"']")
+	ef := c.(rules.ErrFinalizer)
+	if _, err := ef.FinalizeErr(rules.FinalizeContext{Root: root, Repo: repo, Fixture: true}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(out); string(b) != "1" {
+		t.Fatalf("a fixture run must declare itself, got %q", b)
+	}
+	if _, err := ef.FinalizeErr(rules.FinalizeContext{Root: root, Repo: root}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(out); string(b) != "unset" {
+		t.Fatalf("a check run must NOT declare itself a fixture, got %q — a detector would skip its range plane in CI", b)
+	}
+}

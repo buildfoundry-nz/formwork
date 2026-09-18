@@ -42,6 +42,41 @@
   `engine.RunTimedHinted` is `RunTimed` plus the hint; `Run` and `RunTimed`
   are unchanged wrappers, so no existing caller moves.
 
+### Changed (breaking)
+
+- **The engine owns the tree a `command` rule reads (#28).** A rule used to
+  name its tree with a path relative to the caller's working directory
+  (`--root ../../..`). That is correct under `check`, where the cwd is the
+  repository; under `test` the fixture runner makes the fixture tree the cwd
+  and the same argv resolved to the repository again, so a pass fixture judged
+  the real tree — one missing commit trailer on a branch turned into a red on
+  the rule, a red from the vacuity census reporting the pair "has stopped
+  discriminating", and often a third from the mutation proof.
+
+  Three parts:
+
+  - **`{{root}}` and `{{repo}}` argv tokens.** `{{root}}` is the tree under
+    evaluation (the repository under `check`, a fixture under `test`, a scratch
+    under a downstream mutation run); `{{repo}}` is the corpus's own tree, so a
+    detector that lives in the repository stays reachable while judging a
+    fixture. Canonical shape:
+    `go -C {{repo}}/scripts/dev/x run . --root {{root}}`. Quote a token in
+    YAML — a plain scalar cannot begin with a brace.
+  - **Isolated fixtures.** A command rule's fixture arm is copied to a temp
+    directory, `git init`-ed with one commit, and that copy is evaluated. Git
+    discovers a repository by walking UP, so a detector running `git rev-parse`
+    inside a fixture previously found whatever repository enclosed the corpus:
+    an escape no argv mentions and no argv rule could close. Declarative rules
+    are not copied.
+  - **A `..` path segment in `cmd` is refused at load.** Once a rule can name
+    its tree exactly, naming it relatively has no legitimate use, and a rule
+    that does not load cannot read the wrong tree even once. The refusal is
+    about path segments: a regex like `a..b` still loads.
+
+  **Migration:** rewrite each `..`-bearing argv to the token form. A corpus
+  that does not is refused at load with the cure in the message, so nothing
+  fails silently.
+
 ## 0.6.3
 
 ### Added

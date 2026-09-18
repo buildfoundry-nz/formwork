@@ -932,10 +932,37 @@ Runs an external program.
 
 | param | meaning |
 |---|---|
-| `cmd` | argv, run with the scan root as its working directory |
+| `cmd` | argv, run with the tree under evaluation as its working directory. `{{root}}` and `{{repo}}` name the trees (below); a `..` path segment is refused at load |
 | `when` | arming condition; its one key is `paths_changed`, a non-empty glob list, and the rule runs only when a matching in-scope file is in the changeset |
 | `expect` | the expected outcome: `exit` (the exit code to accept, default 0) and `output_forbid` (a regex whose match in the output is a violation) |
 | `cost` | the escape's class: `range` (reads only a commit range; seconds), `tree` (reads the working tree once) or `heavy` (resolves an AST, replays fixtures, proves mutations). Default `heavy`; `fast` is refused, a command execs. `check --cost-max <class>` keeps the rules at or below a class; `--skip-escapes` drops every command rule whatever it declares |
+
+**The engine owns the tree a detector reads.** Two tokens are substituted in
+every argument, and they are the only way a rule can name a directory outside
+its own working directory:
+
+| token | the tree it resolves to |
+|---|---|
+| `{{root}}` | the tree UNDER EVALUATION: the repository under `check`, a fixture tree under `test`, a scratch under a downstream mutation run |
+| `{{repo}}` | the corpus's own tree, so a detector living in the repository is reachable while judging a fixture. Under `check` it is the same directory as `{{root}}` |
+
+The canonical shape for a repository-resident detector is
+`go -C {{repo}}/scripts/dev/x run . --root {{root}}`. **Quote a token in YAML**
+— a plain scalar cannot begin with a brace, so write `- '{{root}}'`, not
+`- {{root}}`.
+
+A `..` path segment anywhere in `cmd` is **refused at load**, because what such
+an argv reads is decided by the caller's working directory rather than by the
+engine: under `formwork test` that directory is the fixture tree, and `..`
+climbs out of it into the repository, so a pass fixture judged the real tree.
+The refusal is about path SEGMENTS, so a regex like `a..b` still loads.
+
+Fixtures for a command rule are judged in **isolation**: the arm is copied to a
+temp directory which is `git init`-ed with one commit, and that copy is what
+the engine evaluates. Git discovers a repository by walking up from the working
+directory, so without this a detector running `git rev-parse` inside a fixture
+found whatever repository enclosed the corpus — an escape no argv mentions.
+Declarative rules are not copied; they cannot ask git anything.
 
 `formwork lint`'s `command-trigger-armable` check reports a `when.paths_changed`
 that cannot intersect the rule's own `scope` — a gate that can never fire, in
@@ -947,7 +974,7 @@ any mode, on any commit.
   scope:
     include: ["lib/**/*.dart", "test/**/*.dart"]
   params:
-    cmd: ["dart", "analyze", "--fatal-infos"]
+    cmd: ["dart", "analyze", "--fatal-infos", "{{root}}"]
     when:
       paths_changed: ["lib/**/*.dart", "test/**/*.dart"]
     expect:

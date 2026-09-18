@@ -190,10 +190,12 @@ func TestIsolationDoesNotWriteIntoTheFixtureTree(t *testing.T) {
 // Isolation arrives WITH the migration, not ahead of it (#28). A rule whose
 // argv still names its paths relative to the caller's working directory is
 // asking for the arm-in-repository layout: its detector resolves a
-// repo-resident helper by walking out of the arm, and severing that before the
-// rule can say which tree to read turns a working fixture into a broken one
-// for no gain — the rule cannot be told the fixture either way. A rule that
-// names its tree with a token can be, so that is the one that gets isolated.
+// repo-resident helper by WALKING UP out of the arm until it finds it, and
+// severing that before the rule can say which tree to read turns a working
+// fixture into a broken one for no gain — the rule cannot be told the fixture
+// either way. A rule that names its tree with a token can be, so that is the
+// one that gets isolated. The detector here walks up exactly as the real one
+// did.
 func TestAnUnmigratedRuleKeepsItsCommittedTree(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		".formwork/formwork.yaml": "version: 1\n",
@@ -203,7 +205,7 @@ func TestAnUnmigratedRuleKeepsItsCommittedTree(t *testing.T) {
     scope:
       include: ["**/*.txt"]
     params:
-      cmd: [sh, -c, 'test -f helper/present.txt']
+      cmd: [sh, -c, 'd=$PWD; while [ "$d" != / ]; do if [ -f "$d/helper/present.txt" ]; then exit 0; fi; d=$(dirname "$d"); done; exit 1']
     cure: unmigrated rules keep reaching the repository, as they always did.
 `,
 		"helper/present.txt": "helper\n",

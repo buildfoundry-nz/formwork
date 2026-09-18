@@ -58,20 +58,51 @@ func isolationEnv() []string {
 	return env
 }
 
-// spawnsAProcess reports whether this rule execs, which is the whole
-// predicate for isolating: a rule that cannot start a process cannot ask git
-// anything, so its fixtures gain nothing from a copy and the corpus would pay
-// a tree copy per arm for almost every rule it has.
+// wantsIsolation reports whether this rule's fixtures are judged in an
+// isolated repository. Two conditions, and both are necessary.
 //
-// It reads the rule TYPE, through the same seam compile-once uses. Not
-// Checker.ProcessBound: that answers a different question — whether the argv
-// launches a heavyweight toolchain (go, dart, flutter) — and returns false for
-// `sh -c`, which execs perfectly well and is exactly how a detector asks git
-// where it is.
-func spawnsAProcess(r *config.Rule) bool {
-	_, ok := ruleCommandCmd(r)
-	return ok
+// It must EXEC. A declarative rule reads the files the walk handed it and
+// cannot ask git anything, so a copy buys nothing and the corpus would pay a
+// tree copy per arm for almost every rule it has. The test reads the rule
+// TYPE, through the seam compile-once already uses — not
+// Checker.ProcessBound, which answers whether the argv launches a heavyweight
+// toolchain and is false for `sh -c`, the very way a detector asks git where
+// it is.
+//
+// And it must NAME ITS TREE with a token. Isolation arrives WITH the
+// migration rather than ahead of it: a rule whose argv still names paths
+// relative to the caller's working directory is asking for the
+// arm-inside-the-repository layout, and its detector routinely resolves a
+// repo-resident helper by walking out of the arm. Severing that before the
+// rule can say which tree to read turns a working fixture into a broken one
+// for no gain — the rule cannot be told the fixture either way, so the
+// isolation protects nothing it can act on. Measured downstream on the first
+// whole-corpus run: a detector exiting 2 with "cannot locate the decomment
+// wrapper at scripts/dev/decomment", a helper its arm never carried.
+//
+// A migrated rule is the one that can be handed a tree, so it is the one that
+// gets a tree of its own. That makes the pairing mechanical: the argv the
+// engine substitutes into is the argv the engine isolates.
+func wantsIsolation(r *config.Rule) bool {
+	cmd, ok := ruleCommandCmd(r)
+	if !ok {
+		return false
+	}
+	for _, a := range cmd {
+		if strings.Contains(a, rootToken) || strings.Contains(a, repoToken) {
+			return true
+		}
+	}
+	return false
 }
+
+// The tokens, spelled here rather than imported, because internal/rules/command
+// keeps them unexported and this package asks a different question of them: not
+// what they resolve to, but whether a rule has adopted them.
+const (
+	rootToken = "{{root}}"
+	repoToken = "{{repo}}"
+)
 
 // isolateArm materialises src as its own repository under a temp directory
 // and returns the copy's path with a cleanup. The committed fixture tree is
@@ -189,7 +220,7 @@ func isolateArms(r *config.Rule, ruleDir string, arms []armEntry) ([]armEntry, f
 		out[i].path = filepath.Join(ruleDir, out[i].name)
 		out[i].src = out[i].path
 	}
-	if !spawnsAProcess(r) {
+	if !wantsIsolation(r) {
 		return out, func() {}, nil
 	}
 	var cleanups []func()

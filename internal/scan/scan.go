@@ -237,7 +237,12 @@ func (f *File) Variant(name string) (*File, error) {
 
 // FileSet is every scannable file under Root, sorted by Path.
 type FileSet struct {
-	Root  string
+	Root string
+	// Repo is the corpus's own tree — where .formwork lives — when that is a
+	// DIFFERENT directory from Root. Empty means "the same as Root", which
+	// is what they are for every walk of a repository; a fixture replay is
+	// the plane where they differ (#28).
+	Repo  string
 	Files []*File
 	// Ignored is every path a scan.ignore glob removed from this walk,
 	// sorted by Path. Empty unless the walk ran with ignore globs.

@@ -57,7 +57,10 @@ func (e expectation) String() string {
 //     path                      file-level
 //     path:line                 line-anchored
 //     path:line <message>       line-anchored with message pin
-func collectExpectations(fset *scan.FileSet, dir, ruleID string) ([]expectation, error) {
+//
+// dir is where the manifest IS; label is the committed path it is NAMED by,
+// which differ when the arm was isolated (#28).
+func collectExpectations(fset *scan.FileSet, dir, label, ruleID string) ([]expectation, error) {
 	marker := regexp.MustCompile(`want:\s*` + regexp.QuoteMeta(ruleID) + `(\s|$)`)
 	var out []expectation
 	for _, f := range fset.Files {
@@ -103,7 +106,7 @@ func collectExpectations(fset *scan.FileSet, dir, ruleID string) ([]expectation,
 			numTok, msg, _ := strings.Cut(rest, " ")
 			ln, convErr := strconv.Atoi(numTok)
 			if convErr != nil {
-				return nil, fmt.Errorf("%s.want:%d: bad line number %q", dir, n+1, numTok)
+				return nil, fmt.Errorf("%s.want:%d: bad line number %q", label, n+1, numTok)
 			}
 			out = append(out, expectation{Path: path, Line: ln, MessagePin: strings.TrimSpace(msg)})
 			continue

@@ -350,7 +350,32 @@ func commandArgv(r *config.Rule) []string {
 	if err := yaml.Unmarshal([]byte(raw), &p); err != nil {
 		return nil
 	}
-	return p.Cmd
+	return repoRelativeArgv(p.Cmd)
+}
+
+// repoRelativeArgv rewrites the engine's root tokens into the repo-relative
+// paths this file reasons in (formwork#28). Every path here is joined against
+// the repository root, and a rule that names its tree as {{repo}}/tools/x is
+// naming tools/x — left as written, the machinery resolver would stat a
+// directory whose name begins "{{repo}}", find nothing, and report the
+// detector's own module as an outside witness, which silences the arm on
+// exactly the rules it exists for.
+//
+// A bare {{root}} or {{repo}} is the detector's root ARGUMENT, not a path
+// inside the tree, and becomes "." — the repository itself.
+func repoRelativeArgv(cmd []string) []string {
+	out := make([]string, len(cmd))
+	for i, a := range cmd {
+		for _, tok := range []string{"{{root}}", "{{repo}}"} {
+			if a == tok {
+				a = "."
+				break
+			}
+			a = strings.ReplaceAll(a, tok+"/", "")
+		}
+		out[i] = a
+	}
+	return out
 }
 
 // fileExists reports whether abs names a regular file.

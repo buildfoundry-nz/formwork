@@ -22,6 +22,16 @@ import (
 type armEntry struct {
 	name   string
 	isFire bool
+	// path is the directory the engine EVALUATES, which is the committed
+	// fixture tree for a declarative rule and an isolated copy of it for one
+	// that spawns a process (#28). Set by isolateArms; never derived again at
+	// a call site, so no caller can reach past the isolation.
+	path string
+	// src is the COMMITTED tree, which is what every message names. An
+	// isolated copy lives under a temp directory that is deleted when the run
+	// ends, so a manifest error naming it would send the author to a path
+	// that no longer exists.
+	src string
 }
 
 // Run evaluates every rule's fixtures under root/.formwork/fixtures and
@@ -114,12 +124,19 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 			arms = append(arms, armEntry{name: name, isFire: isFire})
 		}
 
+		armTrees, releaseArms, err := isolateArms(r, ruleDir, arms)
+		if err != nil {
+			return 0, err
+		}
+		arms = armTrees
+
 		var problems []string
 		count := 0
 		if cmd, ok := ruleCommandCmd(r); ok {
 			if shape, ok := parseGoRunShape(cmd); ok && len(arms) > 0 {
-				ps, n, err := runCommandFixturesCompileOnce(r, ruleDir, arms, shape, workers)
+				ps, n, err := runCommandFixturesCompileOnce(r, arms, shape, root, workers)
 				if err != nil {
+					releaseArms()
 					return 0, err
 				}
 				problems, count = ps, n
@@ -128,8 +145,9 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 		if count == 0 {
 			for _, a := range arms {
 				count++
-				ps, err := runFixture(r, filepath.Join(ruleDir, a.name), a.isFire, workers)
+				ps, err := runFixture(r, a.path, a.src, a.isFire, root, workers)
 				if err != nil {
+					releaseArms()
 					return 0, err
 				}
 				for _, p := range ps {
@@ -137,6 +155,7 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 				}
 			}
 		}
+		releaseArms()
 
 		if count == 0 {
 			skipped++
@@ -217,13 +236,18 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 // which evaluates a rule and its prefilter-stripped twin over these same trees.
 // It needs the identical walk semantics — a repo-level prune there would hide
 // exactly the fire fixture that proves a prefilter load-bearing.
-func EvalIn(r *config.Rule, dir string, workers int) ([]finding.Finding, *scan.FileSet, error) {
+func EvalIn(r *config.Rule, dir, repo string, workers int) ([]finding.Finding, *scan.FileSet, error) {
 	r = r.CloneWithChecker(r.Checker) // never mutate the caller's rule
 	r.Allowlist = nil
 	fset, err := scan.Walk(dir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("fixture %s: %w", dir, err)
 	}
+	// The tree under evaluation is dir; the corpus is repo. Under `check`
+	// they are one directory, and a fixture is the plane where they differ —
+	// which is what lets {{repo}} reach a detector that lives in the
+	// repository while {{root}} stays inside the fixture (#28).
+	fset.Repo = repo
 	findings, err := engine.Run([]*config.Rule{r}, fset, workers)
 	if err != nil {
 		return nil, nil, fmt.Errorf("fixture %s: %w", dir, err)
@@ -233,22 +257,22 @@ func EvalIn(r *config.Rule, dir string, workers int) ([]finding.Finding, *scan.F
 
 // runFixture evaluates one fixture tree with a fresh checker and returns
 // the fixture's problems (empty = fixture behaved as declared).
-func runFixture(r *config.Rule, dir string, isFire bool, workers int) ([]string, error) {
+func runFixture(r *config.Rule, dir, src string, isFire bool, repo string, workers int) ([]string, error) {
 	fresh, err := r.Fresh()
 	if err != nil {
-		return nil, fmt.Errorf("fixture %s: %w", dir, err)
+		return nil, fmt.Errorf("fixture %s: %w", src, err)
 	}
-	findings, fset, err := EvalIn(fresh, dir, workers)
+	findings, fset, err := EvalIn(fresh, dir, repo, workers)
 	if err != nil {
 		return nil, err
 	}
-	return judgeFixture(r, dir, isFire, findings, fset)
+	return judgeFixture(r, dir, src, isFire, findings, fset)
 }
 
 // judgeFixture compares findings against the fixture's declared expectations.
-func judgeFixture(r *config.Rule, dir string, isFire bool, findings []finding.Finding, fset *scan.FileSet) ([]string, error) {
+func judgeFixture(r *config.Rule, dir, src string, isFire bool, findings []finding.Finding, fset *scan.FileSet) ([]string, error) {
 	findings = finding.Unsuppressed(findings)
-	expected, err := collectExpectations(fset, dir, r.ID)
+	expected, err := collectExpectations(fset, dir, src, r.ID)
 	if err != nil {
 		return nil, err
 	}

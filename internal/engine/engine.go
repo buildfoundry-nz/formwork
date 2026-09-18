@@ -340,7 +340,7 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 		t0 := time.Now()
 		switch fin := r.Checker.(type) {
 		case rules.ErrFinalizer:
-			matches, err = finalizeErr(r, fin, rules.FinalizeContext{Root: fset.Root})
+			matches, err = finalizeErr(r, fin, rules.FinalizeContext{Root: fset.Root, Repo: fset.Repo})
 		case rules.Finalizer:
 			matches, err = finalize(r, fin)
 		}

@@ -256,7 +256,7 @@ func prefilterFixtureDifferential(r *config.Rule, root, lit string) (problems []
 		if err != nil {
 			return nil, true, err
 		}
-		base, _, err := fixturetest.EvalIn(fresh, dir, 0)
+		base, _, err := fixturetest.EvalIn(fresh, dir, root, 0)
 		if err != nil {
 			return nil, true, err
 		}
@@ -265,7 +265,7 @@ func prefilterFixtureDifferential(r *config.Rule, root, lit string) (problems []
 			return nil, true, err
 		}
 		sc := freshStripped.Checker.(rules.Prefiltered).WithoutPrefilter()
-		strippedFindings, _, err := fixturetest.EvalIn(freshStripped.CloneWithChecker(sc), dir, 0)
+		strippedFindings, _, err := fixturetest.EvalIn(freshStripped.CloneWithChecker(sc), dir, root, 0)
 		if err != nil {
 			return nil, true, err
 		}

@@ -96,6 +96,9 @@ func newCommand(params *yaml.Node) (rules.Checker, error) {
 	if len(p.Cmd) == 0 {
 		return nil, errors.New("command: params.cmd must be a non-empty argv list")
 	}
+	if arg, bad := parentSegmentArg(p.Cmd); bad {
+		return nil, refuseParentSegment(arg)
+	}
 	c := &command{cmd: p.Cmd, expectExit: 0, cost: rules.CostHeavy}
 	if p.Expect.Exit != nil {
 		c.expectExit = *p.Expect.Exit
@@ -300,7 +303,8 @@ func (c *command) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) 
 	if err := ensureRepositoryAgreement(ctx.Root); err != nil {
 		return nil, fmt.Errorf("command %v: %w", c.cmd, err)
 	}
-	cmd := exec.Command(c.cmd[0], c.cmd[1:]...)
+	argv := substituteRoots(c.cmd, ctx.Root, ctx.Repo)
+	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = ctx.Root
 	if c.workDir != "" {
 		cmd.Dir = c.workDir

@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+### Added
+
+- Phase 2 dispatches each pool **longest-first** (#26). A pool sends its rules
+  to an unbuffered channel, so the first `width` it sends are the first
+  `width` that start — and in declaration order a corpus with one dominant
+  rule spends its opening slots on cheap rules while the long pole waits.
+  Measured downstream over 12+ CI runs on a 4 vCPU runner: `check` is 72-80%
+  of the guardrail step, two rules span 241-429s and 238-462s of a window
+  whose mean concurrency is 3.1-3.3 of 4 slots, and one of the two does not
+  begin until t+59/72/75s. Rules are now ranked by a previous run's measured
+  duration when one is supplied, then by declared `cost:`
+  (`heavy` > `tree` > `range` > `fast` — the ranking `--cost-max` already
+  filters by), then not at all: the sort is stable, so rules neither key
+  separates dispatch exactly as they did before.
+
+  `check --durations <report>` supplies the measured half. The report is one a
+  `check -format json` whole-tree run wrote — v0.6.2 already put a `durations`
+  object in it — so a CI job feeds the next run its predecessor's report and
+  keeps no state of its own. A rule the report does not name is *unknown*, not
+  fast: it is dispatched after every measured rule rather than ranked against
+  them at zero. The flag is refused (exit 2), never ignored, when it cannot be
+  honoured — an unreadable, unparseable or timing-less report, or the flag
+  alongside `--staged`/`--range`, which collect no timings and evaluate
+  through a path that takes no hint.
+
+  **Ordering is not a verdict.** Findings are sorted before they are rendered,
+  the engine error is selected by declaration index rather than by which rule
+  failed first, and the ordering is a permutation — so verdicts, findings and
+  error selection are byte-identical with and without a hint, under any hint.
+  Proved over this repository's own corpora, including the 704-rule
+  `examples/palletra-port-full`, against an inverted hint
+  (`TestDispatchOrderChangesNoVerdictOnTheRepoCorpora`). Without the flag,
+  output is byte-identical to 0.6.3 across all seven corpora and all three
+  formats. Pool widths, the heavy gate and the cost partition are unchanged
+  (#67, #81, #83), as is phase 1, whose pools dispatch file indices and so
+  have no rule order to recover.
+
+  `engine.RunTimedHinted` is `RunTimed` plus the hint; `Run` and `RunTimed`
+  are unchanged wrappers, so no existing caller moves.
+
 ## 0.6.3
 
 ### Added

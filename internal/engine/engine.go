@@ -133,6 +133,27 @@ func Run(rls []*config.Rule, fset *scan.FileSet, workers int) ([]finding.Finding
 // same way (a rule is complete only once every file has been visited), so the
 // callback is finalizer-only; Timing covers both phases either way.
 func RunTimed(rls []*config.Rule, fset *scan.FileSet, workers int, progress func(ruleID string, elapsed time.Duration)) ([]finding.Finding, Timing, error) {
+	return RunTimedHinted(rls, fset, workers, progress, nil)
+}
+
+// RunTimedHinted is RunTimed plus a scheduling hint: prior (may be nil) maps a
+// rule id to the wall time that rule took in a PREVIOUS run — a Timing this
+// package returned, carried across runs by `check --durations <report>`.
+//
+// It changes the ORDER phase 2 dispatches each pool in, and nothing else. See
+// dispatchOrder for what the order is and why the head start it recovers is
+// worth taking. The hint is advisory in the strongest sense: a stale entry, a
+// partial map, a rule the map does not name, or no map at all are all ordinary
+// inputs, because dispatch order cannot reach a verdict. Findings are sorted
+// before they are returned, the engine error is selected by declaration index,
+// and the ordering is a permutation, so every rule still runs exactly once
+// (TestRunDispatchOrderRunsEveryRuleExactlyOnceInEveryPool).
+//
+// It does NOT re-order phase 1, and there is nothing there to re-order for:
+// phase 1's pools dispatch FILE indices, and a worker evaluates every
+// applicable rule against the file it took, so a rule's position in that inner
+// loop does not decide when it starts.
+func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progress func(ruleID string, elapsed time.Duration), prior Timing) ([]finding.Finding, Timing, error) {
 	timing := make(Timing, len(rls))
 	if workers <= 0 {
 		workers = runtime.GOMAXPROCS(0)
@@ -377,6 +398,11 @@ func RunTimed(rls []*config.Rule, fset *scan.FileSet, workers int, progress func
 			warn:  heavyGateWarn,
 		}
 	}
+	// Ordering lives HERE rather than at the three dispatch sites below, and
+	// that is the altitude question rather than a tidiness one: every pool this
+	// run has goes through this function, so no branch — including the
+	// --workers 1 merge, which builds a slice none of the partition owns — can
+	// acquire an unordered dispatch by being added later.
 	runPool := func(idx []int, width int) {
 		if len(idx) == 0 {
 			return
@@ -392,7 +418,7 @@ func RunTimed(rls []*config.Rule, fset *scan.FileSet, workers int, progress func
 				}
 			}()
 		}
-		for _, i := range idx {
+		for _, i := range dispatchOrder(idx, fins, prior) {
 			jobs <- i
 		}
 		close(jobs)

@@ -1117,6 +1117,47 @@ against.
 whole-tree mode; its modes are tabled under
 [Introspection](#formwork-scope-file-set-modes).
 
+### Scheduling: `--durations`
+
+Phase 2 dispatches its pools **longest-first**. When one rule spans most of a
+run, the order the pool starts its rules in decides whether that rule begins at
+t+0 or after the cheap ones ahead of it have drained a pool's worth of slots —
+and the corpus does not declare its rules in cost order, because nothing asks
+it to.
+
+Two things rank a pool, in this order:
+
+1. **A previous run's measured durations**, supplied with
+   `check --durations <report>`. The report is one a `check -format json`
+   whole-tree run wrote: it already carries a `durations` object (rule id →
+   milliseconds), so a CI job can hand the next run its predecessor's report and
+   keep no state of its own. A rule the report does not name is *unknown*, not
+   fast — it is dispatched after every measured rule rather than ranked against
+   them at zero.
+2. **The declared `cost:` class**, heaviest first (`heavy` > `tree` > `range` >
+   `fast`) — the same ranking `--cost-max` filters by. This needs no previous
+   run and is what applies when no report is supplied.
+
+Rules that neither key separates are dispatched exactly as they are declared.
+
+```sh
+formwork check -format json > guardrails.json          # run 1 writes the timings
+formwork check --durations guardrails.json             # run 2 schedules from them
+```
+
+**Ordering is never a verdict.** It cannot change which findings a run reports
+(findings are sorted before they are rendered), which engine error it reports
+(that is selected by declaration order, not by which rule failed first), or
+which rules run. A stale, partial or absent report is therefore always safe —
+the worst a wrong duration can do is spend the window in the order the engine
+would otherwise have chosen. A rule that depended on dispatch order would
+already be broken under the existing pool, and still is.
+
+The flag is refused (exit 2), never ignored, when it cannot be honoured: an
+unreadable or unparseable report, a report carrying no `durations` object (a
+`human`/`github` report, or one from a `--staged`/`--range` run, which collect
+no timings), or the flag combined with `--staged`/`--range`.
+
 ---
 
 ## Introspection

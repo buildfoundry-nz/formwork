@@ -162,3 +162,41 @@ func TestAFixtureRunIsDeclaredToTheDetector(t *testing.T) {
 		t.Fatalf("a check run must NOT declare itself a fixture, got %q — a detector would skip its range plane in CI", b)
 	}
 }
+
+// Both tokens resolve to ABSOLUTE paths, whatever the caller spelled.
+//
+// `formwork test -C .` makes the corpus root the literal ".", and a relative
+// token is resolved by the CHILD against its own working directory — which is
+// the tree under evaluation, not the corpus. {{repo}} then pointed back at the
+// fixture: measured downstream as `go: cannot find main module, but found
+// .git/config in <the fixture>`, a detector looking for its own module inside
+// the tree it was judging.
+func TestTokensResolveToAbsolutePaths(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	out := filepath.Join(root, "seen.txt")
+	c := build(t, "cmd: [sh, -c, 'printf \"%s\\n%s\\n\" \"$1\" \"$2\" > \"$3\"', sh, '{{root}}', '{{repo}}', '"+out+"']")
+	// The shapes a CLI actually produces: -C . and a relative subdirectory.
+	if _, err := finalizeIn(t, c, root, "."); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want two paths, got %q", b)
+	}
+	for _, got := range lines {
+		if !filepath.IsAbs(got) {
+			t.Fatalf("token resolved to %q, which the child resolves against ITS OWN working directory — the tree under evaluation, not the corpus", got)
+		}
+	}
+	if lines[1] != wd {
+		t.Fatalf("{{repo}} for a corpus rooted at \".\" resolved to %q, want the process working directory %q", lines[1], wd)
+	}
+}

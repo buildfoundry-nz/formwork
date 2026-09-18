@@ -35,10 +35,20 @@ const (
 
 // substituteRoots resolves the two tokens in every argument. repo empty means
 // "the same tree as root" (the check plane).
+//
+// Both are made ABSOLUTE first. A CLI is routinely given a relative root —
+// `formwork test -C .` makes it the literal "." — and a relative path in the
+// argv is resolved by the CHILD against ITS working directory, which is the
+// tree under evaluation. {{repo}} would then name the fixture rather than the
+// corpus: measured as `go: cannot find main module, but found .git/config in
+// <the fixture>`, a detector hunting its own module inside the tree it was
+// asked to judge. An unresolvable path is left as written rather than
+// guessed at; the tool's own error then names it.
 func substituteRoots(argv []string, root, repo string) []string {
 	if repo == "" {
 		repo = root
 	}
+	root, repo = absOrAsWritten(root), absOrAsWritten(repo)
 	out := make([]string, len(argv))
 	for i, a := range argv {
 		// Substitution only. The arguments are not all paths — a pattern, a
@@ -49,6 +59,17 @@ func substituteRoots(argv []string, root, repo string) []string {
 		out[i] = strings.ReplaceAll(a, repoToken, repo)
 	}
 	return out
+}
+
+// absOrAsWritten makes p absolute, or returns it unchanged when the working
+// directory cannot be read — the tool's own error is a better report than a
+// path this function invented.
+func absOrAsWritten(p string) string {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return p
+	}
+	return abs
 }
 
 // parentSegmentArg reports the first argument naming a parent directory, and

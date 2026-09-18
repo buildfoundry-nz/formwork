@@ -136,3 +136,67 @@ func TestNonPathDotsStillLoad(t *testing.T) {
 		}
 	}
 }
+
+// A detector judging a FIXTURE is told so, because some planes exist only in
+// the live repository and a fixture cannot fake them (#28). A commit-range
+// scan is the case: an isolated fixture is a real repository, so "is this a
+// git checkout" answers yes, but it has no upstream branch for a default
+// range to resolve against — and a detector that cannot tell the planes apart
+// either dies on the missing ref or skips the range in CI too, which is a
+// gate that fails open.
+func TestAFixtureRunIsDeclaredToTheDetector(t *testing.T) {
+	root, repo := t.TempDir(), t.TempDir()
+	out := filepath.Join(root, "seen.txt")
+	c := build(t, "cmd: [sh, -c, 'printf \"%s\" \"${FORMWORK_FIXTURE:-unset}\" > \"$1\"', sh, '"+out+"']")
+	ef := c.(rules.ErrFinalizer)
+	if _, err := ef.FinalizeErr(rules.FinalizeContext{Root: root, Repo: repo, Fixture: true}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(out); string(b) != "1" {
+		t.Fatalf("a fixture run must declare itself, got %q", b)
+	}
+	if _, err := ef.FinalizeErr(rules.FinalizeContext{Root: root, Repo: root}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(out); string(b) != "unset" {
+		t.Fatalf("a check run must NOT declare itself a fixture, got %q — a detector would skip its range plane in CI", b)
+	}
+}
+
+// Both tokens resolve to ABSOLUTE paths, whatever the caller spelled.
+//
+// `formwork test -C .` makes the corpus root the literal ".", and a relative
+// token is resolved by the CHILD against its own working directory — which is
+// the tree under evaluation, not the corpus. {{repo}} then pointed back at the
+// fixture: measured downstream as `go: cannot find main module, but found
+// .git/config in <the fixture>`, a detector looking for its own module inside
+// the tree it was judging.
+func TestTokensResolveToAbsolutePaths(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	out := filepath.Join(root, "seen.txt")
+	c := build(t, "cmd: [sh, -c, 'printf \"%s\\n%s\\n\" \"$1\" \"$2\" > \"$3\"', sh, '{{root}}', '{{repo}}', '"+out+"']")
+	// The shapes a CLI actually produces: -C . and a relative subdirectory.
+	if _, err := finalizeIn(t, c, root, "."); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want two paths, got %q", b)
+	}
+	for _, got := range lines {
+		if !filepath.IsAbs(got) {
+			t.Fatalf("token resolved to %q, which the child resolves against ITS OWN working directory — the tree under evaluation, not the corpus", got)
+		}
+	}
+	if lines[1] != wd {
+		t.Fatalf("{{repo}} for a corpus rooted at \".\" resolved to %q, want the process working directory %q", lines[1], wd)
+	}
+}

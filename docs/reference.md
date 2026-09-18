@@ -957,12 +957,28 @@ engine: under `formwork test` that directory is the fixture tree, and `..`
 climbs out of it into the repository, so a pass fixture judged the real tree.
 The refusal is about path SEGMENTS, so a regex like `a..b` still loads.
 
-Fixtures for a command rule are judged in **isolation**: the arm is copied to a
-temp directory which is `git init`-ed with one commit, and that copy is what
-the engine evaluates. Git discovers a repository by walking up from the working
-directory, so without this a detector running `git rev-parse` inside a fixture
-found whatever repository enclosed the corpus — an escape no argv mentions.
-Declarative rules are not copied; they cannot ask git anything.
+Fixtures for a command rule **that names its tree with a token** are judged in
+**isolation**: the arm is copied to a temp directory which is `git init`-ed with
+one commit, and that copy is what the engine evaluates. Git discovers a
+repository by walking up from the working directory, so without this a detector
+running `git rev-parse` inside a fixture found whatever repository enclosed the
+corpus — an escape no argv mentions.
+
+An isolated fixture run sets **`FORMWORK_FIXTURE=1`** in the tool's
+environment. It is the one thing a detector cannot see for itself: an isolated
+fixture IS a real git repository, so "am I in a checkout" answers yes, but it
+has no upstream branch for a default range to resolve against. A detector with
+a commit-range plane reads this to skip that plane for a fixture while keeping
+it mandatory in CI — without it the detector either dies on the missing ref or
+skips the range everywhere, which is a gate that fails open. Nothing is ever
+removed from the environment (see the refusal above); this is added.
+
+Isolation arrives **with** the migration, not ahead of it. A rule still naming
+paths relative to its caller is asking for the arm-inside-the-repository
+layout, and its detector commonly resolves a repo-resident helper by walking up
+out of the arm; severing that before the rule can be told which tree to read
+breaks a working fixture for no gain. Adopt a token and the rule gets a tree of
+its own. Declarative rules are never copied — they cannot ask git anything.
 
 `formwork lint`'s `command-trigger-armable` check reports a `when.paths_changed`
 that cannot intersect the rule's own `scope` — a gate that can never fire, in

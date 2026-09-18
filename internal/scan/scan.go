@@ -242,8 +242,12 @@ type FileSet struct {
 	// DIFFERENT directory from Root. Empty means "the same as Root", which
 	// is what they are for every walk of a repository; a fixture replay is
 	// the plane where they differ (#28).
-	Repo  string
-	Files []*File
+	Repo string
+	// Fixture is true when this walk is of a FIXTURE tree rather than the
+	// live repository — derived, never set by hand: it is exactly the case
+	// where the corpus root and the tree under evaluation differ (#28).
+	Fixture bool
+	Files   []*File
 	// Ignored is every path a scan.ignore glob removed from this walk,
 	// sorted by Path. Empty unless the walk ran with ignore globs.
 	Ignored []Ignored

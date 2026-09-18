@@ -46,6 +46,15 @@ type FinalizeContext struct {
 	// repository stays reachable while judging a fixture (#28). Empty means
 	// "same as Root", so a caller that predates the field is unchanged.
 	Repo string
+	// Fixture is true when the tree under evaluation is a FIXTURE rather than
+	// the live repository. Some planes exist only in the live tree and a
+	// fixture cannot fake them. A commit-range scan is the case: an isolated
+	// fixture IS a real repository, so "is this a git checkout" answers yes,
+	// but it has no upstream branch for a default range to resolve against —
+	// and a detector that cannot tell the planes apart either dies on the
+	// missing ref or skips its range in CI as well, which is a gate that
+	// fails open. It reaches the tool as FORMWORK_FIXTURE=1 (#28).
+	Fixture bool
 }
 
 // ErrFinalizer is a Finalizer that may fail and needs run context. Rule types

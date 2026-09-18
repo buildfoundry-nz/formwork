@@ -248,6 +248,10 @@ func EvalIn(r *config.Rule, dir, repo string, workers int) ([]finding.Finding, *
 	// which is what lets {{repo}} reach a detector that lives in the
 	// repository while {{root}} stays inside the fixture (#28).
 	fset.Repo = repo
+	// A fixture plane is exactly where the two differ. Derived rather than
+	// passed, so no caller can evaluate a fixture while telling the detector
+	// it is judging the live repository.
+	fset.Fixture = repo != "" && repo != dir
 	findings, err := engine.Run([]*config.Rule{r}, fset, workers)
 	if err != nil {
 		return nil, nil, fmt.Errorf("fixture %s: %w", dir, err)

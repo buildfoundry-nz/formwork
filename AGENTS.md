@@ -180,7 +180,7 @@ they gate `make verify` exactly like this repo's own rules do.
   warehouse fit-out domain, each with its own `.formwork/`. 4 of the 5
   palletra-port corpora carry a source tree to check those rules against; the
   fifth, `examples/palletra-port-full`, carries none at all, so its board reads
-  `formwork lint: 4/4 checks passed (2 skipped: empty-scope, exemption-hygiene —
+  `formwork lint: 5/5 checks passed (2 skipped: empty-scope, exemption-hygiene —
   see .formwork/lint.yaml)` — over no files both of those skipped checks would
   report 100% of what they can see and discriminate nothing, and
   the corpus is proved by `formwork test` against its own fixtures instead.

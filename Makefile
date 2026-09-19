@@ -316,7 +316,7 @@ selftest:
 # one where only unfalsifiable checks did. `palletra-port-full` is the corpus
 # where that gap would show, and this is its board:
 #
-#   formwork lint: 4/4 checks passed (2 skipped: empty-scope, exemption-hygiene — see .formwork/lint.yaml)
+#   formwork lint: 5/5 checks passed (2 skipped: empty-scope, exemption-hygiene — see .formwork/lint.yaml)
 #
 # Four checks run over a 704-rule corpus. rules-present cannot fail there, but
 # the other three can: prose-not-truncated reads the rule files' own prose,

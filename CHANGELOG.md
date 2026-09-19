@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- regexp2 matches now have a 2s Go-runtime outer bound in addition to the 1s
+  `MatchTimeout`. Under CPU load regexp2's userspace fastclock can starve so
+  `MatchTimeout` never fires and a match flatlines for tens of minutes; the
+  outer bound still fails closed (exit 2).
+
 ## 0.7.1
 
 ### Changed

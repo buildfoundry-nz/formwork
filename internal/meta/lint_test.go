@@ -44,7 +44,7 @@ func TestLintExemptsExternalToolRulesFromFixturesAndScope(t *testing.T) {
 		"[empty-scope] OK",
 		"gofmt-clean: command rule (external tool, heavy — NO firing proof: no fixtures)",
 		"no-new-panic: git-diff rule (external tool, heavy — NO firing proof: no fixtures)",
-		"formwork lint: 5/5 checks passed",
+		"formwork lint: 6/6 checks passed",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)

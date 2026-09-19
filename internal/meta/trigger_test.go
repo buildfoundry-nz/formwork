@@ -164,7 +164,12 @@ func TestLintOmitsTriggerCheckWhenNoRuleDeclaresAWhenGate(t *testing.T) {
 	if strings.Contains(out, "command-trigger-armable") {
 		t.Fatalf("the check must be absent when no rule declares a trigger:\n%s", out)
 	}
-	if !strings.Contains(out, "formwork lint: 5/5 checks passed") {
+	// Six, not five: this corpus declares a command rule, so
+	// command-argv-no-parent-segment HAS a subject and belongs in the
+	// denominator. The property under test is untouched — a check with
+	// nothing to judge stays out, which is what the absent
+	// command-trigger-armable asserts above.
+	if !strings.Contains(out, "formwork lint: 6/6 checks passed") {
 		t.Fatalf("denominator must not grow for a check that had nothing to judge:\n%s", out)
 	}
 }

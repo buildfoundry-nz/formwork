@@ -326,6 +326,17 @@ func lintTree(cfg *config.Config, root string, w io.Writer, fset *scan.FileSet, 
 		*total++
 	}
 
+	// command-argv-no-parent-segment (#28): an argv that names a parent
+	// directory reads differently on every plane the engine evaluates, and
+	// under `test` it climbs out of the fixture into the repository. The
+	// check lives here rather than at load so a corpus written before the
+	// tokens stays READABLE by the tools that read history — see
+	// parentsegment.go for why that mattered enough to move it.
+	if anyCommandArgv(cfg.Rules) && !pol.skipping(w, "command-argv-no-parent-segment") {
+		*failed += emit(w, "command-argv-no-parent-segment", commandArgvProblems(cfg.Rules))
+		*total++
+	}
+
 	// The engine evaluation is only run when something actually consumes its
 	// results: allowlist staleness needs real findings to compare against, the
 	// escape-hatch enumeration's suppressed-finding listing (G1) needs them,

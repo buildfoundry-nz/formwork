@@ -39,10 +39,17 @@
     cannot see for itself, since an isolated fixture is a real repository with
     no upstream branch, so a commit-range plane can skip a fixture while
     staying mandatory in CI.
-  - **A `..` path segment in `cmd` is refused at load.** Once a rule can name
-    its tree exactly, naming it relatively has no legitimate use, and a rule
-    that does not load cannot read the wrong tree even once. The refusal is
-    about path segments: a regex like `a..b` still loads.
+  - **A `..` path segment in `cmd` is reported by `formwork lint`**
+    (`command-argv-no-parent-segment`). Once a rule can name its tree exactly,
+    naming it relatively has no legitimate use. The check is about path
+    segments: a regex like `a..b` is not reported.
+
+    It began as a load refusal, which is stronger — a rule that does not load
+    cannot read the wrong tree even once — and moved to lint because refusing
+    at load makes every pre-token corpus unreadable, including to a vacuity
+    census loading the corpus at a change's merge base to tell an added rule
+    from an edited one. Lint runs on every pull request, so the shape still
+    cannot merge; history stays readable.
 
   **Migration:** rewrite each `..`-bearing argv to the token form. A corpus
   that does not is refused at load with the cure in the message, so nothing

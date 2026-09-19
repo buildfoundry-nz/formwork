@@ -951,11 +951,19 @@ The canonical shape for a repository-resident detector is
 — a plain scalar cannot begin with a brace, so write `- '{{root}}'`, not
 `- {{root}}`.
 
-A `..` path segment anywhere in `cmd` is **refused at load**, because what such
-an argv reads is decided by the caller's working directory rather than by the
-engine: under `formwork test` that directory is the fixture tree, and `..`
-climbs out of it into the repository, so a pass fixture judged the real tree.
-The refusal is about path SEGMENTS, so a regex like `a..b` still loads.
+A `..` path segment anywhere in `cmd` is reported by **`formwork lint`**
+(`command-argv-no-parent-segment`), because what such an argv reads is decided
+by the caller's working directory rather than by the engine: under `formwork
+test` that directory is the fixture tree, and `..` climbs out of it into the
+repository, so a pass fixture judged the real tree. The check is about path
+SEGMENTS, so a regex like `a..b` is not reported.
+
+It is a lint check rather than a load refusal so that a corpus written before
+the tokens stays READABLE. The tools that read an old corpus are the ones that
+need it most: a vacuity census loads the corpus as it stood at a change's
+merge base to tell an added rule from an edited one, and a base it cannot
+parse is a transition it cannot compute. Lint runs on every pull request, so
+the shape still cannot merge.
 
 Fixtures for a command rule **that names its tree with a token** are judged in
 **isolation**: the arm is copied to a temp directory which is `git init`-ed with

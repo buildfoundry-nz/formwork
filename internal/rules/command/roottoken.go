@@ -72,8 +72,12 @@ func absOrAsWritten(p string) string {
 	return abs
 }
 
-// parentSegmentArg reports the first argument naming a parent directory, and
-// is the load-time refusal's whole judgement.
+// Argv is the rule's command line, for the surfaces that must judge it
+// without running it — `formwork lint`'s parent-segment check. A copy, so a
+// caller cannot reach in and rewrite what the rule will execute.
+func (c *command) Argv() []string { return append([]string(nil), c.cmd...) }
+
+// ParentSegmentArg reports the first argument naming a parent directory.
 //
 // It asks about PATH SEGMENTS, not about the characters `..`: an argument is
 // refused when a `..` stands alone between separators (or at either end),
@@ -82,7 +86,7 @@ func absOrAsWritten(p string) string {
 // none is refused. Getting that boundary wrong in the refusing direction
 // would be the worse failure — a corpus that cannot express a pattern is a
 // corpus that reaches for a shell script instead.
-func parentSegmentArg(argv []string) (string, bool) {
+func ParentSegmentArg(argv []string) (string, bool) {
 	for _, a := range argv {
 		for _, field := range strings.Fields(a) {
 			for _, seg := range strings.Split(filepath.ToSlash(field), "/") {
@@ -95,9 +99,17 @@ func parentSegmentArg(argv []string) (string, bool) {
 	return "", false
 }
 
-// refuseParentSegment is the load-time error, and it carries the migration
+// ParentSegmentProblem is the lint finding, and it carries the migration
 // rather than the complaint: the author is one substitution away from the
 // shape that works on every plane.
-func refuseParentSegment(arg string) error {
-	return fmt.Errorf("command: argv %q names a parent directory, so what this detector reads is decided by the caller's working directory rather than by the engine — under `formwork test` that is the fixture tree and `..` climbs out of it into the repository (#28). Name the tree instead: {{root}} is the tree under evaluation and {{repo}} the corpus's own tree, e.g. `go -C {{repo}}/scripts/dev/x run . --root {{root}}`", arg)
+//
+// It is a LINT check rather than a load refusal (#28). Refusing at load makes
+// every corpus written before the tokens unreadable, and the tools that read
+// one are the ones that most need to: the vacuity census loads the corpus as
+// it stood at a change's merge base to tell a new rule from an edited one,
+// and a base it cannot parse is a transition it cannot compute. Lint runs on
+// every pull request, so the shape still cannot merge; what it no longer does
+// is make history unreadable.
+func ParentSegmentProblem(ruleID, arg string) string {
+	return fmt.Sprintf("%s: argv %q names a parent directory, so what this detector reads is decided by the caller's working directory rather than by the engine — under `formwork test` that is the fixture tree and `..` climbs out of it into the repository (#28). Name the tree instead: {{root}} is the tree under evaluation and {{repo}} the corpus's own tree, e.g. `go -C {{repo}}/scripts/dev/x run . --root {{root}}`", ruleID, arg)
 }

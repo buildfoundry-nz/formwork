@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/buildfoundry-nz/formwork/internal/rules"
+	"github.com/buildfoundry-nz/formwork/internal/rules/command"
 	"gopkg.in/yaml.v3"
 )
 
@@ -92,10 +93,15 @@ func TestRepoFallsBackToRootWhenUnset(t *testing.T) {
 	}
 }
 
-// A `..` segment in argv is refused at LOAD, not reported at run: once a rule
-// can name its tree exactly, naming it relatively has no legitimate use, and a
-// rule that does not load cannot read the wrong tree even once.
-func TestParentSegmentInArgvIsRefusedAtLoad(t *testing.T) {
+// A `..` segment in argv is REPORTED, and the rule still LOADS (#28).
+//
+// The refusal began at load — a rule that does not load cannot read the wrong
+// tree even once — and moved to `formwork lint` when it turned out to make
+// every pre-token corpus unreadable, including for the vacuity census, which
+// must load the corpus at a change's merge base to tell an added rule from an
+// edited one. Lint runs on every pull request, so the shape still cannot
+// merge; history stays readable.
+func TestParentSegmentInArgvIsReportedNotRefusedAtLoad(t *testing.T) {
 	for _, argv := range []string{
 		"cmd: [go, -C, scripts/dev/x, run, ., --root, ../../..]",
 		"cmd: [go, run, -C, ../tools/x, .]",
@@ -109,17 +115,25 @@ func TestParentSegmentInArgvIsRefusedAtLoad(t *testing.T) {
 		if err := yaml.Unmarshal([]byte(argv), &doc); err != nil {
 			t.Fatal(err)
 		}
-		_, err := f(doc.Content[0])
-		if err == nil {
-			t.Fatalf("%s: loaded; a parent segment in argv must be refused", argv)
+		c, err := f(doc.Content[0])
+		if err != nil {
+			t.Fatalf("%s: refused at load; the check belongs to lint so a pre-token corpus stays readable: %v", argv, err)
 		}
-		if !strings.Contains(err.Error(), "{{root}}") {
-			t.Fatalf("%s: refusal does not name the cure: %v", argv, err)
+		a, ok := c.(interface{ Argv() []string })
+		if !ok {
+			t.Fatalf("%s: the checker does not state its argv, so lint cannot judge it", argv)
+		}
+		arg, bad := command.ParentSegmentArg(a.Argv())
+		if !bad {
+			t.Fatalf("%s: the parent segment was not reported", argv)
+		}
+		if msg := command.ParentSegmentProblem("some-rule", arg); !strings.Contains(msg, "{{root}}") {
+			t.Fatalf("%s: the finding does not name the cure: %s", argv, msg)
 		}
 	}
 }
 
-// A `..` inside a value that is not a path must still load: the refusal is
+// A `..` inside a value that is not a path is not reported: the check is
 // about path segments, and a regex or a message legitimately carries dots.
 func TestNonPathDotsStillLoad(t *testing.T) {
 	for _, argv := range []string{
@@ -131,8 +145,13 @@ func TestNonPathDotsStillLoad(t *testing.T) {
 		if err := yaml.Unmarshal([]byte(argv), &doc); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := f(doc.Content[0]); err != nil {
+		c, err := f(doc.Content[0])
+		if err != nil {
 			t.Fatalf("%s: refused, but it names no parent directory: %v", argv, err)
+		}
+		a := c.(interface{ Argv() []string })
+		if arg, bad := command.ParentSegmentArg(a.Argv()); bad {
+			t.Fatalf("%s: reported %q, but it names no parent directory", argv, arg)
 		}
 	}
 }

@@ -96,9 +96,6 @@ func newCommand(params *yaml.Node) (rules.Checker, error) {
 	if len(p.Cmd) == 0 {
 		return nil, errors.New("command: params.cmd must be a non-empty argv list")
 	}
-	if arg, bad := parentSegmentArg(p.Cmd); bad {
-		return nil, refuseParentSegment(arg)
-	}
 	c := &command{cmd: p.Cmd, expectExit: 0, cost: rules.CostHeavy}
 	if p.Expect.Exit != nil {
 		c.expectExit = *p.Expect.Exit

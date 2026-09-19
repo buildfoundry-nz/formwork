@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.1
+
+### Changed
+
+- The parent-segment check moved from a load refusal to `formwork lint`
+  (`command-argv-no-parent-segment`) — see the 0.7.0 entry below, which this
+  amends before anyone depends on the refusal. A corpus written before the
+  tokens loads again, which is what a tool reading history needs; lint runs
+  on every pull request, so the shape still cannot merge.
+
 ## 0.7.0
 
 ### Changed (breaking)

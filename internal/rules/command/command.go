@@ -361,7 +361,11 @@ func (c *command) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) 
 		return []rules.Match{{Message: verdict + snippet(out)}}, nil
 	}
 	if c.outputForbid != nil && c.outputForbid.Match(out) {
-		return []rules.Match{{Message: fmt.Sprintf("command %v output matched forbidden pattern %q%s", c.cmd, c.outputForbid.String(), snippet(out))}}, nil
+		verdict := fmt.Sprintf("command %v output matched forbidden pattern %q", c.cmd, c.outputForbid.String())
+		if c.located {
+			return locatedMatches(out, ctx.Root, verdict), nil
+		}
+		return []rules.Match{{Message: verdict + snippet(out)}}, nil
 	}
 	return nil, nil
 }

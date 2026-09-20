@@ -577,11 +577,18 @@ func WithCompiledBinary(c rules.Checker, binary string, progArgs []string, workD
 		return c, false
 	}
 	// Build a fresh value — do not copy atomic.Bool fields (vet: copies lock).
+	//
+	// EVERY DECLARATION THE AUTHOR MADE BELONGS IN THIS LIST. Because the copy
+	// is by hand, a field added to the rule and forgotten here is dropped with
+	// nothing said: the corpus declares it, check honours it, and fixture
+	// replay quietly does not. params.output was lost exactly that way, which
+	// is why compiled_carries_output_test.go pins it.
 	return &command{
 		cmd:                   append([]string{binary}, progArgs...),
 		whenGlobs:             orig.whenGlobs,
 		expectExit:            orig.expectExit,
 		outputForbid:          orig.outputForbid,
+		located:               orig.located,
 		workDir:               workDir,
 		collapseExitLikeGoRun: true,
 	}, true

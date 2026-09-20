@@ -84,6 +84,38 @@ output: findings-v1`, root)
 	}
 }
 
+// A command rule has TWO ways to fire — a wrong exit, and output matching
+// expect.output_forbid — and a declaration has to mean the same thing on both.
+// A contract honoured on one path and not the other is worse than no contract:
+// the rule author reads "declared" and gets locations sometimes, which is the
+// hardest kind of gap to notice.
+func TestCommandOutput_ForbiddenOutputAlsoYieldsLocatedFindings(t *testing.T) {
+	root := rootWithFile(t, "pkg/thing.go")
+	got := findingsAt(t, `cmd: [sh, -c, "echo 'pkg/thing.go:12: holds a frozen symbol'"]
+output: findings-v1
+expect:
+  output_forbid: "frozen symbol"`, root)
+
+	var located, pathless int
+	for _, m := range got {
+		if m.Path == "pkg/thing.go" && m.Line == 12 {
+			located++
+		}
+		if m.Path == "" {
+			pathless++
+			if !strings.Contains(m.Message, "forbidden pattern") {
+				t.Fatalf("pathless finding = %q, want it to name the forbidden-pattern verdict", m.Message)
+			}
+		}
+	}
+	if located != 1 {
+		t.Fatalf("got %d located finding(s), want 1 — a forbidden-output fire must locate like an exit fire:\n%+v", located, got)
+	}
+	if pathless != 1 {
+		t.Fatalf("got %d pathless finding(s), want exactly 1 carrying the verdict:\n%+v", pathless, got)
+	}
+}
+
 // A rule that declares NOTHING behaves exactly as it does today: one message,
 // no path. Every corpus predating this contract must load and report
 // unchanged, which is what makes adoption per-rule rather than a migration.

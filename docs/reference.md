@@ -936,6 +936,30 @@ Runs an external program.
 | `when` | arming condition; its one key is `paths_changed`, a non-empty glob list, and the rule runs only when a matching in-scope file is in the changeset |
 | `expect` | the expected outcome: `exit` (the exit code to accept, default 0) and `output_forbid` (a regex whose match in the output is a violation) |
 | `cost` | the escape's class: `range` (reads only a commit range; seconds), `tree` (reads the working tree once) or `heavy` (resolves an AST, replays fixtures, proves mutations). Default `heavy`; `fast` is refused, a command execs. `check --cost-max <class>` keeps the rules at or below a class; `--skip-escapes` drops every command rule whatever it declares |
+| `output` | `findings-v1`, declaring that the detector prints LOCATIONS the engine should read. Optional; absent keeps the single pathless message, and an unknown value is refused at load |
+
+**A command rule's finding has no path unless it declares one.** That is the
+default because a detector's output is free text, and a finding pointing at a
+file that is not there is worse than one pointing nowhere. A rule that opts in
+with `output: findings-v1` promises its detector prints the convention every Go
+tool already speaks:
+
+```
+path: message
+path:line: message
+```
+
+The engine then reports one finding per line, with `path` and `line` populated.
+The discriminator is the TREE, not the punctuation: a candidate is taken only
+when it is relative, climbs nowhere, and the tree under evaluation actually has
+it — so ordinary output like `go: downloading …` is never mistaken for a
+location. Lines that are not locations are not dropped; they join the engine's
+own verdict (`exited 1, want 0`, or the forbidden-pattern message) in a single
+pathless finding, so a detector's header, summary and cure still arrive.
+
+Both ways a command rule fires — a wrong exit and `expect.output_forbid` —
+honour the declaration identically.
+
 
 **The engine owns the tree a detector reads.** Two tokens are substituted in
 every argument, and they are the only way a rule can name a directory outside

@@ -48,6 +48,13 @@ type commandParams struct {
 	// it did. fast is refused: a command execs, and the one thing --skip-
 	// escapes must keep meaning is "no escape runs".
 	Cost string `yaml:"cost"`
+	// Output declares that this detector speaks a structured output contract,
+	// so the engine can read LOCATIONS out of it instead of keeping one
+	// pathless message. Absent is today's behaviour, which is what makes
+	// adoption per-rule rather than a migration; the only accepted value is
+	// findings-v1, and an unknown one is refused rather than ignored — a
+	// declaration that silently does nothing is its own defect class.
+	Output string `yaml:"output"`
 }
 
 type whenSpec struct {
@@ -78,6 +85,11 @@ type command struct {
 	collapseExitLikeGoRun bool
 	// cost is the declared class (#22); heavy when the rule declared none.
 	cost rules.Cost
+	// located records that the rule declared params.output: findings-v1, so a
+	// fire reads LOCATIONS out of the detector's output instead of keeping
+	// one pathless message. False for every rule that declared nothing, which
+	// is what keeps an existing corpus reporting exactly as it did.
+	located bool
 
 	sawTrigger atomic.Bool
 	// skipped records that FinalizeErr took the when: early return. It is a
@@ -126,6 +138,13 @@ func newCommand(params *yaml.Node) (rules.Checker, error) {
 			return nil, fmt.Errorf("command: invalid expect.output_forbid: %w", err)
 		}
 		c.outputForbid = re
+	}
+	switch p.Output {
+	case "":
+	case findingsFormat:
+		c.located = true
+	default:
+		return nil, fmt.Errorf("command: invalid output %q (want %s)", p.Output, findingsFormat)
 	}
 	return c, nil
 }
@@ -335,7 +354,11 @@ func (c *command) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) 
 		exit = 1
 	}
 	if exit != c.expectExit {
-		return []rules.Match{{Message: fmt.Sprintf("command %v exited %d, want %d%s", c.cmd, exit, c.expectExit, snippet(out))}}, nil
+		verdict := fmt.Sprintf("command %v exited %d, want %d", c.cmd, exit, c.expectExit)
+		if c.located {
+			return locatedMatches(out, ctx.Root, verdict), nil
+		}
+		return []rules.Match{{Message: verdict + snippet(out)}}, nil
 	}
 	if c.outputForbid != nil && c.outputForbid.Match(out) {
 		return []rules.Match{{Message: fmt.Sprintf("command %v output matched forbidden pattern %q%s", c.cmd, c.outputForbid.String(), snippet(out))}}, nil

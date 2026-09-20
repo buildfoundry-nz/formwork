@@ -1,6 +1,7 @@
 package command
 
 import (
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -53,6 +54,35 @@ func parseFindings(out []byte, exists func(rel string) bool) []rules.Match {
 		located = append(located, rules.Match{Message: strings.Join(remainder, "\n")})
 	}
 	return located
+}
+
+// locatedMatches is the fire path for a rule that declared the contract: the
+// detector's located lines, plus one pathless finding carrying the engine's
+// own verdict and whatever the detector said that was not a location.
+//
+// The verdict leads that pathless finding rather than trailing it, because
+// "exited 1, want 0" is the engine's claim and the remainder is the tool's.
+// It is never omitted: a located finding says what is wrong with a file and
+// does not say the detector disagreed with its expected exit at all.
+func locatedMatches(out []byte, root, verdict string) []rules.Match {
+	exists := func(rel string) bool {
+		_, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rel)))
+		return err == nil
+	}
+	found := parseFindings(out, exists)
+	located := make([]rules.Match, 0, len(found)+1)
+	remainder := ""
+	for _, m := range found {
+		if m.Path == "" {
+			remainder = m.Message
+			continue
+		}
+		located = append(located, m)
+	}
+	if remainder != "" {
+		verdict += "\n" + remainder
+	}
+	return append(located, rules.Match{Message: verdict})
 }
 
 // parseLocationLine reads one `path[:line]: message` line. The path is taken

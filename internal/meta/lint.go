@@ -596,6 +596,8 @@ func exemptionHygiene(cfg *config.Config, fset *scan.FileSet, findings []finding
 			}
 			problems = append(problems, fmt.Sprintf("%s: scope.exclude %q matches no files and has no justification comment", r.ID, e.Glob))
 		}
+		// scope.not_declaring's dead-entry hygiene; notdeclaring.go says why.
+		problems = append(problems, notDeclaringProblems(r, fset)...)
 		// A rule that hasn't opted into markers (`except: {marker: true}`)
 		// never honors formwork:allow for it either way, so "missing a
 		// reason" would be misleading — adding one still wouldn't exempt

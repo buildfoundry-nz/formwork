@@ -195,6 +195,20 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 						if !pr.rule.Applies(f.Path()) {
 							continue
 						}
+						// scope.not_declaring is the one scope test a path
+						// cannot answer, so it is asked here where the bytes
+						// are. A read error is NOT treated as "declares
+						// nothing": that would silently evaluate a file whose
+						// declaration could not be seen, which is the
+						// fail-open direction. evalFile re-reads and reports
+						// the error through the ordinary path instead.
+						if len(pr.rule.NotDeclaring()) > 0 {
+							if content, cerr := f.Content(); cerr == nil {
+								if _, declined := pr.rule.DeclinedBy(content); declined {
+									continue
+								}
+							}
+						}
 						t0 := time.Now()
 						fds, err := evalFile(pr.rule, f, ex)
 						mu.Lock()

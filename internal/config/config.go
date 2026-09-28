@@ -49,6 +49,10 @@ type Rule struct {
 	include  []string
 	exclude  []string
 	minFiles int
+	// notDeclaring is scope.not_declaring: literal markers a file may declare
+	// to remove itself from this rule. Content-keyed, unlike every other scope
+	// field — see scopedeclare.go for why a declaration is not a path.
+	notDeclaring []string
 	// excludeComments is parallel to exclude: the YAML head/line comment on
 	// each scope.exclude entry (trimmed, without the leading '#'), empty when
 	// the entry had no comment. Lint uses it to require a justification on
@@ -457,6 +461,11 @@ type scopeSpec struct {
 	// is a number an operator has to reason about, and silently reading a
 	// different number than the one written is the wrong way to be lenient.
 	MinFiles yaml.Node `yaml:"min_files"`
+	// NotDeclaring is a raw node so parseNotDeclaring can refuse the shapes
+	// yaml.v3 would otherwise coerce (a bare string reads as one marker to a
+	// human and decodes to a scalar), and so an empty marker — which matches
+	// every file — is an error rather than a rule scoped to nothing.
+	NotDeclaring yaml.Node `yaml:"not_declaring"`
 }
 
 type exceptSpec struct {
@@ -643,6 +652,10 @@ func compile(spec ruleSpec, dir string) (*Rule, error) {
 	if err != nil {
 		return nil, fmt.Errorf("rule %s: scope.min_files: %w", spec.ID, err)
 	}
+	notDeclaring, err := parseNotDeclaring(spec.Scope.NotDeclaring)
+	if err != nil {
+		return nil, fmt.Errorf("rule %s: scope.not_declaring: %w", spec.ID, err)
+	}
 	rule, err := New(spec.ID, spec.Type, sev, spec.Cure, spec.Scope.Include, excludeGlobs, spec.Except.Paths, checker)
 	if err != nil {
 		return nil, err
@@ -651,6 +664,7 @@ func compile(spec ruleSpec, dir string) (*Rule, error) {
 		return nil, err
 	}
 	rule.excludeComments = excludeComments
+	rule.notDeclaring = notDeclaring
 	rule.Origin = spec.Origin
 	rule.Tags = spec.Tags
 	if rule.FixtureExempt, err = fixtureExemptReason(spec.ID, spec.FixtureExempt); err != nil {

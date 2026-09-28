@@ -227,13 +227,51 @@ func (c *pairConsistency) unitText(f *scan.File) ([]string, error) {
 	return f.Lines()
 }
 
+// countIn is the COUNTING GRAIN, and it differs by mode for a reason measured
+// on a real corpus rather than chosen.
+//
+// Per line (the default) one matching line counts ONCE, however many times the
+// pattern occurs on it. That is what same-file counted before multiline existed,
+// and the countable-obligation arm is built on it: the obligation is "each
+// triggering LINE carries its companion", so a clause with two matching keys is
+// one obligation, not two.
+//
+// Counting occurrences instead silently broke that. Measured on TakeoffQS's
+// pipeline-events-read-ordering-is-total, whose pass fixture is:
+//
+//	a AS (... ORDER BY (x IS NOT NULL) DESC, elapsed_at DESC, occurred_at DESC, CASE ... , id ASC),
+//
+// The trigger `[a-z_]+_at DESC` occurs twice on that line — `elapsed_at` is a
+// SECONDARY sort key inside the same ORDER BY, not a second ordering needing
+// its own tiebreak — so the file counted 5 triggers against 3 companions and a
+// correct, deliberate pass fixture began to fire. The rule had not changed and
+// neither had the tree.
+//
+// Under multiline the unit is the whole FILE, so per-unit counting would cap
+// every count at 1 and make the countable arm meaningless. There occurrences
+// are the only available grain, and there is no prior semantics to preserve
+// because multiline did not reach pair-consistency before it was unified.
+func (c *pairConsistency) countIn(m rxmatch.Matcher, s string) (int, error) {
+	if c.multiline {
+		return m.CountMatches(s)
+	}
+	ok, err := m.MatchString(s)
+	if err != nil {
+		return 0, err
+	}
+	if ok {
+		return 1, nil
+	}
+	return 0, nil
+}
+
 func (c *pairConsistency) scanFile(f *scan.File) (triggerLine int, requiresMatched bool, nTrigger, nRequires int, err error) {
 	text, err := c.unitText(f)
 	if err != nil {
 		return 0, false, 0, 0, err
 	}
 	for i, s := range text {
-		nt, err := c.trigger.CountMatches(s)
+		nt, err := c.countIn(c.trigger, s)
 		if err != nil {
 			return 0, false, 0, 0, err
 		}
@@ -256,7 +294,7 @@ func (c *pairConsistency) scanFile(f *scan.File) (triggerLine int, requiresMatch
 				}
 			}
 		}
-		nr, err := c.requires.CountMatches(s)
+		nr, err := c.countIn(c.requires, s)
 		if err != nil {
 			return 0, false, 0, 0, err
 		}

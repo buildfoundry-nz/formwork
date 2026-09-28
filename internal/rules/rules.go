@@ -36,7 +36,25 @@ type Finalizer interface {
 // per-file Checker path does not — chiefly the repository root external-tool
 // rules (`command`, `git-diff`) must run in.
 type FinalizeContext struct {
+	// Root is the tree UNDER EVALUATION: the repository under `check`, a
+	// fixture tree under `test`, a scratch under a downstream mutation run.
+	// It is what {{root}} resolves to.
 	Root string
+	// Repo is the corpus's own tree — where .formwork lives. Under `check`
+	// the two are the same directory; under `test` Root is the fixture and
+	// Repo is the repository, which is how a detector that lives in the
+	// repository stays reachable while judging a fixture (#28). Empty means
+	// "same as Root", so a caller that predates the field is unchanged.
+	Repo string
+	// Fixture is true when the tree under evaluation is a FIXTURE rather than
+	// the live repository. Some planes exist only in the live tree and a
+	// fixture cannot fake them. A commit-range scan is the case: an isolated
+	// fixture IS a real repository, so "is this a git checkout" answers yes,
+	// but it has no upstream branch for a default range to resolve against —
+	// and a detector that cannot tell the planes apart either dies on the
+	// missing ref or skips its range in CI as well, which is a gate that
+	// fails open. It reaches the tool as FORMWORK_FIXTURE=1 (#28).
+	Fixture bool
 }
 
 // ErrFinalizer is a Finalizer that may fail and needs run context. Rule types

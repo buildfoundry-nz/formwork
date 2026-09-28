@@ -54,7 +54,7 @@
 #
 # THE BOARD IS FALSIFIABLE, and this is the board:
 #
-#   formwork lint: 4/4 checks passed (2 skipped: empty-scope, exemption-hygiene — see .formwork/lint.yaml)
+#   formwork lint: 5/5 checks passed (2 skipped: empty-scope, exemption-hygiene — see .formwork/lint.yaml)
 #
 # rules-present cannot fail on a corpus this size and is not claimed to.
 # prose-not-truncated (#59) reads the rule files' own prose and IS falsifiable

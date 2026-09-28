@@ -225,6 +225,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	costMax := fs.String("cost-max", "", "run only rules at or below this cost class: fast | range | tree | heavy (a pre-push hook can afford range; exclusive with --skip-escapes)")
 	format := fs.String("format", "human", "output format: human | json | github")
 	progress := fs.Bool("progress", false, "stream one line per finalizer to stderr as it completes (rule id + cumulative ms) — liveness for long whole-corpus runs; never affects stdout or the verdict")
+	durations := fs.String("durations", "", durationsUsage)
 	cfg, ok := parseAndLoad(fs, args, root, stderr)
 	if !ok {
 		return 2
@@ -275,6 +276,21 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "formwork: --cost-max %q is not a cost class (want fast, range, tree or heavy)\n", *costMax)
 			return 2
 		}
+	}
+	// --durations is read here, with the other flag guards and before the walk,
+	// because an unreadable report is a problem with the invocation rather than
+	// with the tree — and a refusal that arrives after a whole-corpus scan has
+	// cost the operator the run it was refusing. priorDurations owns every arm,
+	// including why each is a refusal rather than a shrug.
+	fileSetFlag := ""
+	if *staged {
+		fileSetFlag = "--staged"
+	} else if *rangeSpec != "" {
+		fileSetFlag = "--range"
+	}
+	prior, ok := priorDurations(*durations, fileSetFlag, stderr)
+	if !ok {
+		return 2
 	}
 	// --lane selects which rules run; --staged/--range select which files.
 	// Unknown lane → config error (exit 2).
@@ -544,7 +560,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	} else {
 		summary.RulesMatchingNoFiles = meta.RulesMatchingNoFiles(rls, fset.Files)
 		var runTiming engine.Timing
-		findings, runTiming, err = engine.RunTimed(rls, fset, *workers, onProgress)
+		findings, runTiming, err = engine.RunTimedHinted(rls, fset, *workers, onProgress, prior)
 		if err != nil {
 			fmt.Fprintln(stderr, "formwork:", err)
 			return 2

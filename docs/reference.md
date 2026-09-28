@@ -946,10 +946,85 @@ Runs an external program.
 
 | param | meaning |
 |---|---|
-| `cmd` | argv, run with the scan root as its working directory |
+| `cmd` | argv, run with the tree under evaluation as its working directory. `{{root}}` and `{{repo}}` name the trees (below); a `..` path segment is refused at load |
 | `when` | arming condition; its one key is `paths_changed`, a non-empty glob list, and the rule runs only when a matching in-scope file is in the changeset |
 | `expect` | the expected outcome: `exit` (the exit code to accept, default 0) and `output_forbid` (a regex whose match in the output is a violation) |
 | `cost` | the escape's class: `range` (reads only a commit range; seconds), `tree` (reads the working tree once) or `heavy` (resolves an AST, replays fixtures, proves mutations). Default `heavy`; `fast` is refused, a command execs. `check --cost-max <class>` keeps the rules at or below a class; `--skip-escapes` drops every command rule whatever it declares |
+| `output` | `findings-v1`, declaring that the detector prints LOCATIONS the engine should read. Optional; absent keeps the single pathless message, and an unknown value is refused at load |
+
+**A command rule's finding has no path unless it declares one.** That is the
+default because a detector's output is free text, and a finding pointing at a
+file that is not there is worse than one pointing nowhere. A rule that opts in
+with `output: findings-v1` promises its detector prints the convention every Go
+tool already speaks:
+
+```
+path: message
+path:line: message
+```
+
+The engine then reports one finding per line, with `path` and `line` populated.
+The discriminator is the TREE, not the punctuation: a candidate is taken only
+when it is relative, climbs nowhere, and the tree under evaluation actually has
+it — so ordinary output like `go: downloading …` is never mistaken for a
+location. Lines that are not locations are not dropped; they join the engine's
+own verdict (`exited 1, want 0`, or the forbidden-pattern message) in a single
+pathless finding, so a detector's header, summary and cure still arrive.
+
+Both ways a command rule fires — a wrong exit and `expect.output_forbid` —
+honour the declaration identically.
+
+
+**The engine owns the tree a detector reads.** Two tokens are substituted in
+every argument, and they are the only way a rule can name a directory outside
+its own working directory:
+
+| token | the tree it resolves to |
+|---|---|
+| `{{root}}` | the tree UNDER EVALUATION: the repository under `check`, a fixture tree under `test`, a scratch under a downstream mutation run |
+| `{{repo}}` | the corpus's own tree, so a detector living in the repository is reachable while judging a fixture. Under `check` it is the same directory as `{{root}}` |
+
+The canonical shape for a repository-resident detector is
+`go -C {{repo}}/scripts/dev/x run . --root {{root}}`. **Quote a token in YAML**
+— a plain scalar cannot begin with a brace, so write `- '{{root}}'`, not
+`- {{root}}`.
+
+A `..` path segment anywhere in `cmd` is reported by **`formwork lint`**
+(`command-argv-no-parent-segment`), because what such an argv reads is decided
+by the caller's working directory rather than by the engine: under `formwork
+test` that directory is the fixture tree, and `..` climbs out of it into the
+repository, so a pass fixture judged the real tree. The check is about path
+SEGMENTS, so a regex like `a..b` is not reported.
+
+It is a lint check rather than a load refusal so that a corpus written before
+the tokens stays READABLE. The tools that read an old corpus are the ones that
+need it most: a vacuity census loads the corpus as it stood at a change's
+merge base to tell an added rule from an edited one, and a base it cannot
+parse is a transition it cannot compute. Lint runs on every pull request, so
+the shape still cannot merge.
+
+Fixtures for a command rule **that names its tree with a token** are judged in
+**isolation**: the arm is copied to a temp directory which is `git init`-ed with
+one commit, and that copy is what the engine evaluates. Git discovers a
+repository by walking up from the working directory, so without this a detector
+running `git rev-parse` inside a fixture found whatever repository enclosed the
+corpus — an escape no argv mentions.
+
+An isolated fixture run sets **`FORMWORK_FIXTURE=1`** in the tool's
+environment. It is the one thing a detector cannot see for itself: an isolated
+fixture IS a real git repository, so "am I in a checkout" answers yes, but it
+has no upstream branch for a default range to resolve against. A detector with
+a commit-range plane reads this to skip that plane for a fixture while keeping
+it mandatory in CI — without it the detector either dies on the missing ref or
+skips the range everywhere, which is a gate that fails open. Nothing is ever
+removed from the environment (see the refusal above); this is added.
+
+Isolation arrives **with** the migration, not ahead of it. A rule still naming
+paths relative to its caller is asking for the arm-inside-the-repository
+layout, and its detector commonly resolves a repo-resident helper by walking up
+out of the arm; severing that before the rule can be told which tree to read
+breaks a working fixture for no gain. Adopt a token and the rule gets a tree of
+its own. Declarative rules are never copied — they cannot ask git anything.
 
 `formwork lint`'s `command-trigger-armable` check reports a `when.paths_changed`
 that cannot intersect the rule's own `scope` — a gate that can never fire, in
@@ -961,7 +1036,7 @@ any mode, on any commit.
   scope:
     include: ["lib/**/*.dart", "test/**/*.dart"]
   params:
-    cmd: ["dart", "analyze", "--fatal-infos"]
+    cmd: ["dart", "analyze", "--fatal-infos", "{{root}}"]
     when:
       paths_changed: ["lib/**/*.dart", "test/**/*.dart"]
     expect:
@@ -1130,6 +1205,47 @@ against.
 `formwork scope` selects a changeset with the same two flags and no
 whole-tree mode; its modes are tabled under
 [Introspection](#formwork-scope-file-set-modes).
+
+### Scheduling: `--durations`
+
+Phase 2 dispatches its pools **longest-first**. When one rule spans most of a
+run, the order the pool starts its rules in decides whether that rule begins at
+t+0 or after the cheap ones ahead of it have drained a pool's worth of slots —
+and the corpus does not declare its rules in cost order, because nothing asks
+it to.
+
+Two things rank a pool, in this order:
+
+1. **A previous run's measured durations**, supplied with
+   `check --durations <report>`. The report is one a `check -format json`
+   whole-tree run wrote: it already carries a `durations` object (rule id →
+   milliseconds), so a CI job can hand the next run its predecessor's report and
+   keep no state of its own. A rule the report does not name is *unknown*, not
+   fast — it is dispatched after every measured rule rather than ranked against
+   them at zero.
+2. **The declared `cost:` class**, heaviest first (`heavy` > `tree` > `range` >
+   `fast`) — the same ranking `--cost-max` filters by. This needs no previous
+   run and is what applies when no report is supplied.
+
+Rules that neither key separates are dispatched exactly as they are declared.
+
+```sh
+formwork check -format json > guardrails.json          # run 1 writes the timings
+formwork check --durations guardrails.json             # run 2 schedules from them
+```
+
+**Ordering is never a verdict.** It cannot change which findings a run reports
+(findings are sorted before they are rendered), which engine error it reports
+(that is selected by declaration order, not by which rule failed first), or
+which rules run. A stale, partial or absent report is therefore always safe —
+the worst a wrong duration can do is spend the window in the order the engine
+would otherwise have chosen. A rule that depended on dispatch order would
+already be broken under the existing pool, and still is.
+
+The flag is refused (exit 2), never ignored, when it cannot be honoured: an
+unreadable or unparseable report, a report carrying no `durations` object (a
+`human`/`github` report, or one from a `--staged`/`--range` run, which collect
+no timings), or the flag combined with `--staged`/`--range`.
 
 ---
 

@@ -23,6 +23,19 @@ type goRunShape struct {
 	treePaths []string // arm-relative paths that must be byte-identical across arms
 }
 
+// namesTheRepo reports whether the detector this shape builds lives in the
+// corpus rather than in the arm — i.e. the argv reached it through {{repo}}
+// (#28). Such a detector has no per-arm copy, so there is nothing to compile
+// once or to compare for identity across arms.
+func (s goRunShape) namesTheRepo() bool {
+	for _, v := range append(append([]string{s.chDir}, s.buildArgs...), s.progArgs...) {
+		if strings.Contains(v, "{{repo}}") || strings.Contains(v, "{{root}}") {
+			return true
+		}
+	}
+	return false
+}
+
 // parseGoRunShape recognises the three corpus shapes:
 //
 //	go run file.go [file.go...] [args...]
@@ -377,10 +390,10 @@ func buildDetectorOnce(arm string, shape goRunShape, outBin string) error {
 	return nil
 }
 
-func runArmsCold(r *config.Rule, ruleDir string, arms []armEntry, workers int) (problems []string, count int, err error) {
+func runArmsCold(r *config.Rule, arms []armEntry, repo string, workers int) (problems []string, count int, err error) {
 	for _, a := range arms {
 		count++
-		ps, err := runFixture(r, filepath.Join(ruleDir, a.name), a.isFire, workers)
+		ps, err := runFixture(r, a.path, a.src, a.isFire, repo, workers)
 		if err != nil {
 			return nil, count, err
 		}
@@ -395,22 +408,30 @@ func runArmsCold(r *config.Rule, ruleDir string, arms []armEntry, workers int) (
 // reuses the binary across every arm. On hash or build failure it falls back to
 // the cold go-run path so the arm still surfaces the toolchain/path error. Only
 // a detector-tree digest mismatch across arms is an engine error (exit 2).
-func runCommandFixturesCompileOnce(r *config.Rule, ruleDir string, arms []armEntry, shape goRunShape, workers int) (problems []string, count int, err error) {
+func runCommandFixturesCompileOnce(r *config.Rule, arms []armEntry, shape goRunShape, repo string, workers int) (problems []string, count int, err error) {
 	if len(arms) == 0 {
 		return nil, 0, nil
 	}
-	first := filepath.Join(ruleDir, arms[0].name)
+	// A detector named through {{repo}} lives in the repository, not in the
+	// arm: there is no per-arm copy to compile once or to compare across
+	// arms, and the argv the cold path runs already resolves both tokens.
+	// Compile-once exists to avoid recompiling a COPY per arm, so with no
+	// copy there is nothing for it to do (#28).
+	if shape.namesTheRepo() {
+		return runArmsCold(r, arms, repo, workers)
+	}
+	first := arms[0].path
 	wantDigest, err := treeDigest(first, shape)
 	if err != nil {
 		// Same posture as build failure: incomplete/broken detector trees are
 		// per-arm findings via cold go run, not a suite-wide abort.
-		return runArmsCold(r, ruleDir, arms, workers)
+		return runArmsCold(r, arms, repo, workers)
 	}
 	for _, a := range arms[1:] {
-		armPath := filepath.Join(ruleDir, a.name)
+		armPath := a.path
 		got, err := treeDigest(armPath, shape)
 		if err != nil {
-			return runArmsCold(r, ruleDir, arms, workers)
+			return runArmsCold(r, arms, repo, workers)
 		}
 		if got != wantDigest {
 			return nil, 0, fmt.Errorf("fixtures: rule %s: detector tree for %v differs between %s and %s — compile-once requires byte-identical detector copies across arms (diff the paths and restore them, or split the rule)",
@@ -429,17 +450,17 @@ func runCommandFixturesCompileOnce(r *config.Rule, ruleDir string, arms []armEnt
 	if err := buildDetectorOnce(first, shape, bin); err != nil {
 		// Fall back to cold go run so a broken detector still fails the arm
 		// with the toolchain's own message rather than a silent pass.
-		return runArmsCold(r, ruleDir, arms, workers)
+		return runArmsCold(r, arms, repo, workers)
 	}
 
 	for _, a := range arms {
 		count++
-		armPath := filepath.Join(ruleDir, a.name)
+		armPath := a.path
 		workDir := ""
 		if shape.chDir != "" {
 			workDir = filepath.Join(armPath, filepath.FromSlash(shape.chDir))
 		}
-		ps, err := runFixtureCompiled(r, armPath, a.isFire, workers, bin, shape.progArgs, workDir)
+		ps, err := runFixtureCompiled(r, armPath, a.src, a.isFire, repo, workers, bin, shape.progArgs, workDir)
 		if err != nil {
 			return nil, count, err
 		}
@@ -450,19 +471,19 @@ func runCommandFixturesCompileOnce(r *config.Rule, ruleDir string, arms []armEnt
 	return problems, count, nil
 }
 
-func runFixtureCompiled(r *config.Rule, dir string, isFire bool, workers int, binary string, progArgs []string, workDir string) ([]string, error) {
+func runFixtureCompiled(r *config.Rule, dir, src string, isFire bool, repo string, workers int, binary string, progArgs []string, workDir string) ([]string, error) {
 	fresh, err := r.Fresh()
 	if err != nil {
-		return nil, fmt.Errorf("fixture %s: %w", dir, err)
+		return nil, fmt.Errorf("fixture %s: %w", src, err)
 	}
 	rewritten, ok := command.WithCompiledBinary(fresh.Checker, binary, progArgs, workDir)
 	if !ok {
-		return runFixture(r, dir, isFire, workers)
+		return runFixture(r, dir, src, isFire, repo, workers)
 	}
 	fresh = fresh.CloneWithChecker(rewritten)
-	findings, fset, err := EvalIn(fresh, dir, workers)
+	findings, fset, err := EvalIn(fresh, dir, repo, workers)
 	if err != nil {
 		return nil, err
 	}
-	return judgeFixture(r, dir, isFire, findings, fset)
+	return judgeFixture(r, dir, src, isFire, findings, fset)
 }

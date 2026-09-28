@@ -70,13 +70,48 @@ func (m re2Matcher) FindLine(content string) (int, bool, error) {
 	return 1 + strings.Count(content[:loc[0]], "\n"), true, nil
 }
 
+// regexp2MatchTimeout is handed to dlclark/regexp2. regexp2OuterBound is a
+// Go-runtime timer around each call, because regexp2's own MatchTimeout is
+// enforced by a userspace fastclock that starves under CPU load — so the
+// timeout goes unobserved and a match flatlines for tens of minutes
+// (TakeoffQS #18189 / #16809). This timer does not depend on that clock.
+var (
+	regexp2MatchTimeout = time.Second
+	regexp2OuterBound   = 2 * time.Second
+)
+
+// regexp2Call bounds one regexp2 call with regexp2OuterBound. When it fires the
+// call returns an error, so the rule fails closed (exit 2) rather than reading
+// as a clean pass — the same contract MatchString documents below. The matcher
+// goroutine is reaped when the check process exits on that error.
+func regexp2Call[T any](fn func() (T, error)) (T, error) {
+	type out struct {
+		v   T
+		err error
+	}
+	ch := make(chan out, 1)
+	go func() {
+		v, err := fn()
+		ch <- out{v, err}
+	}()
+	timer := time.NewTimer(regexp2OuterBound)
+	defer timer.Stop()
+	select {
+	case r := <-ch:
+		return r.v, r.err
+	case <-timer.C:
+		var zero T
+		return zero, fmt.Errorf("match exceeded %s hard bound", regexp2OuterBound)
+	}
+}
+
 type pcreMatcher struct {
 	re  *regexp2.Regexp
 	src string
 }
 
 func (m pcreMatcher) FindLine(content string) (int, bool, error) {
-	mm, err := m.re.FindStringMatch(content)
+	mm, err := regexp2Call(func() (*regexp2.Match, error) { return m.re.FindStringMatch(content) })
 	if err != nil {
 		return 0, false, fmt.Errorf("regexp2 %q: %w", m.src, err)
 	}
@@ -106,14 +141,14 @@ func (m pcreMatcher) FindLine(content string) (int, bool, error) {
 // suite until that file or the timing-out regexp2 rule is fixed — the intended,
 // recoverable outcome over a silent under-report.
 func (m pcreMatcher) MatchString(s string) (bool, error) {
-	ok, err := m.re.MatchString(s)
+	ok, err := regexp2Call(func() (bool, error) { return m.re.MatchString(s) })
 	if err != nil {
 		return false, fmt.Errorf("regexp2 %q: %w", m.src, err)
 	}
 	return ok, nil
 }
 func (m pcreMatcher) FindIndex(s string) (int, bool, error) {
-	mm, err := m.re.FindStringMatch(s)
+	mm, err := regexp2Call(func() (*regexp2.Match, error) { return m.re.FindStringMatch(s) })
 	if err != nil {
 		return -1, false, fmt.Errorf("regexp2 %q: %w", m.src, err)
 	}
@@ -131,14 +166,14 @@ func (m pcreMatcher) FindIndex(s string) (int, bool, error) {
 // the matches found so far: a short count clears a countable obligation, which
 // is the silent pass this interface exists to prevent.
 func (m pcreMatcher) CountMatches(s string) (int, error) {
-	mm, err := m.re.FindStringMatch(s)
+	mm, err := regexp2Call(func() (*regexp2.Match, error) { return m.re.FindStringMatch(s) })
 	if err != nil {
 		return 0, fmt.Errorf("regexp2 %q: %w", m.src, err)
 	}
 	n := 0
 	for mm != nil {
 		n++
-		mm, err = m.re.FindNextMatch(mm)
+		mm, err = regexp2Call(func() (*regexp2.Match, error) { return m.re.FindNextMatch(mm) })
 		if err != nil {
 			return 0, fmt.Errorf("regexp2 %q: %w", m.src, err)
 		}
@@ -164,7 +199,7 @@ func Compile(what, pattern, syntax string) (Matcher, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: invalid regexp2 pattern: %w", what, err)
 		}
-		re.MatchTimeout = time.Second
+		re.MatchTimeout = regexp2MatchTimeout
 		return pcreMatcher{re: re, src: pattern}, nil
 	default:
 		return nil, fmt.Errorf("%s: unknown syntax %q (want re2 or regexp2)", what, syntax)

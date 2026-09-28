@@ -48,6 +48,13 @@ type commandParams struct {
 	// it did. fast is refused: a command execs, and the one thing --skip-
 	// escapes must keep meaning is "no escape runs".
 	Cost string `yaml:"cost"`
+	// Output declares that this detector speaks a structured output contract,
+	// so the engine can read LOCATIONS out of it instead of keeping one
+	// pathless message. Absent is today's behaviour, which is what makes
+	// adoption per-rule rather than a migration; the only accepted value is
+	// findings-v1, and an unknown one is refused rather than ignored — a
+	// declaration that silently does nothing is its own defect class.
+	Output string `yaml:"output"`
 }
 
 type whenSpec struct {
@@ -78,6 +85,11 @@ type command struct {
 	collapseExitLikeGoRun bool
 	// cost is the declared class (#22); heavy when the rule declared none.
 	cost rules.Cost
+	// located records that the rule declared params.output: findings-v1, so a
+	// fire reads LOCATIONS out of the detector's output instead of keeping
+	// one pathless message. False for every rule that declared nothing, which
+	// is what keeps an existing corpus reporting exactly as it did.
+	located bool
 
 	sawTrigger atomic.Bool
 	// skipped records that FinalizeErr took the when: early return. It is a
@@ -126,6 +138,13 @@ func newCommand(params *yaml.Node) (rules.Checker, error) {
 			return nil, fmt.Errorf("command: invalid expect.output_forbid: %w", err)
 		}
 		c.outputForbid = re
+	}
+	switch p.Output {
+	case "":
+	case findingsFormat:
+		c.located = true
+	default:
+		return nil, fmt.Errorf("command: invalid output %q (want %s)", p.Output, findingsFormat)
 	}
 	return c, nil
 }
@@ -300,8 +319,18 @@ func (c *command) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) 
 	if err := ensureRepositoryAgreement(ctx.Root); err != nil {
 		return nil, fmt.Errorf("command %v: %w", c.cmd, err)
 	}
-	cmd := exec.Command(c.cmd[0], c.cmd[1:]...)
+	argv := substituteRoots(c.cmd, ctx.Root, ctx.Repo)
+	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = ctx.Root
+	if ctx.Fixture {
+		// ADDED, never removed: the contract above is that this package takes
+		// nothing out of the tool's environment, and this takes nothing out.
+		// It states which plane the tool is in, because the tool cannot tell
+		// an isolated fixture from the live repository by looking — both are
+		// real git repositories — and the difference decides whether a
+		// commit-range plane can run at all (#28).
+		cmd.Env = append(cmd.Environ(), "FORMWORK_FIXTURE=1")
+	}
 	if c.workDir != "" {
 		cmd.Dir = c.workDir
 	}
@@ -325,10 +354,18 @@ func (c *command) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) 
 		exit = 1
 	}
 	if exit != c.expectExit {
-		return []rules.Match{{Message: fmt.Sprintf("command %v exited %d, want %d%s", c.cmd, exit, c.expectExit, snippet(out))}}, nil
+		verdict := fmt.Sprintf("command %v exited %d, want %d", c.cmd, exit, c.expectExit)
+		if c.located {
+			return locatedMatches(out, ctx.Root, verdict), nil
+		}
+		return []rules.Match{{Message: verdict + snippet(out)}}, nil
 	}
 	if c.outputForbid != nil && c.outputForbid.Match(out) {
-		return []rules.Match{{Message: fmt.Sprintf("command %v output matched forbidden pattern %q%s", c.cmd, c.outputForbid.String(), snippet(out))}}, nil
+		verdict := fmt.Sprintf("command %v output matched forbidden pattern %q", c.cmd, c.outputForbid.String())
+		if c.located {
+			return locatedMatches(out, ctx.Root, verdict), nil
+		}
+		return []rules.Match{{Message: verdict + snippet(out)}}, nil
 	}
 	return nil, nil
 }
@@ -540,11 +577,18 @@ func WithCompiledBinary(c rules.Checker, binary string, progArgs []string, workD
 		return c, false
 	}
 	// Build a fresh value — do not copy atomic.Bool fields (vet: copies lock).
+	//
+	// EVERY DECLARATION THE AUTHOR MADE BELONGS IN THIS LIST. Because the copy
+	// is by hand, a field added to the rule and forgotten here is dropped with
+	// nothing said: the corpus declares it, check honours it, and fixture
+	// replay quietly does not. params.output was lost exactly that way, which
+	// is why compiled_carries_output_test.go pins it.
 	return &command{
 		cmd:                   append([]string{binary}, progArgs...),
 		whenGlobs:             orig.whenGlobs,
 		expectExit:            orig.expectExit,
 		outputForbid:          orig.outputForbid,
+		located:               orig.located,
 		workDir:               workDir,
 		collapseExitLikeGoRun: true,
 	}, true

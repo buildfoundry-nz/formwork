@@ -203,7 +203,7 @@ func TestCommandFirePinsAreDrawnFromDetectorOutput(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", r.ID, err)
 			}
-			findings, _, err := fixturetest.EvalIn(fresh, filepath.Join(ruleDir, e.Name()), 0)
+			findings, _, err := fixturetest.EvalIn(fresh, filepath.Join(ruleDir, e.Name()), root, 0)
 			if err != nil {
 				t.Fatalf("%s/%s: %v", r.ID, e.Name(), err)
 			}

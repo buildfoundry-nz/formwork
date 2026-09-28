@@ -563,6 +563,29 @@ formwork check [--lane <name>] [--staged | --range A..B] [--rules id,…]
    width 2 keeps the analyzer worst case at two processes. The pools run
    concurrently, so bounding heavy costs fast rules no parallelism. `cost:`
    was previously only a lane filter; this is the second thing it decides.
+
+   **Within a pool, dispatch is longest-first** (#26). A pool sends its rules
+   to an unbuffered channel, so the first `width` it sends are the first
+   `width` that start, and declaration order decides which rules get the
+   opening slots. Where one rule spans most of the window that is the only
+   recoverable slack in the run: measured downstream, `check` is 72–80% of the
+   guardrail step, two rules span 241–429s and 238–462s inside a window whose
+   mean concurrency is 3.1–3.3 of 4 slots, and one of the two does not begin
+   until t+59/72/75s. Rules are ranked by a previous run's measured duration
+   when `check --durations <report>` supplies one (the JSON report's
+   `durations` object), then by declared `cost:` (`rules.Rank`:
+   heavy > tree > range > fast) — so `cost:` is the THIRD thing that
+   declaration decides, after the lane filter and the pool split. Rules
+   neither key separates keep declaration order; the sort is stable, so a
+   corpus declaring no costs and supplying no report dispatches exactly as it
+   did before. Order is not a verdict and must not become one: findings are
+   sorted at the end (step 5 below), the engine error is selected by declaration index
+   rather than by which rule failed first, and the ordering is a permutation,
+   so every rule still runs exactly once. Neither pool WIDTHS nor the cost
+   PARTITION are changed by it. Phase 1 is not re-ordered: its pools dispatch
+   file indices and each worker evaluates every applicable rule against the
+   file it took, so a rule's position in that loop does not decide when it
+   starts.
 5. **Report + exit**: findings sorted by (rule id, path, line) for
    determinism.
 

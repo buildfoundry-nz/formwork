@@ -1,6 +1,120 @@
 # Changelog
 
-## Unreleased
+## 0.8.2
+
+### Fixed
+
+- regexp2 matches now have a 2s Go-runtime outer bound in addition to the 1s
+  `MatchTimeout`. Under CPU load regexp2's userspace fastclock can starve so
+  `MatchTimeout` never fires and a match flatlines for tens of minutes; the
+  outer bound still fails closed (exit 2).
+
+## 0.7.1
+
+### Changed
+
+- The parent-segment check moved from a load refusal to `formwork lint`
+  (`command-argv-no-parent-segment`) — see the 0.7.0 entry below, which this
+  amends before anyone depends on the refusal. A corpus written before the
+  tokens loads again, which is what a tool reading history needs; lint runs
+  on every pull request, so the shape still cannot merge.
+
+## 0.7.0
+
+### Changed (breaking)
+
+- **The engine owns the tree a `command` rule reads (#28).** A rule used to
+  name its tree with a path relative to the caller's working directory
+  (`--root ../../..`). That is correct under `check`, where the cwd is the
+  repository; under `test` the fixture runner makes the fixture tree the cwd
+  and the same argv resolved to the repository again, so a pass fixture judged
+  the real tree — one missing commit trailer on a branch turned into a red on
+  the rule, a red from the vacuity census reporting the pair "has stopped
+  discriminating", and often a third from the mutation proof.
+
+  Three parts:
+
+  - **`{{root}}` and `{{repo}}` argv tokens.** `{{root}}` is the tree under
+    evaluation (the repository under `check`, a fixture under `test`, a scratch
+    under a downstream mutation run); `{{repo}}` is the corpus's own tree, so a
+    detector that lives in the repository stays reachable while judging a
+    fixture. Canonical shape:
+    `go -C {{repo}}/scripts/dev/x run . --root {{root}}`. Both resolve to
+    ABSOLUTE paths, whatever the caller spelled — a relative one would be
+    resolved by the tool against its own working directory, which is the tree
+    under evaluation, so `{{repo}}` would point back at the fixture. Quote a
+    token in YAML — a plain scalar cannot begin with a brace.
+  - **Isolated fixtures.** A command rule's fixture arm is copied to a temp
+    directory, `git init`-ed with one commit, and that copy is evaluated. Git
+    discovers a repository by walking UP, so a detector running `git rev-parse`
+    inside a fixture previously found whatever repository enclosed the corpus:
+    an escape no argv mentions and no argv rule could close. Declarative rules
+    are not copied. Isolation applies to a rule that has ADOPTED a token:
+    one still naming paths relative to its caller is asking for the
+    arm-inside-the-repository layout, and its detector commonly resolves a
+    repo-resident helper by walking up out of the arm, so isolating it first
+    would break a working fixture for no gain. An isolated run sets
+    `FORMWORK_FIXTURE=1` in the tool's environment — the one fact a detector
+    cannot see for itself, since an isolated fixture is a real repository with
+    no upstream branch, so a commit-range plane can skip a fixture while
+    staying mandatory in CI.
+  - **A `..` path segment in `cmd` is reported by `formwork lint`**
+    (`command-argv-no-parent-segment`). Once a rule can name its tree exactly,
+    naming it relatively has no legitimate use. The check is about path
+    segments: a regex like `a..b` is not reported.
+
+    It began as a load refusal, which is stronger — a rule that does not load
+    cannot read the wrong tree even once — and moved to lint because refusing
+    at load makes every pre-token corpus unreadable, including to a vacuity
+    census loading the corpus at a change's merge base to tell an added rule
+    from an edited one. Lint runs on every pull request, so the shape still
+    cannot merge; history stays readable.
+
+  **Migration:** rewrite each `..`-bearing argv to the token form. A corpus
+  that does not is refused at load with the cure in the message, so nothing
+  fails silently.
+
+## 0.6.4
+
+### Added
+
+- Phase 2 dispatches each pool **longest-first** (#26). A pool sends its rules
+  to an unbuffered channel, so the first `width` it sends are the first
+  `width` that start — and in declaration order a corpus with one dominant
+  rule spends its opening slots on cheap rules while the long pole waits.
+  Measured downstream over 12+ CI runs on a 4 vCPU runner: `check` is 72-80%
+  of the guardrail step, two rules span 241-429s and 238-462s of a window
+  whose mean concurrency is 3.1-3.3 of 4 slots, and one of the two does not
+  begin until t+59/72/75s. Rules are now ranked by a previous run's measured
+  duration when one is supplied, then by declared `cost:`
+  (`heavy` > `tree` > `range` > `fast` — the ranking `--cost-max` already
+  filters by), then not at all: the sort is stable, so rules neither key
+  separates dispatch exactly as they did before.
+
+  `check --durations <report>` supplies the measured half. The report is one a
+  `check -format json` whole-tree run wrote — v0.6.2 already put a `durations`
+  object in it — so a CI job feeds the next run its predecessor's report and
+  keeps no state of its own. A rule the report does not name is *unknown*, not
+  fast: it is dispatched after every measured rule rather than ranked against
+  them at zero. The flag is refused (exit 2), never ignored, when it cannot be
+  honoured — an unreadable, unparseable or timing-less report, or the flag
+  alongside `--staged`/`--range`, which collect no timings and evaluate
+  through a path that takes no hint.
+
+  **Ordering is not a verdict.** Findings are sorted before they are rendered,
+  the engine error is selected by declaration index rather than by which rule
+  failed first, and the ordering is a permutation — so verdicts, findings and
+  error selection are byte-identical with and without a hint, under any hint.
+  Proved over this repository's own corpora, including the 704-rule
+  `examples/palletra-port-full`, against an inverted hint
+  (`TestDispatchOrderChangesNoVerdictOnTheRepoCorpora`). Without the flag,
+  output is byte-identical to 0.6.3 across all seven corpora and all three
+  formats. Pool widths, the heavy gate and the cost partition are unchanged
+  (#67, #81, #83), as is phase 1, whose pools dispatch file indices and so
+  have no rule order to recover.
+
+  `engine.RunTimedHinted` is `RunTimed` plus the hint; `Run` and `RunTimed`
+  are unchanged wrappers, so no existing caller moves.
 
 ## 0.6.3
 

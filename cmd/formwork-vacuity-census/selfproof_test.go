@@ -169,7 +169,7 @@ func TestModuleFormCommandIsRecognisedAsMachinery(t *testing.T) {
     scope:
       include: ["scripts/dev/thing/**"]
     params:
-      cmd: [go, -C, scripts/dev/thing, run, ., --root, ../../..]
+      cmd: [go, -C, '{{repo}}/scripts/dev/thing', run, ., --root, '{{root}}']
       expect: { exit: 0 }
     origin: scripts/dev/thing/main.go
     tags: [always]
@@ -203,7 +203,7 @@ func TestLinkedGateLibraryIsMachinery(t *testing.T) {
         - "tools/thing-census/**"
         - "tools/gatelib/**"
     params:
-      cmd: [go, run, -C, tools/thing-census, ., ../..]
+      cmd: [go, run, -C, '{{repo}}/tools/thing-census', ., '{{root}}']
       expect: { exit: 0 }
     origin: tools/thing-census/main.go
     tags: [always]
@@ -238,7 +238,7 @@ func TestLinkedProductPackageIsNotMachinery(t *testing.T) {
         - "tools/thing-census/**"
         - "api-factory/internal/subject/**"
     params:
-      cmd: [go, run, -C, tools/thing-census, ., ../..]
+      cmd: [go, run, -C, '{{repo}}/tools/thing-census', ., '{{root}}']
       expect: { exit: 0 }
     origin: tools/thing-census/main.go
     tags: [always]
@@ -267,7 +267,7 @@ func TestFlagAfterRunVerbStillResolvesTheModule(t *testing.T) {
     scope:
       include: ["tools/thing-census/**"]
     params:
-      cmd: [go, run, -C, tools/thing-census, ., ../..]
+      cmd: [go, run, -C, '{{repo}}/tools/thing-census', ., '{{root}}']
       expect: { exit: 0 }
     origin: tools/thing-census/main.go
     tags: [always]
@@ -286,7 +286,7 @@ func TestFlagAfterRunVerbStillResolvesTheModule(t *testing.T) {
 	}
 }
 
-// The detector's own root argument is not a package. `../..` is how every
+// The detector's own root argument is not a package. {{root}} is how every
 // go-run detector here is handed the repo root, and resolving it as a package
 // path walks out of the tree entirely.
 func TestDetectorRootArgumentIsNotAPackageTarget(t *testing.T) {
@@ -299,7 +299,7 @@ func TestDetectorRootArgumentIsNotAPackageTarget(t *testing.T) {
         - "tools/thing-census/**"
         - "api-factory/internal/subject/subject.go"
     params:
-      cmd: [go, run, -C, tools/thing-census, ., ../..]
+      cmd: [go, run, -C, '{{repo}}/tools/thing-census', ., '{{root}}']
       expect: { exit: 0 }
     origin: tools/thing-census/main.go
     tags: [always]

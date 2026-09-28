@@ -33,7 +33,7 @@ func TestCollectExpectationsFindsInlineMarkers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := collectExpectations(fset, dir, "my-rule")
+	got, err := collectExpectations(fset, dir, dir, "my-rule")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestCollectExpectationsReadsWantManifest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := collectExpectations(fset, dir, "my-rule")
+	got, err := collectExpectations(fset, dir, dir, "my-rule")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestCollectExpectationsRejectsBadManifestLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := collectExpectations(fset, dir, "my-rule"); err == nil || !strings.Contains(err.Error(), "notanumber") {
+	if _, err := collectExpectations(fset, dir, dir, "my-rule"); err == nil || !strings.Contains(err.Error(), "notanumber") {
 		t.Fatalf("bad manifest line accepted: %v", err)
 	}
 }
@@ -133,7 +133,7 @@ func TestCollectExpectationsReadsMessagePin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := collectExpectations(fset, dir, "my-rule")
+	got, err := collectExpectations(fset, dir, dir, "my-rule")
 	if err != nil {
 		t.Fatal(err)
 	}

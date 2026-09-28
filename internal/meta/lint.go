@@ -596,22 +596,8 @@ func exemptionHygiene(cfg *config.Config, fset *scan.FileSet, findings []finding
 			}
 			problems = append(problems, fmt.Sprintf("%s: scope.exclude %q matches no files and has no justification comment", r.ID, e.Glob))
 		}
-		// scope.not_declaring: the same hygiene, for the declaration-keyed
-		// half. A marker no file in the tree declares subtracts nothing, and
-		// the failure mode is the one that makes an exemption dangerous rather
-		// than merely useless: it reads as a narrow, reasoned carve-out while
-		// protecting nothing, so a reader stops looking for the real one. No
-		// comment escape here, unlike scope.exclude — a preventative glob for
-		// a directory the repo has not created yet is a coherent thing to
-		// write, but a marker for a declaration no generator emits is a
-		// guess, and the cure is to name the marker a generator actually
-		// writes.
-		for _, m := range r.NotDeclaring() {
-			if declaredByAny(m, r, fset) {
-				continue
-			}
-			problems = append(problems, fmt.Sprintf("%s: scope.not_declaring %q is declared by no file this rule covers — it subtracts nothing", r.ID, m))
-		}
+		// scope.not_declaring's dead-entry hygiene; notdeclaring.go says why.
+		problems = append(problems, notDeclaringProblems(r, fset)...)
 		// A rule that hasn't opted into markers (`except: {marker: true}`)
 		// never honors formwork:allow for it either way, so "missing a
 		// reason" would be misleading — adding one still wouldn't exempt
@@ -623,30 +609,6 @@ func exemptionHygiene(cfg *config.Config, fset *scan.FileSet, findings []finding
 		problems = append(problems, reasonlessByRule[r.ID]...)
 	}
 	return problems, nil
-}
-
-// declaredByAny reports whether any file in the rule's PATH scope declares the
-// marker. Scoped to the rule's own include/exclude on purpose: a marker is dead
-// relative to what the rule looks at, and asking the whole tree would call an
-// entry live because some unrelated file elsewhere happens to carry it.
-//
-// A file whose content cannot be read counts as not declaring: the alternative
-// is calling an entry live on a file nobody could read, which is the direction
-// that hides a dead entry.
-func declaredByAny(marker string, r *config.Rule, fset *scan.FileSet) bool {
-	for _, f := range fset.Files {
-		if !r.Applies(f.Path()) {
-			continue
-		}
-		content, err := f.Content()
-		if err != nil {
-			continue
-		}
-		if _, ok := r.DeclinedBy(content); ok {
-			return true
-		}
-	}
-	return false
 }
 
 // ignoredBy reports which scan.ignore glob (if any) hides path: a file-level

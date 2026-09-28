@@ -1,4 +1,4 @@
-package pattern
+package rxmatch
 
 import (
 	"math"
@@ -9,6 +9,11 @@ import (
 	"github.com/dlclark/regexp2"
 )
 
+// Moved here with the backend it tests (#17979): the outer bound now lives in
+// rxmatch, which pattern and pair-consistency both compile through, so the test
+// follows its subject rather than being left behind on a package that no longer
+// declares it.
+//
 // TestRegexp2OuterBoundFailsClosed: when regexp2's MatchTimeout is disabled
 // (the hang under load: its userspace clock is never observed), the Go-runtime
 // outer bound must still return an error instead of running for minutes.

@@ -354,6 +354,8 @@ Requires a pattern to be present. `pattern` is the regex, `syntax` its flavour
 each in-scope file that lacks the pattern, `exists` reports once, at the end,
 if no in-scope file carried it. `when` (every-file mode only) applies the
 requirement only to files that match it: "a file that does X must contain Y".
+It takes one pattern or a list, and a list applies only where every entry
+matches.
 `multiline` matches `pattern` and `when` over the whole file, so the required
 shape may span lines.
 

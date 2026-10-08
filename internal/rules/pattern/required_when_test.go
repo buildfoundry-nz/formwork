@@ -37,3 +37,27 @@ func TestRequiredWhenRefusedInExistsMode(t *testing.T) {
 		t.Fatal("when must be refused in exists mode")
 	}
 }
+
+// A list is a conjunction: the requirement applies only where every entry
+// matches.
+func TestRequiredWhenListIsAConjunction(t *testing.T) {
+	c := mustChecker(t, "required-pattern", "pattern: 'FakeRepo'\nwhen: ['wakes the rail', 'FakeRail']\n")
+	for _, tc := range []struct {
+		name, body string
+		want       int
+	}{
+		{"one of two", "// wakes the rail\n", 0},
+		{"both, and holds", "// wakes the rail\nFakeRail()\nFakeRepo()\n", 0},
+		{"both, missing", "// wakes the rail\nFakeRail()\n", 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ms, err := c.CheckFile(scan.NewMemFile("a_test.dart", []byte(tc.body)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ms) != tc.want {
+				t.Fatalf("want %d findings, got %+v", tc.want, ms)
+			}
+		})
+	}
+}

@@ -27,7 +27,8 @@
 
 ### Added
 
-- `required-pattern` takes `when` (every-file mode only) and `multiline`. "A file
+- `required-pattern` takes `when` (every-file mode only; one pattern, or a list
+  that must all match) and `multiline`. "A file
   that does X must contain Y" is now a requirement in its own right instead of
   an `all_of` plus `none_of` pair.
 

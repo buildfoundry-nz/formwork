@@ -18,7 +18,7 @@ type requiredParams struct {
 	// does X must contain Y". It is a requirement, not an excusal, and is the
 	// form a file-wide proof takes now that forbidden-pattern evidence must sit
 	// beside its trigger.
-	When string `yaml:"when"`
+	When whenList `yaml:"when"`
 	// Multiline matches pattern (and when) over the whole file, so Y may span
 	// lines (a method body shape, an ordered pair of statements).
 	Multiline bool `yaml:"multiline"`
@@ -32,7 +32,7 @@ const (
 type required struct {
 	re        lineMatcher
 	mode      string
-	when      lineMatcher // nil: every in-scope file
+	when      []lineMatcher // empty: every in-scope file; else ALL must match
 	multiline bool
 
 	seen  atomic.Bool // exists mode: any in-scope file observed
@@ -59,12 +59,16 @@ func newRequired(params *yaml.Node) (rules.Checker, error) {
 		return nil, fmt.Errorf("required-pattern: unknown mode %q (want %q or %q)", p.Mode, modeEveryFile, modeExists)
 	}
 	c := &required{re: re, mode: mode, multiline: p.Multiline}
-	if p.When != "" {
+	if len(p.When) > 0 {
 		if mode != modeEveryFile {
 			return nil, errors.New("required-pattern: when applies to every-file mode")
 		}
-		if c.when, err = compileMatcher("required-pattern when", p.When, p.Syntax); err != nil {
-			return nil, err
+		for _, w := range p.When {
+			m, err := compileMatcher("required-pattern when", w, p.Syntax)
+			if err != nil {
+				return nil, err
+			}
+			c.when = append(c.when, m)
 		}
 	}
 	return c, nil
@@ -97,8 +101,8 @@ func (c *required) matches(f *scan.File, m lineMatcher) (bool, error) {
 }
 
 func (c *required) CheckFile(f *scan.File) ([]rules.Match, error) {
-	if c.when != nil {
-		applies, err := c.matches(f, c.when)
+	for _, w := range c.when {
+		applies, err := c.matches(f, w)
 		if err != nil {
 			return nil, err
 		}
@@ -151,4 +155,21 @@ func (c *required) WholeTreeInvariant() bool {
 
 func init() {
 	rules.Register("required-pattern", newRequired)
+}
+
+// whenList is `when:` as one pattern or a list; a file is subject to the
+// requirement only when it matches every entry.
+type whenList []string
+
+func (w *whenList) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		*w = whenList{n.Value}
+		return nil
+	}
+	var s []string
+	if err := n.Decode(&s); err != nil {
+		return err
+	}
+	*w = s
+	return nil
 }

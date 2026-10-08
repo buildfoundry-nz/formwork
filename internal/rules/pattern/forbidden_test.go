@@ -230,7 +230,7 @@ func TestForbiddenGuardedPatternFiresOnceOnFirstMatch(t *testing.T) {
 // negative lookahead like (?![\s\S]*allowed).
 func TestForbiddenRequireAbsentGatesOnFileCooccurrence(t *testing.T) {
 	c := mustChecker(t, "forbidden-pattern",
-		"pattern: 'rawQuery'\nrequire_absent:\n  - 'GENERATED-OK'\n")
+		"pattern: 'rawQuery'\nrequire_absent:\n  - {credential: '^// GENERATED-OK', holders: 1}\n")
 	fire := scan.NewMemFile("a.go", []byte("x\nrawQuery(sql)\n"))
 	ms, err := c.CheckFile(fire)
 	if err != nil {

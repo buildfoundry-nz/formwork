@@ -32,7 +32,7 @@ rules:
       multiline: true
       pattern: '(?m)^[ \t]*UPDATE[ \t]+\S[\s\S]*?^[ \t]*CREATE[ \t]+UNIQUE[ \t]+INDEX'
       require_absent:
-        - '(?m)^[ \t]*DELETE[ \t]+FROM'
-        - '(?m)^[ \t]*MERGE[ \t]+INTO'
+        - {evidence: '(?m)^[ \t]*DELETE[ \t]+FROM', within: 100}
+        - {evidence: '(?m)^[ \t]*MERGE[ \t]+INTO', within: 100}
     cure: "Insert a DELETE FROM <table> (keeper-by-created_at,id) or MERGE INTO <table> step between the canonicalising UPDATE and the CREATE UNIQUE INDEX so pre-existing duplicates are resolved before the index rejects them (SQLSTATE 23505). See migration platform/0021_platform_stock_lines_dedup_unique.up.sql for the canonical shape (sweep-13 §A1)."
     origin: scripts/check-migration-unique-index-requires-prior-dedup.sh

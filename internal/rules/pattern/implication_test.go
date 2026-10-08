@@ -85,7 +85,7 @@ func TestPrefilterImplied(t *testing.T) {
 		// guarantee the literal appears — it is not a conjunct.
 		name: "require_absent cannot imply the prefilter",
 		params: "pattern: 'beta-two'\n" +
-			"require_absent: ['Alpha']\n" +
+			"require_absent: [{credential: '^Alpha', holders: 1}]\n" +
 			"prefilter: Alpha\n",
 		implied:   false,
 		decidable: true,

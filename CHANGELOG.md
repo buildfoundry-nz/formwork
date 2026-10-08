@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.9.0
+
+### Changed (breaking)
+
+- **An excusal is a credential or evidence, never a bare string.** A
+  `forbidden-pattern` `require_absent` entry (and, in `all_of` mode, a `none_of`
+  entry) used to excuse any file containing its text anywhere. That made each
+  one an exemption any file could claim: a copy of the text inside a string
+  earned it, any number of files could hold it, and it excused triggers it had
+  nothing to do with. Each entry is now exactly one of:
+  - `{credential: '^…', holders: N}`: an owner. The pattern must be anchored at
+    the start of a line, and `holders` is the exact number of lines in scope
+    that match it. The count runs over every in-scope file, before the
+    prefilter, and a difference is a finding. A rule carrying a credential is a
+    whole-tree invariant, so `--staged`/`--range` evaluate it over the whole
+    tree. A library rule cannot carry one, because the count belongs to the
+    consuming repo.
+  - `{evidence: '…', within: N}`: a discharge. It excuses only a trigger it
+    starts within N lines of (N ≤ 100), and each trigger needs its own.
+
+  A bare string, an unanchored credential, a missing or non-positive `holders`,
+  or a missing or out-of-range `within` is refused at load. Migration: name each
+  entry's role. An entry that proves something about the whole file is a
+  requirement, not an excusal; see the next entry.
+
+### Added
+
+- `required-pattern` takes `when` (every-file mode only) and `multiline`. "A file
+  that does X must contain Y" is now a requirement in its own right instead of
+  an `all_of` plus `none_of` pair.
+
 ## 0.8.2
 
 ### Fixed

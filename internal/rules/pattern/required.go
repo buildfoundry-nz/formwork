@@ -14,6 +14,14 @@ type requiredParams struct {
 	Pattern string `yaml:"pattern"`
 	Mode    string `yaml:"mode"`
 	Syntax  string `yaml:"syntax"` // "" | re2 | regexp2
+	// When narrows every-file mode to the files that match it: "a file that
+	// does X must contain Y". It is a requirement, not an excusal, and is the
+	// form a file-wide proof takes now that forbidden-pattern evidence must sit
+	// beside its trigger.
+	When string `yaml:"when"`
+	// Multiline matches pattern (and when) over the whole file, so Y may span
+	// lines (a method body shape, an ordered pair of statements).
+	Multiline bool `yaml:"multiline"`
 }
 
 const (
@@ -22,8 +30,10 @@ const (
 )
 
 type required struct {
-	re   lineMatcher
-	mode string
+	re        lineMatcher
+	mode      string
+	when      lineMatcher // nil: every in-scope file
+	multiline bool
 
 	seen  atomic.Bool // exists mode: any in-scope file observed
 	found atomic.Bool // exists mode: any in-scope file matched
@@ -48,24 +58,57 @@ func newRequired(params *yaml.Node) (rules.Checker, error) {
 	if mode != modeEveryFile && mode != modeExists {
 		return nil, fmt.Errorf("required-pattern: unknown mode %q (want %q or %q)", p.Mode, modeEveryFile, modeExists)
 	}
-	return &required{re: re, mode: mode}, nil
+	c := &required{re: re, mode: mode, multiline: p.Multiline}
+	if p.When != "" {
+		if mode != modeEveryFile {
+			return nil, errors.New("required-pattern: when applies to every-file mode")
+		}
+		if c.when, err = compileMatcher("required-pattern when", p.When, p.Syntax); err != nil {
+			return nil, err
+		}
+	}
+	return c, nil
+}
+
+// matches reports whether m matches f: over the whole content when multiline,
+// else on some line.
+func (c *required) matches(f *scan.File, m lineMatcher) (bool, error) {
+	if c.multiline {
+		content, err := f.Content()
+		if err != nil {
+			return false, err
+		}
+		return m.MatchString(string(content))
+	}
+	lines, err := f.Lines()
+	if err != nil {
+		return false, err
+	}
+	for _, line := range lines {
+		ok, err := m.MatchString(line)
+		if err != nil {
+			return false, err
+		}
+		if ok {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (c *required) CheckFile(f *scan.File) ([]rules.Match, error) {
-	lines, err := f.Lines()
-	if err != nil {
-		return nil, err
-	}
-	matched := false
-	for _, line := range lines {
-		ok, err := c.re.MatchString(line)
+	if c.when != nil {
+		applies, err := c.matches(f, c.when)
 		if err != nil {
 			return nil, err
 		}
-		if ok {
-			matched = true
-			break
+		if !applies {
+			return nil, nil
 		}
+	}
+	matched, err := c.matches(f, c.re)
+	if err != nil {
+		return nil, err
 	}
 	if c.mode == modeExists {
 		c.seen.Store(true)

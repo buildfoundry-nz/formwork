@@ -46,7 +46,7 @@ rules:
       require_present:
         - 'palletra\.annotation_gauges'
       require_absent:
-        - 'project_id'
+        - {evidence: 'project_id', within: 10}
       prefilter: 'annotation_gauges'
     cure: "An annotation_gauges page read that value-filters page_id must carry a matching project_id predicate in the SAME SQL literal, so it seeks idx_gauges_project_page (project_id leads page_id) instead of seq-scanning the table (#5692). Add the project_id predicate, or route the read through internal/scan/metric's canonical constant."
     origin: scripts/check-annotation-metrics-page-lookups-require-project-scope.sh

@@ -8,9 +8,11 @@ rules:
     params:
       multiline: true
       pattern: '(?m)^[ \t]*UPDATE[ \t]+\S[\s\S]*?^[ \t]*CREATE[ \t]+UNIQUE[ \t]+INDEX'
+      # Evidence, per trigger: each canonicalising UPDATE ... CREATE UNIQUE
+      # INDEX needs its own dedup step beside it, not one anywhere in the file.
       require_absent:
-        - '(?m)^[ \t]*DELETE[ \t]+FROM'
-        - '(?m)^[ \t]*MERGE[ \t]+INTO'
+        - {evidence: '(?m)^[ \t]*DELETE[ \t]+FROM', within: 100}
+        - {evidence: '(?m)^[ \t]*MERGE[ \t]+INTO', within: 100}
     cure: >-
       Insert a DELETE FROM or MERGE INTO dedup step between a canonicalising
       UPDATE and CREATE UNIQUE INDEX so pre-existing duplicates are resolved

@@ -182,3 +182,18 @@ func TestEvidenceMultilinePerTrigger(t *testing.T) {
 		t.Fatalf("want the second, undischarged trigger on line 14, got %+v", ms)
 	}
 }
+
+// The holder count is a live-tree fact: a fixture run does not judge it.
+func TestCredentialCountSkippedInFixtureRuns(t *testing.T) {
+	c := mustChecker(t, "forbidden-pattern", credentialRule)
+	if _, err := c.CheckFile(scan.NewMemFile("other/use.go", []byte("package other\n"))); err != nil {
+		t.Fatal(err)
+	}
+	ef := c.(rules.ErrFinalizer)
+	if ms, _ := ef.FinalizeErr(rules.FinalizeContext{Fixture: true}); len(ms) != 0 {
+		t.Fatalf("a fixture run must not judge the count, got %+v", ms)
+	}
+	if ms, _ := ef.FinalizeErr(rules.FinalizeContext{}); len(ms) != 1 {
+		t.Fatalf("a live run must judge the count, got %+v", ms)
+	}
+}

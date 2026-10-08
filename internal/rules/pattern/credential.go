@@ -262,6 +262,19 @@ func withCredentials(c *forbidden) rules.Checker {
 	return counted{c}
 }
 
+// FinalizeErr judges the holder count on the LIVE tree only. The count is a
+// fact about the repository; a fixture tree proves the trigger and the
+// excusal, and cannot honestly hold the repository's number. The count itself
+// is proven on the real tree, by mutation (duplicate a holder line, the rule
+// must fail). Fixture is set by the fixture runner alone, so a live check can
+// never claim it.
+func (c counted) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) {
+	if ctx.Fixture {
+		return nil, nil
+	}
+	return c.Finalize(), nil
+}
+
 // Finalize reports every credential whose holder count differs from its
 // declaration. A credential excuses each file that holds it, so a holder the
 // declaration does not account for is a file that excused itself.

@@ -277,7 +277,9 @@ A **credential** names an owner. It must be anchored at the start of a line
 exact number of lines in the rule's scope that match it. The count is taken
 over every in-scope file, prefiltered or not, and a run whose count differs is
 a finding: the set of excused files is fixed, and changing it is a reviewed
-edit to a number. A rule carrying a credential is evaluated over the whole tree
+edit to a number. The count is judged on the live tree only: a fixture proves
+the trigger and the excusal, and cannot honestly hold the repository's number,
+so prove the count on the real tree (a mutation that duplicates a holder line). A rule carrying a credential is evaluated over the whole tree
 even under `--staged`/`--range`. A library rule cannot carry one: its holder
 count is a fact about the consuming repo, so declare the rule locally.
 

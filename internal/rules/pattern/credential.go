@@ -114,7 +114,7 @@ func compileExcusals(key string, specs []excusalSpec, syntax string) (excusals, 
 			if *s.Holders < 1 {
 				return out, fmt.Errorf("%s: holders must be >= 1, got %d: a credential no line holds excuses nothing; delete it", where, *s.Holders)
 			}
-			m, err := compileMatcher(where, s.Credential, syntax)
+			m, err := compileExcusal(where, s.Credential, syntax)
 			if err != nil {
 				return out, err
 			}
@@ -130,7 +130,7 @@ func compileExcusals(key string, specs []excusalSpec, syntax string) (excusals, 
 				return out, fmt.Errorf("%s: within must be between 0 and %d, got %d: evidence further away proves something about the file, "+
 					"not the trigger; write the rule as required-pattern with when:", where, maxEvidenceWithin, *s.Within)
 			}
-			m, err := compileMatcher(where, s.Evidence, syntax)
+			m, err := compileExcusal(where, s.Evidence, syntax)
 			if err != nil {
 				return out, err
 			}
@@ -140,6 +140,18 @@ func compileExcusals(key string, specs []excusalSpec, syntax string) (excusals, 
 		}
 	}
 	return out, nil
+}
+
+// compileExcusal compiles with linear RE2 whenever the pattern parses as RE2,
+// whatever the rule's own syntax. An excusal runs on every line of every
+// in-scope file, and a regexp2 rule's backtracking engine under load can time
+// out on a one-line literal; only a pattern RE2 cannot express keeps the rule's
+// syntax.
+func compileExcusal(where, pattern, syntax string) (lineMatcher, error) {
+	if m, err := compileMatcher(where, pattern, "re2"); err == nil {
+		return m, nil
+	}
+	return compileMatcher(where, pattern, syntax)
 }
 
 // holdsCredential counts every credential line in f and reports whether f

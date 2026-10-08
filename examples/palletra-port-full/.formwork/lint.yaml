@@ -17,7 +17,7 @@
 # which is still the right thing to run by hand:
 #
 #   $ formwork list -C examples/palletra-port-full rules | wc -l
-#   $ git ls-files examples/palletra-port-full | wc -l -> 2693
+#   $ git ls-files examples/palletra-port-full | wc -l -> 2695
 #   $ git ls-files examples/palletra-port-full | grep -vc '/\.formwork/' -> 0
 #   $ formwork lint -C examples/palletra-port-full | tail -1
 #   $ mkdir -p /tmp/c && cp -R examples/palletra-port-full/.formwork /tmp/c/

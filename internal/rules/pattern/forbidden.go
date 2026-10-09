@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
@@ -13,11 +14,14 @@ import (
 )
 
 type forbiddenParams struct {
-	Pattern        string   `yaml:"pattern"`
-	AllOf          []string `yaml:"all_of"`          // co-occurrence: violate iff EVERY pattern appears in the file
-	NoneOf         []string `yaml:"none_of"`         // ...and (with all_of) none of these appear
-	RequirePresent []string `yaml:"require_present"` // file-level guard on `pattern`: report only if the file contains ALL of these
-	RequireAbsent  []string `yaml:"require_absent"`  // file-level guard on `pattern`: report only if the file contains NONE of these
+	Pattern string   `yaml:"pattern"`
+	AllOf   []string `yaml:"all_of"` // co-occurrence: violate iff EVERY pattern appears in the file
+	// NoneOf is all_of mode's EXCUSAL list, with require_absent's shape and rules.
+	NoneOf         []excusalSpec `yaml:"none_of"`
+	RequirePresent []string      `yaml:"require_present"` // file-level guard on `pattern`: report only if the file contains ALL of these
+	// RequireAbsent is pattern mode's EXCUSAL list: credentials and evidence,
+	// see excusalSpec for both and for why a bare string is refused.
+	RequireAbsent []excusalSpec `yaml:"require_absent"`
 	// Prefilter is a pure optimization: a cheap literal gate that must never
 	// change the verdict. formwork lint (prefilter-load-bearing) rejects a
 	// load-bearing prefilter; put semantic scope in require_present: instead.
@@ -38,9 +42,8 @@ type forbiddenParams struct {
 type forbidden struct {
 	re             lineMatcher
 	allOf          []lineMatcher // whole-file co-occurrence (RE2, linear — no backtracking)
-	noneOf         []lineMatcher
 	requirePresent []lineMatcher // whole-file guards on `pattern` mode (RE2, linear)
-	requireAbsent  []lineMatcher
+	ex             excusals
 	prefilter      string // if set, a file not containing this literal cannot match — skip cheaply
 	multiline      bool
 	denial         *denial // nil unless params.denied_by is set (#4)
@@ -110,14 +113,12 @@ func newForbidden(params *yaml.Node) (rules.Checker, error) {
 			}
 			c.allOf = append(c.allOf, m)
 		}
-		for _, pat := range p.NoneOf {
-			m, err := compileMatcher("forbidden-pattern none_of", pat, p.Syntax)
-			if err != nil {
-				return nil, err
-			}
-			c.noneOf = append(c.noneOf, m)
+		ex, err := compileExcusals("none_of", p.NoneOf, p.Syntax)
+		if err != nil {
+			return nil, err
 		}
-		return c, nil
+		c.ex = ex
+		return withCredentials(c), nil
 	}
 	re, err := compileMatcher("forbidden-pattern", p.Pattern, p.Syntax)
 	if err != nil {
@@ -131,14 +132,12 @@ func newForbidden(params *yaml.Node) (rules.Checker, error) {
 		}
 		c.requirePresent = append(c.requirePresent, m)
 	}
-	for _, pat := range p.RequireAbsent {
-		m, err := compileMatcher("forbidden-pattern require_absent", pat, p.Syntax)
-		if err != nil {
-			return nil, err
-		}
-		c.requireAbsent = append(c.requireAbsent, m)
+	ex, err := compileExcusals("require_absent", p.RequireAbsent, p.Syntax)
+	if err != nil {
+		return nil, err
 	}
-	return c, nil
+	c.ex = ex
+	return withCredentials(c), nil
 }
 
 // windowedAllOf fires when every all_of pattern matches within some sliding
@@ -192,8 +191,9 @@ func (c *forbidden) windowedAllOf(f *scan.File) ([]rules.Match, error) {
 	return nil, nil
 }
 
-// fileGuardsFail reports whether the whole-file require_present/require_absent
-// guards reject this file (so the line-anchored pattern must not be reported).
+// fileGuardsFail reports whether the whole-file require_present guards reject
+// this file (so the line-anchored pattern must not be reported). Credentials
+// (require_absent) are decided per line by holdsCredential, not here.
 // One linear scan per guard — the RE2 replacement for a backtracking lookaround.
 func (c *forbidden) fileGuardsFail(s string) (bool, error) {
 	for _, m := range c.requirePresent {
@@ -205,21 +205,19 @@ func (c *forbidden) fileGuardsFail(s string) (bool, error) {
 			return true, nil // a required-present pattern is absent
 		}
 	}
-	for _, m := range c.requireAbsent {
-		ok, err := m.MatchString(s)
-		if err != nil {
-			return false, err
-		}
-		if ok {
-			return true, nil // a required-absent pattern is present
-		}
-	}
 	return false, nil
 }
 
 func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 	// Co-occurrence mode: cheap linear scans over whole content.
 	if len(c.allOf) > 0 {
+		held, err := c.ex.holdsCredential(f)
+		if err != nil {
+			return nil, err
+		}
+		if held {
+			return nil, nil // a none_of credential is held → excused, and counted
+		}
 		content, err := f.Content()
 		if err != nil {
 			return nil, err
@@ -228,17 +226,12 @@ func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 		if c.prefilter != "" && !strings.Contains(s, c.prefilter) {
 			return nil, nil
 		}
-		for _, m := range c.noneOf {
-			ok, err := m.MatchString(s)
-			if err != nil {
-				return nil, err
-			}
-			if ok {
-				return nil, nil // an excluded pattern is present → not a violation
-			}
-		}
 		if c.window > 0 {
-			return c.windowedAllOf(f)
+			ms, err := c.windowedAllOf(f)
+			if err != nil || len(ms) == 0 {
+				return ms, err
+			}
+			return c.unlessEvidenced(s, ms[0].Line, ms)
 		}
 		for _, m := range c.allOf {
 			ok, err := m.MatchString(s)
@@ -249,12 +242,25 @@ func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 				return nil, nil // a required pattern is absent → no co-occurrence
 			}
 		}
-		return []rules.Match{{Line: 1, Message: "forbidden co-occurrence matched (all_of present)"}}, nil
+		ms := []rules.Match{{Line: 1, Message: "forbidden co-occurrence matched (all_of present)"}}
+		if len(c.ex.evidence) == 0 {
+			return ms, nil
+		}
+		// Evidence is measured from where the first all_of pattern first matches.
+		first, err := matchStartLines(c.allOf[0], s)
+		if err != nil || len(first) == 0 {
+			return ms, err
+		}
+		return c.unlessEvidenced(s, first[0], ms)
 	}
 	// multiline: match the pattern against the whole (preprocessed) file so a
 	// cross-line block/co-occurrence can match (spec §5). Reports one finding at
 	// the line where the first match starts.
 	if c.multiline {
+		held, err := c.ex.holdsCredential(f)
+		if err != nil {
+			return nil, err
+		}
 		content, err := f.Content()
 		if err != nil {
 			return nil, err
@@ -263,11 +269,32 @@ func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 		if c.prefilter != "" && !strings.Contains(s, c.prefilter) {
 			return nil, nil // cheap literal gate — skip the backtracking regex
 		}
+		if held {
+			return nil, nil
+		}
 		fail, err := c.fileGuardsFail(s)
 		if err != nil {
 			return nil, err
 		}
 		if fail {
+			return nil, nil
+		}
+		if len(c.ex.evidence) > 0 {
+			// Every trigger must be discharged by evidence near it; the first
+			// one that is not is the finding.
+			idx, err := c.ex.indexEvidence(s)
+			if err != nil {
+				return nil, err
+			}
+			triggers, err := matchStartLines(c.re, s)
+			if err != nil {
+				return nil, err
+			}
+			for _, tl := range triggers {
+				if !c.ex.excused(idx, tl) {
+					return []rules.Match{{Line: tl, Message: "forbidden pattern matched (multiline): " + c.re.String()}}, nil
+				}
+			}
 			return nil, nil
 		}
 		line, ok, err := c.re.FindLine(s)
@@ -292,8 +319,18 @@ func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 	// whole-file co-occurrence once (linear), skip the file if it fails. The
 	// prefilter gate runs whether or not the rule is guarded — a plain
 	// single-pattern rule honours it like every other mode (#21).
-	guarded := len(c.requirePresent) > 0 || len(c.requireAbsent) > 0
-	if c.prefilter != "" || guarded {
+	// Credentials are counted BEFORE the prefilter gate: a holder in a file the
+	// prefilter skips is still a holder, and an uncounted holder is exactly the
+	// forgery the count exists to catch.
+	held, err := c.ex.holdsCredential(f)
+	if err != nil {
+		return nil, err
+	}
+	if held {
+		return nil, nil
+	}
+	guarded := len(c.requirePresent) > 0 || len(c.ex.credentials) > 0 || len(c.ex.evidence) > 0
+	if c.prefilter != "" || len(c.requirePresent) > 0 {
 		content, err := f.Content()
 		if err != nil {
 			return nil, err
@@ -302,7 +339,7 @@ func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 		if c.prefilter != "" && !strings.Contains(s, c.prefilter) {
 			return nil, nil
 		}
-		if guarded {
+		if len(c.requirePresent) > 0 {
 			fail, err := c.fileGuardsFail(s)
 			if err != nil {
 				return nil, err
@@ -316,11 +353,24 @@ func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 	if err != nil {
 		return nil, err
 	}
+	var evIdx evidenceIndex
+	if len(c.ex.evidence) > 0 {
+		content, err := f.Content()
+		if err != nil {
+			return nil, err
+		}
+		if evIdx, err = c.ex.indexEvidence(string(content)); err != nil {
+			return nil, err
+		}
+	}
 	var matches []rules.Match
 	for i, line := range lines {
 		ok, err := c.re.MatchString(line)
 		if err != nil {
 			return nil, err
+		}
+		if ok && evIdx != nil && c.ex.excused(evIdx, i+1) {
+			continue // this trigger is discharged by evidence beside it
 		}
 		if ok && c.denial != nil {
 			// Second stage: drop a match whose text DENIES the topic it matched
@@ -351,6 +401,21 @@ func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 	return matches, nil
 }
 
+// unlessEvidenced drops ms when evidence sits within distance of anchor.
+func (c *forbidden) unlessEvidenced(s string, anchor int, ms []rules.Match) ([]rules.Match, error) {
+	if len(c.ex.evidence) == 0 {
+		return ms, nil
+	}
+	idx, err := c.ex.indexEvidence(s)
+	if err != nil {
+		return nil, err
+	}
+	if c.ex.excused(idx, anchor) {
+		return nil, nil
+	}
+	return ms, nil
+}
+
 // Prefilter reports the rule's literal prefilter gate ("" if none). Part of the
 // rules.Prefiltered contract consumed by lint's load-bearing-prefilter check.
 func (c *forbidden) Prefilter() string { return c.prefilter }
@@ -362,6 +427,14 @@ func (c *forbidden) Prefilter() string { return c.prefilter }
 func (c *forbidden) WithoutPrefilter() rules.Checker {
 	cp := *c
 	cp.prefilter = ""
+	// Fresh holder counters: the copy is evaluated as a separate run, and a
+	// shared counter would add its holders to the original's.
+	cp.ex.credentials = make([]*credential, len(c.ex.credentials))
+	for i, cr := range c.ex.credentials {
+		fresh := *cr
+		fresh.seen = &atomic.Int64{}
+		cp.ex.credentials[i] = &fresh
+	}
 	return &cp
 }
 

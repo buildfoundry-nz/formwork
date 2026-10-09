@@ -245,14 +245,58 @@ Reports files matching a pattern.
 |---|---|
 | `pattern` | the regex to forbid |
 | `all_of` | co-occurrence: violate only if EVERY pattern appears in the file |
-| `none_of` | with `all_of`: and none of these appear |
+| `none_of` | with `all_of`: excusals, same shape and rules as `require_absent` |
 | `require_present` | file-level guard on `pattern`: report only if the file contains ALL of these |
-| `require_absent` | file-level guard: report only if the file contains NONE of these |
+| `require_absent` | excusals: each entry is a credential or evidence (see below) |
+| `credential` | in a `require_absent`/`none_of` entry: a line pattern anchored with `^` naming the owner a file may be |
+| `holders` | with `credential`: the exact number of lines in scope that hold it |
+| `evidence` | in a `require_absent`/`none_of` entry: a pattern that discharges a trigger it sits near |
+| `within` | with `evidence`: how many lines from the trigger it may sit, 0–100 |
 | `prefilter` | literal substring gate — a pure optimization (see below) |
 | `syntax` | regex flavour |
 | `multiline` | match across line boundaries |
 | `window` | bounded multiline window |
 | `denied_by` | literal markers that SUPPRESS a match whose text denies the topic (see below) |
+
+**Excusals are credentials or evidence, never a bare string (0.9).** A bare
+`require_absent` entry used to excuse any file containing its text anywhere: a
+copy inside a string earned it, any number of files could hold it, and it
+excused triggers it had nothing to do with. Each entry now says which of two
+things it is.
+
+```yaml
+params:
+  pattern: '"auto_policy"'
+  require_absent:
+    # CREDENTIAL: the one file that declares the constant may spell it.
+    - {credential: '^const SourceAutoPolicy = "auto_policy"', holders: 1}
+```
+
+A **credential** names an owner. It must be anchored at the start of a line
+(`^...`, optionally after a flag group such as `(?i)^`), and `holders` is the
+exact number of lines in the rule's scope that match it. The count is taken
+over every in-scope file, prefiltered or not, and a run whose count differs is
+a finding: the set of excused files is fixed, and changing it is a reviewed
+edit to a number. The count is judged on the live tree only: a fixture proves
+the trigger and the excusal, and cannot honestly hold the repository's number,
+so prove the count on the real tree (a mutation that duplicates a holder line). A rule carrying a credential is evaluated over the whole tree
+even under `--staged`/`--range`. A library rule cannot carry one: its holder
+count is a fact about the consuming repo, so declare the rule locally.
+
+```yaml
+params:
+  pattern: 'INSERT INTO'
+  require_absent:
+    # EVIDENCE: this INSERT runs against a disposable database.
+    - {evidence: 'ephemeralDB\(', within: 5}
+```
+
+**Evidence** names a discharge. It excuses only a trigger it starts within
+`within` lines of (before or after), at most 100; every trigger needs its own.
+Evidence elsewhere in the file excuses nothing, so it cannot become a
+file-wide opt-out. A proof that really is file-wide ("a file that does X must
+contain Y") is a requirement, not an excusal: write it as `required-pattern`
+with `when:`.
 
 **`denied_by` answers polarity, which no pattern can carry.** A
 forbidden-pattern matches TOPIC. Whether the matched text asserts that topic or
@@ -310,7 +354,12 @@ that passes.
 Requires a pattern to be present. `pattern` is the regex, `syntax` its flavour
 (as above), and `mode` chooses the unit: `every-file` (the default) reports
 each in-scope file that lacks the pattern, `exists` reports once, at the end,
-if no in-scope file carried it.
+if no in-scope file carried it. `when` (every-file mode only) applies the
+requirement only to files that match it: "a file that does X must contain Y".
+It takes one pattern or a list, and a list applies only where every entry
+matches.
+`multiline` matches `pattern` and `when` over the whole file, so the required
+shape may span lines.
 
 ```yaml
 - id: spec-exists

@@ -38,6 +38,6 @@ rules:
       prefilter: '--source-maps'
       pattern: '--source-maps'
       require_absent:
-        - '(?:gcloud storage (?:cp|rsync)|gsutil(?: -m)? (?:cp|rsync))[^;&|=]*gs://[^;&|=]*main\.dart\.js\.map'
+        - {evidence: '(?:gcloud storage (?:cp|rsync)|gsutil(?: -m)? (?:cp|rsync))[^;&|=]*gs://[^;&|=]*main\.dart\.js\.map', within: 100}
     cure: "A --source-maps build must upload its map: add a `gcloud storage cp build/web/main.dart.js.map gs://<bucket>/<build>/main.dart.js.map` step, and never gate the deploy behind continue-on-error (a swallowed upload strands every stack from that build)."
     origin: scripts/check-deploy-source-maps-require-gcs-upload.sh

@@ -9,7 +9,11 @@ rules:
   params:
     pattern: '\bawait\s+'
     require_present: ['bool\s+build\s*\(']
-    require_absent: ['ref\.keepAlive\s*\(', 'keepAlive:\s*true']
+    # Evidence, not a credential: the keepAlive must sit beside the await it
+    # protects. A keepAlive elsewhere in the file protects a different build.
+    require_absent:
+      - {evidence: 'ref\.keepAlive\s*\(', within: 30}
+      - {evidence: 'keepAlive:\s*true', within: 30}
   cure: "final link = ref.keepAlive(); try { await ... } finally { link.close(); } (#6584)."
   origin: stdlib/generic
   tags: [dart]

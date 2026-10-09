@@ -21,19 +21,14 @@
 # (helper / test) because the .sh's assertions target two different files.
 rules:
   - id: feedback-post-helper-attaches-bearer
-    type: forbidden-pattern
+    type: required-pattern
     severity: error
     scope:
       include:
         - "packages/plt_core/lib/network/raw_http_client.dart"
     params:
-      # Origin: the helper must set an 'Authorization' header AND attach
-      # 'Bearer $sessionToken' (two independent grep -qF assertions). all_of holds the
-      # present context token, none_of the required Bearer attach whose absence fires.
-      all_of:
-        - "'Authorization'"
-      none_of:
-        - 'Bearer \$sessionToken'
-      prefilter: 'Authorization'
+      # A requirement, not an excusal (formwork 0.9): the file that sets the Authorization header must attach the Bearer token.
+      when: "'Authorization'"
+      pattern: 'Bearer \$sessionToken'
     cure: "Keep the Bearer attach in raw_http_client.dart: set the 'Authorization' header to 'Bearer $sessionToken' (#1898)."
     origin: scripts/check-feedback-submission-bearer-auth.sh

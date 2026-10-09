@@ -101,12 +101,16 @@ func TestForbiddenAllOfCoOccurrence(t *testing.T) {
 }
 
 func TestForbiddenAllOfWithNoneOf(t *testing.T) {
-	c := mkForbidden(t, "all_of: ['jsonDecode']\nnone_of: ['fromJson']")
+	c := mkForbidden(t, "all_of: ['jsonDecode']\nnone_of: [{credential: '^// owner: json codec', holders: 1}]")
 	if m, _ := c.CheckFile(scan.NewMemFile("a.dart", []byte("jsonDecode(x)\n"))); len(m) != 1 {
 		t.Fatalf("all_of present + none_of absent should fire, got %v", m)
 	}
-	if m, _ := c.CheckFile(scan.NewMemFile("b.dart", []byte("jsonDecode(x).fromJson()\n"))); len(m) != 0 {
-		t.Fatalf("none_of present should pass, got %v", m)
+	if m, _ := c.CheckFile(scan.NewMemFile("b.dart", []byte("// owner: json codec\njsonDecode(x)\n"))); len(m) != 0 {
+		t.Fatalf("none_of credential held should pass, got %v", m)
+	}
+	// none_of is a credential, not evidence: its text mid-line excuses nothing.
+	if m, _ := c.CheckFile(scan.NewMemFile("c.dart", []byte("jsonDecode(x) // owner: json codec\n"))); len(m) != 1 {
+		t.Fatalf("a mid-line copy of the credential must not excuse, got %v", m)
 	}
 }
 

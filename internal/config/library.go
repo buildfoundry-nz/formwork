@@ -118,6 +118,13 @@ func loadRuleFile(cfg *Config, seen map[string]string, index map[string]int, src
 			return fmt.Errorf("config: %s: %w", src, err)
 		}
 		rule.Library = library
+		// A credential's holder count is a fact about the consuming repo, which a
+		// pack cannot know. The consumer declares such a rule locally (local wins
+		// by id), where the count is its own.
+		if h, ok := rule.Checker.(interface{ HasCredentials() bool }); library != "" && ok && h.HasCredentials() {
+			return fmt.Errorf("config: %s: library rule %s: a library rule cannot carry a credential (require_absent or none_of "+
+				"{credential, holders}): its holder count belongs to the consuming repo, so declare the rule locally", src, rule.ID)
+		}
 		if prev, dup := seen[rule.ID]; dup {
 			if library == "" && strings.HasPrefix(prev, "library:") {
 				cfg.Rules[index[rule.ID]] = rule

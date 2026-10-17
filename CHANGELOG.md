@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.1
+
+### Added
+
+- `forbidden-pattern` takes `params.census`: the command runner (`cmd`,
+  `when`, `expect`, `output`) whose verdict is the finding, while the rule
+  type stays `forbidden-pattern` and the rule stays fast, so
+  `check --skip-escapes` runs the detector. Set exactly one of `pattern`,
+  `all_of`, or `census`. A `cost` key inside `census` is refused. `{{root}}`,
+  `{{repo}}`, and fixture isolation apply as they do for `command`.
+
 ## 0.9.0
 
 ### Changed (breaking)

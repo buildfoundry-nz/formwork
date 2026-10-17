@@ -257,6 +257,7 @@ Reports files matching a pattern.
 | `multiline` | match across line boundaries |
 | `window` | bounded multiline window |
 | `denied_by` | literal markers that SUPPRESS a match whose text denies the topic (see below) |
+| `census` | a command detector (`cmd`, `when`, `expect`, `output`) whose verdict is the finding. Exactly one of `pattern`, `all_of`, or `census`. The rule stays fast, so `--skip-escapes` runs it. `cost` inside `census` is refused |
 
 **Excusals are credentials or evidence, never a bare string (0.9).** A bare
 `require_absent` entry used to excuse any file containing its text anywhere: a
@@ -348,6 +349,37 @@ that passes.
   params:
     pattern: '//\s*(TODO|FIXME|HACK)\b'
   cure: "Resolve the item now or track it in an issue; marker comments rot."
+```
+
+**`census` is the command runner under this type.** A hand-built document is
+not a line: it is folded across literals, calls, and files, and a pattern that
+tries to see that fold false-fires on the composite literals beside it. The
+detector that already folds those shapes stays the detector. `census` takes
+that detector's params (`cmd`, `when`, `expect`, `output` — the same keys
+`command` decodes, except `cost`). The rule does not declare a cost, so it is
+fast and `check --skip-escapes` runs it. A `cost` key inside `census` is
+refused at load: declaring a slower class would drop the detector at
+pre-commit, which is the hole this mode closes.
+
+`{{root}}`, `{{repo}}`, the parent-segment lint, the `when.paths_changed`
+lint, and fixture isolation apply, because the checker is that runner. A
+census cannot combine with `pattern`, `all_of`, `multiline`, `prefilter`,
+`window`, `syntax`, `denied_by`, `require_present`, `require_absent`, or
+`none_of`.
+
+```yaml
+- id: no-hand-built-json
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include: ["**/*.go"]
+  params:
+    census:
+      cmd: ["go", "-C", "{{repo}}/scripts/dev/gojsoncensus", "run", ".", "--root", "{{root}}"]
+      expect:
+        exit: 0
+      output: findings-v1
+  cure: "Build the body as the declared message. Do not type a JSON document into source."
 ```
 
 #### `required-pattern`

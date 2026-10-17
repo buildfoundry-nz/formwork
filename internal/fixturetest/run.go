@@ -367,14 +367,27 @@ var commandOutputTail = regexp.MustCompile(
 // one, is left entirely to diff — which already reports the manifests that are
 // wrong for those reasons, and would be double-reported by a requirement that
 // asked the second question first.
+// ruleShellsOut reports whether this rule's verdict comes from a subprocess.
+// type: command does. forbidden-pattern census mode does too: it forwards
+// Argv from that same runner, and a bare '-' on its fire manifest accepts a
+// detector that failed to compile.
+func ruleShellsOut(r *config.Rule) bool {
+	if r.Type == "command" {
+		return true
+	}
+	type argvReader interface{ Argv() []string }
+	_, ok := r.Checker.(argvReader)
+	return ok
+}
+
 func commandPinProblems(r *config.Rule, findings []finding.Finding, expected []expectation) []string {
-	// Scoped to the rule type that shells out, deliberately. A declarative
+	// Scoped to the rule that shells out, deliberately. A declarative
 	// rule's scope-level message ("required pattern not found in any in-scope
 	// file") is just as talkative, but it is produced by a checker the engine
 	// compiled and the corpus spells those manifests `-` throughout; the
 	// newly-reachable hazard is a SUBPROCESS whose failure to run and whose
 	// verdict share an exit code.
-	if r.Type != "command" {
+	if !ruleShellsOut(r) {
 		return nil
 	}
 	printed := ""

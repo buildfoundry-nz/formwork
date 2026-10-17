@@ -100,6 +100,14 @@ type command struct {
 	skipped atomic.Bool
 }
 
+// NewChecker builds the command checker from a params node. forbidden-pattern
+// census mode delegates to it so a document census keeps this runner — argv,
+// expect, findings-v1, {{root}}/{{repo}}, the git-env refusal — while the rule
+// type stays forbidden-pattern and the wrapper does not declare a cost.
+func NewChecker(params *yaml.Node) (rules.Checker, error) {
+	return newCommand(params)
+}
+
 func newCommand(params *yaml.Node) (rules.Checker, error) {
 	var p commandParams
 	if err := rules.DecodeParams(params, &p); err != nil {
@@ -571,7 +579,17 @@ func snippet(out []byte) string {
 // this, so production evaluation keeps cold go-run semantics. The returned
 // checker collapses non-zero exits to match `go run` (exit 1 + "exit status N"
 // on CombinedOutput) so formwork test and formwork check observe the same codes.
+// compiledRewriter is implemented by a checker that wraps a command and must
+// keep that wrap when fixturetest substitutes a compiled binary. Dropping the
+// wrap would also drop the wrapper's cost (fast) and its forwarded when-gate.
+type compiledRewriter interface {
+	Recompile(binary string, progArgs []string, workDir string) (rules.Checker, bool)
+}
+
 func WithCompiledBinary(c rules.Checker, binary string, progArgs []string, workDir string) (rules.Checker, bool) {
+	if h, ok := c.(compiledRewriter); ok {
+		return h.Recompile(binary, progArgs, workDir)
+	}
 	orig, ok := c.(*command)
 	if !ok {
 		return c, false

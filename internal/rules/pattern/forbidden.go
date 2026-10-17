@@ -37,6 +37,32 @@ type forbiddenParams struct {
 	Multiline bool     `yaml:"multiline"` // match over whole file content, not line-by-line
 	DeniedBy  []string `yaml:"denied_by"` // suppress a match whose text DENIES the topic it matched (#4)
 	Window    int      `yaml:"window"`    // all_of only: patterns must co-occur within this many consecutive lines (0 = whole file)
+	// Census is the third mode: a command detector (cmd, when, expect, output)
+	// whose verdict is this rule's finding. Exactly one of pattern, all_of, or
+	// census. The wrapper stays fast so --skip-escapes runs the detector.
+	// censusParams captures the node raw. DecodeParams sets KnownFields, and a
+	// *yaml.Node field is then decoded as a struct, which refuses cmd.
+	Census censusParams `yaml:"census"`
+}
+
+// censusParams keeps the census mapping as a node so the command decoder,
+// not this struct, is what rejects an unknown key inside it.
+type censusParams struct {
+	node *yaml.Node
+}
+
+func (c *censusParams) UnmarshalYAML(value *yaml.Node) error {
+	if value == nil || value.Tag == "!!null" {
+		c.node = nil
+		return nil
+	}
+	copied := *value
+	c.node = &copied
+	return nil
+}
+
+func (c censusParams) present() bool {
+	return c.node != nil && c.node.Kind != 0 && c.node.Tag != "!!null"
 }
 
 type forbidden struct {
@@ -66,8 +92,22 @@ func newForbidden(params *yaml.Node) (rules.Checker, error) {
 		return nil, err
 	}
 	hasPattern, hasAllOf := p.Pattern != "", len(p.AllOf) > 0
-	if hasPattern == hasAllOf {
-		return nil, errors.New("forbidden-pattern: set exactly one of params.pattern or params.all_of")
+	hasCensus := p.Census.present()
+	modes := 0
+	if hasPattern {
+		modes++
+	}
+	if hasAllOf {
+		modes++
+	}
+	if hasCensus {
+		modes++
+	}
+	if modes != 1 {
+		return nil, errors.New("forbidden-pattern: set exactly one of params.pattern, params.all_of, or params.census")
+	}
+	if hasCensus {
+		return newCensus(p)
 	}
 	hasGuards := len(p.RequirePresent) > 0 || len(p.RequireAbsent) > 0
 	if hasGuards && !hasPattern {

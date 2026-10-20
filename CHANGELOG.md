@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.10.0
+
+### Changed (breaking)
+
+- **Every `-format json` answer is one object.** `list rules`, `list lanes`,
+  `list types`, `list preprocessors` and `rules-for` used to print a bare
+  top-level array, a shape a consumer can only decode by framing it in code.
+  Each now answers an object whose one member is the list: `rules`, `lanes`,
+  `types`, `preprocessors`, and `paths` (one entry per asked path, in the
+  order asked). The entries are unchanged. The JSON writer refuses any other
+  top-level value, so no answer can regress to an array. Migration: read the
+  member instead of the document.
+
 ## 0.9.1
 
 ### Added

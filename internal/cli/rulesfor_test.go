@@ -189,17 +189,20 @@ func TestRulesForJSONGroupsByPath(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	var got []struct {
-		Path  string `json:"path"`
-		Rules []struct {
-			ID       string `json:"id"`
-			Severity string `json:"severity"`
-			Cure     string `json:"cure"`
-		} `json:"rules"`
+	var doc struct {
+		Paths []struct {
+			Path  string `json:"path"`
+			Rules []struct {
+				ID       string `json:"id"`
+				Severity string `json:"severity"`
+				Cure     string `json:"cure"`
+			} `json:"rules"`
+		} `json:"paths"`
 	}
-	if err := json.Unmarshal([]byte(out), &got); err != nil {
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
 	}
+	got := doc.Paths
 	if len(got) != 2 || got[0].Path != "README.md" || got[1].Path != "src/notes.txt" {
 		t.Fatalf("paths not in argv order: %+v", got)
 	}
@@ -298,18 +301,21 @@ scan:
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	var got []struct {
-		Path       string `json:"path"`
-		Rules      []any  `json:"rules"`
-		NotScanned *struct {
-			By     string `json:"by"`
-			Glob   string `json:"glob"`
-			Reason string `json:"reason"`
-		} `json:"not_scanned"`
+	var doc struct {
+		Paths []struct {
+			Path       string `json:"path"`
+			Rules      []any  `json:"rules"`
+			NotScanned *struct {
+				By     string `json:"by"`
+				Glob   string `json:"glob"`
+				Reason string `json:"reason"`
+			} `json:"not_scanned"`
+		} `json:"paths"`
 	}
-	if err := json.Unmarshal([]byte(out), &got); err != nil {
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
 	}
+	got := doc.Paths
 	if len(got) != 1 || got[0].NotScanned == nil || got[0].NotScanned.Glob != "vendor/**" || got[0].NotScanned.Reason != "vendored, not ours" || len(got[0].Rules) != 0 {
 		t.Fatalf("not_scanned must be structural with empty rules: %+v", got[0])
 	}

@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
@@ -69,6 +70,14 @@ func introspectFormat(f string, stderr io.Writer) bool {
 }
 
 func emitJSON(w, stderr io.Writer, v any) int {
+	// Every -format json answer is one object: a list is a named member of
+	// it, never the document itself. A bare top-level array is a shape no
+	// declared message decodes without framing it in code, which is what
+	// every consumer used to do.
+	if k := reflect.ValueOf(v).Kind(); k != reflect.Struct && k != reflect.Pointer {
+		fmt.Fprintf(stderr, "formwork: rendering json: a %s is not a document; wrap it in an object\n", k)
+		return 2
+	}
 	out, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		// Unreachable with the fixed-field structs marshaled today, but an
@@ -78,6 +87,16 @@ func emitJSON(w, stderr io.Writer, v any) int {
 	}
 	fmt.Fprintln(w, string(out))
 	return 0
+}
+
+// ruleList is `list rules` JSON output: the rules, sorted by id.
+type ruleList struct {
+	Rules []ruleRow `json:"rules"`
+}
+
+// laneList is `list lanes` JSON output: the lanes, sorted by name.
+type laneList struct {
+	Lanes []laneRow `json:"lanes"`
 }
 
 // ruleRow is one rule in `list rules` JSON output.
@@ -136,9 +155,9 @@ func runList(args []string, stdout, stderr io.Writer) int {
 	}
 	switch kind := fs.Arg(0); kind {
 	case "types":
-		return listStrings(stdout, stderr, *format, rules.TypeNames())
+		return listStrings(stdout, stderr, *format, namesDoc{Types: rules.TypeNames()}, rules.TypeNames())
 	case "preprocessors":
-		return listStrings(stdout, stderr, *format, preprocess.Names())
+		return listStrings(stdout, stderr, *format, namesDoc{Preprocessors: preprocess.Names()}, preprocess.Names())
 	case "rules":
 		cfg, ok := loadGatedNonEmpty(*root, "there is nothing to enumerate and an empty list would read as \"this repository declares no guardrails\"", stderr)
 		if !ok {
@@ -153,7 +172,7 @@ func runList(args []string, stdout, stderr io.Writer) int {
 			})
 		}
 		if *format == "json" {
-			return emitJSON(stdout, stderr, rows)
+			return emitJSON(stdout, stderr, ruleList{Rules: rows})
 		}
 		for _, row := range rows {
 			pre := row.Preprocess
@@ -177,7 +196,7 @@ func runList(args []string, stdout, stderr io.Writer) int {
 			rows = append(rows, laneRow{Name: l.Name, All: l.All, Tags: l.Tags, Cost: l.Cost, CI: l.CI, Shape: "list-lane"})
 		}
 		if *format == "json" {
-			return emitJSON(stdout, stderr, rows)
+			return emitJSON(stdout, stderr, laneList{Lanes: rows})
 		}
 		for _, row := range rows {
 			sel := "all"
@@ -400,9 +419,16 @@ func fixtureDirs(root, id string) ([]string, error) {
 	return out, nil
 }
 
-func listStrings(w, stderr io.Writer, format string, names []string) int {
+// namesDoc is `list types` or `list preprocessors` JSON output: the one
+// member the listing fills.
+type namesDoc struct {
+	Types         []string `json:"types,omitempty"`
+	Preprocessors []string `json:"preprocessors,omitempty"`
+}
+
+func listStrings(w, stderr io.Writer, format string, doc namesDoc, names []string) int {
 	if format == "json" {
-		return emitJSON(w, stderr, names)
+		return emitJSON(w, stderr, doc)
 	}
 	for _, n := range names {
 		fmt.Fprintln(w, n)

@@ -54,18 +54,21 @@ func TestRulesForGitIgnoredJSONIsStructural(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	var got []struct {
-		Rules      []any `json:"rules"`
-		NotScanned *struct {
-			By     string `json:"by"`
-			Glob   string `json:"glob"`
-			Rule   string `json:"rule"`
-			Reason string `json:"reason"`
-		} `json:"not_scanned"`
+	var doc struct {
+		Paths []struct {
+			Rules      []any `json:"rules"`
+			NotScanned *struct {
+				By     string `json:"by"`
+				Glob   string `json:"glob"`
+				Rule   string `json:"rule"`
+				Reason string `json:"reason"`
+			} `json:"not_scanned"`
+		} `json:"paths"`
 	}
-	if err := json.Unmarshal([]byte(out), &got); err != nil {
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
 	}
+	got := doc.Paths
 	if len(got) != 1 || got[0].NotScanned == nil {
 		t.Fatalf("not_scanned must be structural: %s", out)
 	}

@@ -1356,6 +1356,13 @@ formwork scope [-format human|json] [--staged | --range A..B]       # the same, 
 cannot misreport its own vocabulary — which is why they, and not this document,
 are the authority.
 
+Every `-format json` answer is one object, and a list is a named member of it:
+`list rules` answers `rules`, `list lanes` answers `lanes`, `list types` and
+`list preprocessors` answer `types` and `preprocessors`, and `rules-for`
+answers `paths`, one entry per asked path in the order asked. A consumer
+decodes the answer as one declared document; nothing it reads is a bare
+top-level array.
+
 `TestReferenceManualIntrospectionCommandsTakeTheFormatFlag` (in `internal/meta`)
 runs each of these lines against the binary, so the two promises above are
 executable rather than asserted.

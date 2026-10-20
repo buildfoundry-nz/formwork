@@ -145,15 +145,18 @@ func TestListJSONIsStableAndParses(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	var got []struct {
-		ID       string `json:"id"`
-		Type     string `json:"type"`
-		Severity string `json:"severity"`
-		Cost     string `json:"cost"`
+	var doc struct {
+		Rules []struct {
+			ID       string `json:"id"`
+			Type     string `json:"type"`
+			Severity string `json:"severity"`
+			Cost     string `json:"cost"`
+		} `json:"rules"`
 	}
-	if err := json.Unmarshal([]byte(out), &got); err != nil {
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
 	}
+	got := doc.Rules
 	if len(got) != 2 || got[0].ID != "no-todo-markers" || got[0].Type != "forbidden-pattern" || got[0].Severity != "error" || got[0].Cost != "fast" {
 		t.Fatalf("unexpected json: %+v", got)
 	}
@@ -376,13 +379,16 @@ lanes:
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, jout)
 	}
-	var rows []struct {
-		ID    string   `json:"id"`
-		Lanes []string `json:"lanes"`
+	var doc struct {
+		Rules []struct {
+			ID    string   `json:"id"`
+			Lanes []string `json:"lanes"`
+		} `json:"rules"`
 	}
-	if err := json.Unmarshal([]byte(jout), &rows); err != nil {
+	if err := json.Unmarshal([]byte(jout), &doc); err != nil {
 		t.Fatalf("json: %v\n%s", err, jout)
 	}
+	rows := doc.Rules
 	if len(rows) != 2 || len(rows[0].Lanes) != 2 || len(rows[1].Lanes) != 1 || rows[1].Lanes[0] != "ci" {
 		t.Fatalf("lane assignment wrong: %+v", rows)
 	}

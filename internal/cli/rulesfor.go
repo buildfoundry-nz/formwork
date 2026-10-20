@@ -57,6 +57,12 @@ type notScannedOut struct {
 }
 
 // pathRules groups governing rules under one queried path.
+// rulesForDoc is `rules-for` JSON output: each asked path's answer, in the
+// order asked.
+type rulesForDoc struct {
+	Paths []pathRules `json:"paths"`
+}
+
 type pathRules struct {
 	Path       string         `json:"path"`
 	Rules      []govRule      `json:"rules"`
@@ -330,7 +336,7 @@ func runRulesFor(args []string, stdout, stderr io.Writer) int {
 		out = append(out, pr)
 	}
 	if *format == "json" {
-		return emitJSON(stdout, stderr, out)
+		return emitJSON(stdout, stderr, rulesForDoc{Paths: out})
 	}
 	for _, pr := range out {
 		fmt.Fprintf(stdout, "%s:\n", pr.Path)

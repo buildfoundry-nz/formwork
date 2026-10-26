@@ -247,3 +247,86 @@ func TestPairConsistencySameFuncDartMapLiteralFieldHasNoUnit(t *testing.T) {
 		t.Fatalf("map-literal initializer must not become a unit, got %+v", ms)
 	}
 }
+
+// A multi-line signature with NAMED parameters opens a `{` inside the
+// parameter list and closes it on the line that opens the body — `String
+// id, {` … `}) async {`. The walker took the named-parameter brace for a
+// candidate body opener (resetting the accumulated signature) and then set
+// the body's open depth before counting the `}` earlier on its own line, so
+// the unit closed on the line it opened and the body was never a unit: every
+// same-func rule was blind to every such function. Measured on a production
+// corpus: a Dart same-func rule whose only trigger sat in a named-parameter
+// function stayed green with its companion deleted.
+func TestPairConsistencySameFuncDartNamedParamsMultiLineFires(t *testing.T) {
+	src := `Future<int> foldPageSnapshot(
+  Ref ref,
+  String pageId, {
+  required String failureEvent,
+  bool foldCarriedView = true,
+}) async {
+  applyOptimistic(entry);
+  return 1;
+}
+`
+	c := mustChecker(t, dartPairParams)
+	ms, err := c.CheckFile(scan.NewMemFile("fold.dart", []byte(src)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ms) != 1 {
+		t.Fatalf("a named-parameter function's bare body must fire once, got %+v", ms)
+	}
+	if ms[0].Line != 7 {
+		t.Fatalf("finding must anchor on the trigger line (7), got line %d", ms[0].Line)
+	}
+	if !strings.Contains(ms[0].Message, "foldPageSnapshot") {
+		t.Fatalf("message must name the function from its full signature, got %q", ms[0].Message)
+	}
+}
+
+// The single-line spelling — `void f({int a = 1}) {` — has the named-param
+// braces before the body opener on one line. The first `{` is a parameter
+// brace, not the body.
+func TestPairConsistencySameFuncDartNamedParamsOneLineFires(t *testing.T) {
+	src := `class Loader {
+  void load({required String id, Map<String, int> seen = const {}}) {
+    applyOptimistic(entry);
+  }
+}
+`
+	c := mustChecker(t, dartPairParams)
+	ms, err := c.CheckFile(scan.NewMemFile("loader.dart", []byte(src)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ms) != 1 || ms[0].Line != 3 || !strings.Contains(ms[0].Message, "load") {
+		t.Fatalf("a one-line named-parameter method's bare body must fire once on line 3 naming load, got %+v", ms)
+	}
+}
+
+// The companion inside a named-parameter function's body clears it, and the
+// unit ends at the body's closing brace: a sibling after it is its own unit.
+func TestPairConsistencySameFuncDartNamedParamsCompanionPassesAndUnitEnds(t *testing.T) {
+	src := `class Loader {
+  Future<void> load(
+    String id, {
+    bool force = false,
+  }) async {
+    applyOptimistic(entry);
+    revertOptimistic(entry);
+  }
+
+  void other() {
+    applyOptimistic(entry);
+  }
+}
+`
+	c := mustChecker(t, dartPairParams)
+	ms, err := c.CheckFile(scan.NewMemFile("loader.dart", []byte(src)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ms) != 1 || ms[0].Line != 11 || !strings.Contains(ms[0].Message, "other") {
+		t.Fatalf("load passes; other is its own unit and fires on line 11, got %+v", ms)
+	}
+}

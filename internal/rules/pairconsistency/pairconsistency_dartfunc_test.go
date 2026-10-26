@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/buildfoundry-nz/formwork/internal/rules/pairconsistency"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 )
 
@@ -356,5 +357,35 @@ class WallWidthController extends _$WallWidthController {
 	}
 	if len(ms) != 1 || ms[0].Line != 4 || !strings.Contains(ms[0].Message, "setWidth") {
 		t.Fatalf("the annotated class is a container; setWidth is its own unit and fires on line 4, got %+v", ms)
+	}
+}
+
+// SameFuncUnits is the engine's own geometry, exported: an annotated class's
+// two methods are two units, and the arrow-bodied member is none.
+func TestSameFuncUnitsExportsTheEngineGeometry(t *testing.T) {
+	src := `@Riverpod(keepAlive: true)
+class Repo extends _$Repo {
+  Future<int> members({
+    String? pageToken,
+  }) async {
+    return 1;
+  }
+
+  Future<int> invitations() => api.list();
+
+  void other() {
+    work();
+  }
+}
+`
+	us, err := pairconsistency.SameFuncUnits("repo.dart", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(us) != 2 || us[0].Name != "members" || us[1].Name != "other" {
+		t.Fatalf("want units members and other, got %+v", us)
+	}
+	if us[0].Line != 3 || !strings.HasPrefix(src[us[0].Start:us[0].End], "  Future<int> members({") {
+		t.Fatalf("members must span its signature and body, got line %d %q", us[0].Line, src[us[0].Start:us[0].End])
 	}
 }

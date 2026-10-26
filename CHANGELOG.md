@@ -2,6 +2,13 @@
 
 ## 0.10.2
 
+### Added
+
+- `internal/rules/pairconsistency.SameFuncUnits(path, content)` exports the
+  engine's own same-func unit geometry (name, byte span, first line) for Go,
+  Dart and proto, so an instrument that reasons about which unit holds a match
+  reads the engine's units instead of re-deriving them.
+
 ### Fixed
 
 - **`pair-consistency` `where: same-func` treats an annotated Dart class as a

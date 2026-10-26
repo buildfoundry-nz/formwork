@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.10.1
+
+### Fixed
+
+- **`pair-consistency` `where: same-func` sees Dart functions with named
+  parameters.** A multi-line signature whose parameter list opens a named
+  block — `String id, {` … `}) async {` — and the one-line
+  `void f({int a = 1}) {` were never units: the walker took the
+  named-parameter `{` for a body opener and set the real body's open depth
+  before counting the `}` that closes the named block on the same line, so
+  the unit closed where it opened. Every same-func rule was blind to every
+  such function's body, and stayed green with its companion deleted. Only a
+  `{` at parenthesis depth 0 now opens a body, braces inside a parameter list
+  keep the signature accumulating, and a unit's open depth is the depth at
+  its opener.
+
 ## 0.10.0
 
 ### Changed (breaking)

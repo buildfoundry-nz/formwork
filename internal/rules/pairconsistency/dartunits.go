@@ -45,6 +45,10 @@ func dartFuncUnits(path string, content []byte) ([]funcUnit, error) {
 	var pending strings.Builder
 	pendingStart := 0
 	pendingLine := 0
+	// pendingParen is the parenthesis depth the accumulated signature ends
+	// at. A `{` while it is open is a NAMED-PARAMETER brace (`String id, {`),
+	// never a body: only a `{` at paren depth 0 opens one.
+	pendingParen := 0
 
 	offset := 0
 	for i, raw := range strings.SplitAfter(string(content), "\n") {
@@ -63,21 +67,25 @@ func dartFuncUnits(path string, content []byte) ([]funcUnit, error) {
 			continue
 		}
 
-		open := strings.Index(line, "{")
+		open, endParen, bracesOutsideParens := dartBodyOpener(line, pendingParen)
 		if open == -1 {
 			depth += delta
 			switch {
-			case delta != 0 || strings.Contains(line, ";"):
+			case endParen == 0 && (bracesOutsideParens || strings.Contains(line, ";")):
 				// A `}`-carrying line or a completed statement ends any
 				// accumulated signature (abstract/arrow declarations land
-				// here — they open no body and are never units).
+				// here — they open no body and are never units). Braces and
+				// semicolons INSIDE a still-open parameter list are part of
+				// the signature (named parameters, default values).
 				pending.Reset()
+				pendingParen = 0
 			case strings.TrimSpace(line) != "":
 				if pending.Len() == 0 {
 					pendingStart = offset
 					pendingLine = lineNo
 				}
 				pending.WriteString(strings.TrimSpace(line) + " ")
+				pendingParen = endParen
 			}
 			offset += len(raw)
 			continue
@@ -90,10 +98,15 @@ func dartFuncUnits(path string, content []byte) ([]funcUnit, error) {
 			start, startLine = offset, lineNo
 		}
 		pending.Reset()
+		pendingParen = 0
 		if isDartUnitHeader(header) {
 			unit = funcUnit{name: dartUnitName(header), start: start, line: startLine}
 			inUnit = true
-			openDepth = depth
+			// The open depth is the depth AT the opener: a `}` earlier on
+			// this line (`}) async {` closing a named-parameter brace) has
+			// already lowered it. Taking the line's starting depth made the
+			// unit close on the line it opened.
+			openDepth = depth + strings.Count(line[:open], "{") - strings.Count(line[:open], "}")
 		}
 		depth += delta
 		if inUnit && depth <= openDepth {
@@ -111,6 +124,33 @@ func dartFuncUnits(path string, content []byte) ([]funcUnit, error) {
 			path, unit.name, unit.line)
 	}
 	return units, nil
+}
+
+// dartBodyOpener scans one line, starting at the parenthesis depth the
+// accumulated signature ended at, and returns the offset of the first `{` at
+// paren depth 0 (-1 when there is none), the paren depth at line end, and
+// whether a brace occurred outside any parenthesis. A `{` inside a parameter
+// list is a named-parameter or default-value brace and is never a body.
+func dartBodyOpener(line string, paren int) (open, endParen int, bracesOutsideParens bool) {
+	for i := 0; i < len(line); i++ {
+		switch line[i] {
+		case '(':
+			paren++
+		case ')':
+			if paren > 0 {
+				paren--
+			}
+		case '{':
+			if paren == 0 {
+				return i, paren, true
+			}
+		case '}':
+			if paren == 0 {
+				bracesOutsideParens = true
+			}
+		}
+	}
+	return -1, paren, bracesOutsideParens
 }
 
 // isDartUnitHeader reports whether the text before a `{` declares a

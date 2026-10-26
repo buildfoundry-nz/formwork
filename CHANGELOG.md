@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.10.2
+
+### Added
+
+- `internal/rules/pairconsistency.SameFuncUnits(path, content)` exports the
+  engine's own same-func unit geometry (name, byte span, first line) for Go,
+  Dart and proto, so an instrument that reasons about which unit holds a match
+  reads the engine's units instead of re-deriving them.
+
+### Fixed
+
+- **`pair-consistency` `where: same-func` treats an annotated Dart class as a
+  container.** An annotation with arguments on the line before a class —
+  `@Riverpod(keepAlive: true)` — joined the accumulated header, and the
+  container test did not allow `(…)` in a leading annotation, so the class read
+  as ONE function unit: every method in it shared one obligation, and a
+  companion in one method answered for a sibling's trigger. Leading annotations
+  are now stripped before the container and header tests, which also stops an
+  annotated function (`@Deprecated('x') void f()`) being named after its
+  annotation.
+
 ## 0.10.1
 
 ### Fixed

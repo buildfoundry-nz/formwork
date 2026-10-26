@@ -31,6 +31,13 @@ var (
 	// test file, or a misbalanced body the walk has not entered).
 	dartControlHead = regexp.MustCompile(`^(?:if|for|while|switch|try|else|catch|on|do|finally|return|throw|assert|yield|rethrow)\b`)
 	dartIdent       = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
+	// dartLeadingAnnotations matches the metadata a declaration may carry
+	// ahead of its header — `@override`, `@Riverpod(keepAlive: true)`,
+	// `@visibleForTesting` — one or more, each with an optional argument list.
+	// It is stripped before the container and header tests: an annotation's
+	// `(…)` is not a parameter list, and left in place it hid `class` from the
+	// container test, so an annotated class read as one function unit.
+	dartLeadingAnnotations = regexp.MustCompile(`^(?:@[\w.$]+(?:\([^()]*(?:\([^()]*\)[^()]*)*\))?\s*)+`)
 )
 
 // dartFuncUnits returns the function-grain units of one .dart file. A unit
@@ -159,7 +166,7 @@ func dartBodyOpener(line string, paren int) (open, endParen int, bracesOutsidePa
 // (parameter list) or an identifier (getters, `async`), where a collection
 // literal ends in `=`, `(`, `,`, `[` or `:`.
 func isDartUnitHeader(header string) bool {
-	h := strings.TrimSpace(header)
+	h := strings.TrimSpace(dartLeadingAnnotations.ReplaceAllString(strings.TrimSpace(header), ""))
 	if h == "" {
 		return false
 	}
@@ -175,7 +182,7 @@ func isDartUnitHeader(header string) bool {
 // ()` → write, `String get label` (no paren) → label. A parenthesised
 // header with no preceding identifier is an anonymous closure.
 func dartUnitName(header string) string {
-	h := strings.TrimSpace(header)
+	h := strings.TrimSpace(dartLeadingAnnotations.ReplaceAllString(strings.TrimSpace(header), ""))
 	if cut := strings.IndexByte(h, '('); cut != -1 {
 		h = h[:cut]
 	}

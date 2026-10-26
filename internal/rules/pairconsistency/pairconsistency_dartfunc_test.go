@@ -330,3 +330,31 @@ func TestPairConsistencySameFuncDartNamedParamsCompanionPassesAndUnitEnds(t *tes
 		t.Fatalf("load passes; other is its own unit and fires on line 11, got %+v", ms)
 	}
 }
+
+// An annotation with arguments on the line before a class — Riverpod's
+// `@Riverpod(keepAlive: true)` — joined the accumulated header, and the
+// container test did not allow `(…)` in a leading annotation, so the CLASS
+// read as one function unit: every method in it shared one obligation and a
+// companion in one method answered for a sibling's trigger.
+func TestPairConsistencySameFuncDartAnnotatedClassIsAContainer(t *testing.T) {
+	src := `@Riverpod(keepAlive: true)
+class WallWidthController extends _$WallWidthController {
+  Future<void> setWidth() async {
+    applyOptimistic(entry);
+  }
+
+  Future<void> materialize() async {
+    applyOptimistic(entry);
+    revertOptimistic(entry);
+  }
+}
+`
+	c := mustChecker(t, dartPairParams)
+	ms, err := c.CheckFile(scan.NewMemFile("wall_width_controller.dart", []byte(src)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ms) != 1 || ms[0].Line != 4 || !strings.Contains(ms[0].Message, "setWidth") {
+		t.Fatalf("the annotated class is a container; setWidth is its own unit and fires on line 4, got %+v", ms)
+	}
+}

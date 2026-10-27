@@ -61,7 +61,7 @@ func walk(t *testing.T, files map[string]string) *scan.FileSet {
 
 func judge(t *testing.T, ruleYAML string, files map[string]string) vacuity.Verdict {
 	t.Helper()
-	v, err := vacuity.Judge(loadRule(t, ruleYAML), walk(t, files))
+	v, err := vacuity.Judge(loadRule(t, ruleYAML), walk(t, files), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestEmptyAnchorPatternIsAnError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := vacuity.Judge(r, walk(t, map[string]string{"a.go": "package a\n"})); err == nil {
+	if _, err := vacuity.Judge(r, walk(t, map[string]string{"a.go": "package a\n"}), nil); err == nil {
 		t.Fatal("empty anchor pattern judged without error")
 	}
 }

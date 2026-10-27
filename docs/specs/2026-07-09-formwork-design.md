@@ -712,8 +712,10 @@ The validating target's synth-test discipline, built into the engine:
   unsuppressed findings while blind's anchor probe counts suppressed ones too
   (a marker-suppressed symbol still proves the anchor sees its subject), and a
   `guard-precedes-call` rule with `funcs` runs a second probe with the filter
-  defeated. `# except-declaration:` excuses a vacuous fixture only in the vacuity
-  census, which reads it; `formwork test` has no access to it.
+  defeated. A fixture standing at an `except.paths` entry declared inert with
+  `# except-declaration: <reason>` is excused by `formwork test` and by the
+  vacuity census alike, both reading the marker through `internal/vacuity` (a
+  bare marker declares nothing; only `.formwork/rules/*.yaml` of the root is read).
 
 ## 8. Orchestration
 

@@ -10,7 +10,10 @@
   `go/call-confined-to-func-name` or `go/guard-precedes-call` fixture holding no
   occurrence of the anchored symbol/sink) fail the arm and the rule, exit 1, by
   default. A corpus with such fixtures that passed before fails now; fix the
-  fixture so it exercises the rule (#49).
+  fixture so it exercises the rule (#49). A pass fixture standing at an
+  `except.paths` entry declared inert with `# except-declaration: <reason>` (a
+  bare marker declares nothing) is excused, exactly as the vacuity census
+  excuses it; both read the marker through `internal/vacuity` (#49).
 
 ### Added
 

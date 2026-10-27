@@ -18,8 +18,8 @@ func TestUnreadableAnchorParamsIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	boom := errors.New("boom")
-	_, err = blind(r, &scan.FileSet{}, func(*config.Rule) (anchorParamSet, error) {
-		return anchorParamSet{}, boom
+	_, err = blind(r, &scan.FileSet{}, func(*config.Rule) (AnchorParamSet, error) {
+		return AnchorParamSet{}, boom
 	})
 	if !errors.Is(err, boom) {
 		t.Fatalf("err = %v, want it to wrap the anchor-params error", err)

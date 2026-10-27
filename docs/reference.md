@@ -1470,7 +1470,9 @@ rule, and two answers fail the arm (so the rule, so exit 1) with a problem line
   scope that subtracts nothing, would have judged nothing in it. A fixture
   that parks a real violation at an excluded path is not vacuous: it holds the
   exclusion in place. Fix by adding an in-scope file the rule judges and passes,
-  or by parking a real violation at the excluded path.
+  or by parking a real violation at the excluded path. A fixture standing at an
+  `except.paths` entry marked `# except-declaration: <reason>` on the line above
+  it is excused; a marker with no reason is not.
 - `PASS-FIXTURE-BLIND` — `go/call-confined-to-func-name` and
   `go/guard-precedes-call` only: the fixture is reached but holds no occurrence
   of the `symbol` / `sink` the rule is anchored on, even with `allowed_func` /

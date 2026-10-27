@@ -69,15 +69,18 @@ func IsEscape(r *config.Rule) bool {
 // An escape rule is not-judged. Otherwise vacuous is checked first, then blind;
 // a rule that is neither is judged. A probe that cannot run is an error — the
 // caller must exit 2, never read it as a pass.
-func Judge(r *config.Rule, fs *scan.FileSet) (Verdict, error) {
-	return judgeWith(r, fs, anchorParams)
+//
+// inert carries the except.paths entries their authors declared inert (see
+// DeclaredInert); a fixture standing at one is not vacuous. nil excuses nothing.
+func Judge(r *config.Rule, fs *scan.FileSet, inert DeclaredInert) (Verdict, error) {
+	return judgeWith(r, fs, inert, AnchorParams)
 }
 
-func judgeWith(r *config.Rule, fs *scan.FileSet, anchor func(*config.Rule) (anchorParamSet, error)) (Verdict, error) {
+func judgeWith(r *config.Rule, fs *scan.FileSet, inert DeclaredInert, anchor func(*config.Rule) (AnchorParamSet, error)) (Verdict, error) {
 	if IsEscape(r) {
 		return NotJudgedEscape(r), nil
 	}
-	vac, err := Vacuous(r, fs, nil)
+	vac, err := Vacuous(r, fs, func(fs *scan.FileSet) bool { return inert.Excuses(r.ID, fs) })
 	if err != nil {
 		return Verdict{}, err
 	}
@@ -100,7 +103,7 @@ func judgeWith(r *config.Rule, fs *scan.FileSet, anchor func(*config.Rule) (anch
 // a required-pattern by an absence) without re-implementing any matcher.
 //
 // declaredInert, when non-nil, lets the caller excuse a fixture standing at a
-// path its author declared inert; Judge passes nil.
+// path its author declared inert (Judge passes DeclaredInert.Excuses).
 //
 // Heavy rules are out of class: their tool runs at the tree root and never
 // consults scope for its verdict.
@@ -152,11 +155,11 @@ func judgesAnything(r *config.Rule, fs *scan.FileSet) (bool, error) {
 	return len(finding.Unsuppressed(fds)) > 0, nil
 }
 
-// neverMatches compiles and can never match: end-of-text followed by
+// NeverMatches compiles and can never match: end-of-text followed by
 // start-of-text. Substituted for the half of a rule that EXCUSES an occurrence
 // (allowed_func, guard), it turns the rule into "flag every occurrence of the
 // anchor".
-const neverMatches = `$^`
+const NeverMatches = `$^`
 
 // probeIdent is a stand-in func name used to tell "admits nothing" from "admits
 // something real" in totalBanConfinement.
@@ -168,7 +171,7 @@ const probeIdent = "SomeFuncName"
 //
 // Two quirks are kept deliberately, as ported:
 //   - vacuous counts only UNSUPPRESSED findings (judgesAnything), while blind's
-//     anchorHits counts suppressed ones too — a marker-suppressed symbol proves
+//     AnchorHits counts suppressed ones too — a marker-suppressed symbol proves
 //     the anchor still sees its subject.
 //   - a guard-precedes-call rule with `funcs` set runs a SECOND probe with the
 //     funcs filter defeated as well, because a pass fixture can legitimately
@@ -178,7 +181,7 @@ const probeIdent = "SomeFuncName"
 // rule reaches no file of, hits>0 and a funcs-probe hit are all KindJudged (the
 // fixture is fine, or the question belongs to vacuous). An anchor-params error
 // or an empty anchor pattern is a config defect and returns an error.
-func blind(r *config.Rule, fs *scan.FileSet, anchor func(*config.Rule) (anchorParamSet, error)) (Verdict, error) {
+func blind(r *config.Rule, fs *scan.FileSet, anchor func(*config.Rule) (AnchorParamSet, error)) (Verdict, error) {
 	var (
 		override  map[string]string
 		field, pt string
@@ -196,9 +199,9 @@ func blind(r *config.Rule, fs *scan.FileSet, anchor func(*config.Rule) (anchorPa
 		if totalBanConfinement(p.AllowedFunc) {
 			return Verdict{Kind: KindJudged}, nil // absence IS this rule's compliant end state
 		}
-		override, field, pt = map[string]string{"allowed_func": neverMatches}, "params.symbol", p.Symbol
+		override, field, pt = map[string]string{"allowed_func": NeverMatches}, "params.symbol", p.Symbol
 	} else {
-		override, field, pt = map[string]string{"guard": neverMatches}, "params.sink", p.Sink
+		override, field, pt = map[string]string{"guard": NeverMatches}, "params.sink", p.Sink
 	}
 	if pt == "" {
 		return Verdict{}, fmt.Errorf("rule %s: %s is empty, so the anchor probe has nothing to look for", r.ID, field)
@@ -206,7 +209,7 @@ func blind(r *config.Rule, fs *scan.FileSet, anchor func(*config.Rule) (anchorPa
 	if !reachesAnyFile(r, fs) {
 		return Verdict{Kind: KindJudged}, nil // vacuous's question, decided before blind is reached
 	}
-	hits, err := anchorHits(r, fs, override)
+	hits, err := AnchorHits(r, fs, override)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("rule %s: anchor probe: %w", r.ID, err)
 	}
@@ -214,7 +217,7 @@ func blind(r *config.Rule, fs *scan.FileSet, anchor func(*config.Rule) (anchorPa
 		return Verdict{Kind: KindJudged}, nil
 	}
 	if p.Funcs != "" {
-		wider, err := anchorHits(r, fs, map[string]string{"guard": neverMatches, "funcs": "."})
+		wider, err := AnchorHits(r, fs, map[string]string{"guard": NeverMatches, "funcs": "."})
 		if err != nil {
 			return Verdict{}, fmt.Errorf("rule %s: funcs-defeated anchor probe: %w", r.ID, err)
 		}
@@ -230,18 +233,18 @@ func blind(r *config.Rule, fs *scan.FileSet, anchor func(*config.Rule) (anchorPa
 	}, nil
 }
 
-// anchorParamSet is the subset of goast params the blind probe anchors on.
-type anchorParamSet struct {
+// AnchorParamSet is the subset of goast params the blind probe anchors on.
+type AnchorParamSet struct {
 	AllowedFunc string `yaml:"allowed_func"`
 	Symbol      string `yaml:"symbol"`
 	Sink        string `yaml:"sink"`
 	Funcs       string `yaml:"funcs"`
 }
 
-// anchorParams reads the name-anchoring params off the rule as written. Only
+// AnchorParams reads the name-anchoring params off the rule as written. Only
 // metadata is read here; every verdict is still rendered by the engine.
-func anchorParams(r *config.Rule) (anchorParamSet, error) {
-	var p anchorParamSet
+func AnchorParams(r *config.Rule) (AnchorParamSet, error) {
+	var p AnchorParamSet
 	raw, err := r.ParamsYAML()
 	if err != nil || raw == "" {
 		return p, err
@@ -268,11 +271,11 @@ func totalBanConfinement(allowedFunc string) bool {
 	return re.MatchString("") && !re.MatchString(probeIdent)
 }
 
-// anchorHits recompiles r with override applied to its params and returns how
+// AnchorHits recompiles r with override applied to its params and returns how
 // many findings — suppressed ones included — the real engine produces over fs.
 // scope.exclude and except.paths are left as written: a symbol surviving only
 // in a path the rule excludes is invisible TO THE RULE.
-func anchorHits(r *config.Rule, fs *scan.FileSet, override map[string]string) (int, error) {
+func AnchorHits(r *config.Rule, fs *scan.FileSet, override map[string]string) (int, error) {
 	checker, err := recompileWith(r, override)
 	if err != nil {
 		return 0, err

@@ -225,6 +225,13 @@ func Results(cfg *config.Config, allRuleIDs []string, root string, workers int) 
 	}
 	sort.Strings(orphans)
 
+	// Read once per run: the except-declaration marker lives only in the rule
+	// files' comments, and the census reads the same files.
+	inert, err := vacuity.ReadDeclaredInert(root)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, r := range cfg.Rules {
 		ruleDir := filepath.Join(fixturesRoot, r.ID)
 		entries, err := os.ReadDir(ruleDir)
@@ -280,7 +287,7 @@ func Results(cfg *config.Config, allRuleIDs []string, root string, workers int) 
 		}
 		if len(armResults) == 0 {
 			for _, a := range arms {
-				ps, v, err := runFixture(r, a.path, a.src, a.isFire, root, workers)
+				ps, v, err := runFixture(r, a.path, a.src, a.isFire, root, workers, inert)
 				if err != nil {
 					releaseArms()
 					return nil, err
@@ -371,7 +378,7 @@ func EvalIn(r *config.Rule, dir, repo string, workers int) ([]finding.Finding, *
 // runFixture evaluates one fixture tree with a fresh checker and returns
 // the fixture's problems (empty = fixture behaved as declared) and, for a pass
 // arm that behaved, its vacuity verdict over the tree EvalIn already walked.
-func runFixture(r *config.Rule, dir, src string, isFire bool, repo string, workers int) ([]string, vacuity.Verdict, error) {
+func runFixture(r *config.Rule, dir, src string, isFire bool, repo string, workers int, inert vacuity.DeclaredInert) ([]string, vacuity.Verdict, error) {
 	fresh, err := r.Fresh()
 	if err != nil {
 		return nil, vacuity.Verdict{}, fmt.Errorf("fixture %s: %w", src, err)
@@ -387,7 +394,7 @@ func runFixture(r *config.Rule, dir, src string, isFire bool, repo string, worke
 	if isFire || len(ps) > 0 {
 		return ps, vacuity.Verdict{}, nil
 	}
-	v, err := judgeVacuity(r, fset)
+	v, err := judgeVacuity(r, fset, inert)
 	if err != nil {
 		return nil, vacuity.Verdict{}, fmt.Errorf("fixture %s: vacuity probe: %w", src, err)
 	}

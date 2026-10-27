@@ -15,7 +15,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/bmatcuk/doublestar/v4"
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"github.com/buildfoundry-nz/formwork/internal/vacuity"
@@ -59,8 +58,8 @@ import (
 func passVacuousVerdict(r *config.Rule, fixture string, ffs *scan.FileSet, gm *globMeasure) ([]verdict, error) {
 	// The probe itself lives in internal/vacuity, shared with `formwork test`:
 	// one definition of "vacuous", so the census and the test runner cannot
-	// disagree. Only the except-declaration excuse stays here: it is read through
-	// globMeasure (declaredInertExcept below), which Judge has no access to.
+	// disagree. The except-declaration excuse is the same too: globMeasure's
+	// entries come from vacuity.ExceptEntries and the match is DeclaredInert.Excuses.
 	vac, err := vacuity.Vacuous(r, ffs, func(fs *scan.FileSet) bool { return declaredInertExcept(r, fs, gm) })
 	if err != nil {
 		return nil, fmt.Errorf("fixture %s: %w", fixture, err)
@@ -89,22 +88,19 @@ func passVacuousVerdict(r *config.Rule, fixture string, ffs *scan.FileSet, gm *g
 // entry or fabricate a violation to keep it, and an arm that does that is
 // switched off within a week.
 //
-// The declaration must carry a non-empty reason: globMeasure sets declOK only
-// for a marker with text after the colon, so a bare `# except-declaration:`
-// buys nothing here, exactly as it buys nothing for the sibling vocabularies.
+// The declaration must carry a non-empty reason: vacuity.ExceptEntries marks an
+// entry Declared only for a marker with text after the colon, so a bare
+// `# except-declaration:` buys nothing here, exactly as it buys nothing for the
+// sibling vocabularies.
 func declaredInertExcept(r *config.Rule, ffs *scan.FileSet, gm *globMeasure) bool {
 	if gm == nil {
 		return false
 	}
+	inert := vacuity.DeclaredInert{}
 	for _, gc := range gm.except[r.ID] {
-		if !gc.declOK {
-			continue
-		}
-		for _, ff := range ffs.Files {
-			if ok, _ := doublestar.Match(gc.glob, ff.Path()); ok {
-				return true
-			}
+		if gc.declOK {
+			inert[r.ID] = append(inert[r.ID], gc.glob)
 		}
 	}
-	return false
+	return inert.Excuses(r.ID, ffs)
 }

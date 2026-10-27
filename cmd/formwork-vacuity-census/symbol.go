@@ -37,19 +37,10 @@ import (
 	"regexp"
 	"strings"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/buildfoundry-nz/formwork/internal/config"
-	"github.com/buildfoundry-nz/formwork/internal/engine"
-	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
+	"github.com/buildfoundry-nz/formwork/internal/vacuity"
 )
-
-// neverMatches compiles and can never match: end-of-text followed by
-// start-of-text. Substituting it for the half of a rule that EXCUSES an
-// occurrence — allowed_func on a confinement, guard on a guard-precedes —
-// turns that rule into "flag every occurrence of the anchor".
-const neverMatches = `$^`
 
 // goFuncDecl matches a Go function or method declaration and captures its name.
 // A line scan rather than a parse: this runs over every Go file in the tree, and
@@ -203,7 +194,7 @@ func symbolAnchorUndecidedReason(r *config.Rule) string {
 	if r.Type != "go/call-confined-to-func-name" && r.Type != "go/guard-precedes-call" {
 		return ""
 	}
-	p, err := anchorParams(r)
+	p, err := vacuity.AnchorParams(r)
 	if err != nil {
 		return ""
 	}
@@ -260,11 +251,11 @@ func symbolAnchorVerdicts(r *config.Rule, root string, inScope []*scan.File, dec
 // symbol is live and every call sits in the allowed func, so asking only "does
 // the rule pass?" would condemn every healthy confinement in the corpus.
 func callConfinedVerdicts(r *config.Rule, root string, inScope []*scan.File, declared map[string]bool) []verdict {
-	p, err := anchorParams(r)
+	p, err := vacuity.AnchorParams(r)
 	if err != nil || !decidableAnchor(p.Symbol, declared) {
 		return nil
 	}
-	hits, err := anchorHits(r, root, inScope, map[string]string{"allowed_func": neverMatches})
+	hits, err := vacuity.AnchorHits(r, &scan.FileSet{Root: root, Files: inScope}, map[string]string{"allowed_func": vacuity.NeverMatches})
 	if err != nil || hits > 0 {
 		return nil
 	}
@@ -292,7 +283,7 @@ func callConfinedVerdicts(r *config.Rule, root string, inScope []*scan.File, dec
 // Reporting it would manufacture findings against rules enforcing harder than
 // their author intended.
 func guardPrecedesVerdicts(r *config.Rule, root string, inScope []*scan.File, declared map[string]bool) []verdict {
-	p, err := anchorParams(r)
+	p, err := vacuity.AnchorParams(r)
 	if err != nil {
 		return nil
 	}
@@ -309,7 +300,7 @@ func guardPrecedesVerdicts(r *config.Rule, root string, inScope []*scan.File, de
 	if !decidableAnchor(p.Sink, declared) {
 		return nil
 	}
-	hits, err := anchorHits(r, root, inScope, map[string]string{"guard": neverMatches})
+	hits, err := vacuity.AnchorHits(r, &scan.FileSet{Root: root, Files: inScope}, map[string]string{"guard": vacuity.NeverMatches})
 	if err != nil || hits > 0 {
 		return nil
 	}
@@ -321,97 +312,4 @@ func guardPrecedesVerdicts(r *config.Rule, root string, inScope []*scan.File, de
 			"together",
 		evidence: []string{"sink: " + p.Sink},
 	}}
-}
-
-// anchorParams reads the name-anchoring params off the rule as written. Only
-// metadata is read here; every verdict above is still rendered by the engine.
-func anchorParams(r *config.Rule) (anchorParamSet, error) {
-	var p anchorParamSet
-	raw, err := r.ParamsYAML()
-	if err != nil || raw == "" {
-		return p, err
-	}
-	if err := yaml.Unmarshal([]byte(raw), &p); err != nil {
-		return p, err
-	}
-	return p, nil
-}
-
-// anchorParamSet is the subset of goast params this probe anchors on.
-type anchorParamSet struct {
-	Symbol string `yaml:"symbol"`
-	Sink   string `yaml:"sink"`
-	Funcs  string `yaml:"funcs"`
-}
-
-// anchorHits recompiles r with override applied to its params and returns how
-// many findings the real engine produces over inScope.
-//
-// SUPPRESSED findings count. The question is whether the anchor can still see
-// its subject, and a marker-suppressed finding proves it can — a new unmarked
-// call would trip the rule tomorrow. Counting only unsuppressed findings would
-// call a fully-marked live symbol dead and retire a working gate. This is the
-// same reading exceptExcuses uses ("suppressed findings count as still trips").
-//
-// scope.exclude and except.paths are left as written. A symbol surviving only in
-// a path the rule excludes is invisible TO THE RULE.
-func anchorHits(r *config.Rule, root string, inScope []*scan.File, override map[string]string) (int, error) {
-	checker, err := recompileWith(r, override)
-	if err != nil {
-		return 0, err
-	}
-	probe := r.CloneWithChecker(checker)
-	fds, err := engine.Run([]*config.Rule{probe}, &scan.FileSet{Root: root, Files: inScope}, 1)
-	if err != nil {
-		return 0, err
-	}
-	return len(fds), nil
-}
-
-// recompileWith builds a checker for r's type from r's own params with override
-// applied. The factory is the engine's — the census never constructs a checker
-// of its own, so the variant is compiled by the same code that compiled the rule.
-func recompileWith(r *config.Rule, override map[string]string) (rules.Checker, error) {
-	raw, err := r.ParamsYAML()
-	if err != nil {
-		return nil, err
-	}
-	var doc yaml.Node
-	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
-		return nil, err
-	}
-	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
-		return nil, fmt.Errorf("rule %s: params did not render as a document", r.ID)
-	}
-	params := doc.Content[0]
-	if params.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("rule %s: params are not a mapping", r.ID)
-	}
-	for key, val := range override {
-		setScalar(params, key, val)
-	}
-	factory, ok := rules.Lookup(r.Type)
-	if !ok {
-		return nil, fmt.Errorf("rule %s: no factory registered for type %q", r.ID, r.Type)
-	}
-	return factory(params)
-}
-
-// setScalar sets key to val on a mapping node, appending the pair when the key
-// is absent so an override never silently does nothing.
-func setScalar(m *yaml.Node, key, val string) {
-	for i := 0; i+1 < len(m.Content); i += 2 {
-		if m.Content[i].Value == key {
-			m.Content[i+1].Kind = yaml.ScalarNode
-			m.Content[i+1].Tag = "!!str"
-			m.Content[i+1].Style = yaml.DoubleQuotedStyle
-			m.Content[i+1].Value = val
-			m.Content[i+1].Content = nil
-			return
-		}
-	}
-	m.Content = append(m.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Style: yaml.DoubleQuotedStyle, Value: val},
-	)
 }

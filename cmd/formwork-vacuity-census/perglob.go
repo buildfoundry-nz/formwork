@@ -46,6 +46,7 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/finding"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
+	"github.com/buildfoundry-nz/formwork/internal/vacuity"
 	"gopkg.in/yaml.v3"
 )
 
@@ -308,7 +309,8 @@ func parseRuleGlobs(data []byte) ([]globRef, []sourceListDecl, error) {
 	// Scoping recognition to except.paths keeps a misplaced marker from reading
 	// as coverage: on an include glob it is simply not recognised, and if that
 	// glob is dead EMPTY-GLOB still fires and says so.
-	declaredException := func(line int) (bool, string) { return declaredWith("# except-declaration:", line) }
+	//
+	// The marker itself is parsed by vacuity.ExceptEntries (below), not here.
 
 	// `# source-list-exhaustive: <dir>` (#13517) is recognised on the scope.include
 	// KEY only. The two markers above are per-entry claims; this one is about the
@@ -324,7 +326,14 @@ func parseRuleGlobs(data []byte) ([]globRef, []sourceListDecl, error) {
 	}
 	var refs []globRef
 	var decls []sourceListDecl
-	for _, rule := range mappingSeq(&doc, "rules") {
+	// The except.paths entries and their `# except-declaration:` markers are read
+	// by internal/vacuity, the same reader `formwork test` uses, so the two cannot
+	// disagree about which entries are declared inert.
+	excepts, err := vacuity.ExceptEntries(data)
+	if err != nil {
+		return nil, nil, err
+	}
+	for ruleIdx, rule := range mappingSeq(&doc, "rules") {
 		id := mappingScalar(rule, "id")
 		for _, key := range []string{"include", "exclude"} {
 			var globs []string
@@ -344,17 +353,12 @@ func parseRuleGlobs(data []byte) ([]globRef, []sourceListDecl, error) {
 				decls = append(decls, sourceListDecl{ruleID: id, dir: dir, globs: globs})
 			}
 		}
-		for _, g := range mappingSeq(mappingValue(rule, "except"), "paths") {
-			g = resolveNode(g)
-			if g == nil || g.Kind != yaml.ScalarNode {
-				continue
+		for _, e := range excepts[ruleIdx].Entries {
+			deadOK, reason := declaredDead(e.Line)
+			if e.Declared {
+				reason = e.Reason
 			}
-			deadOK, reason := declaredDead(g.Line)
-			declOK, declReason := declaredException(g.Line)
-			if declOK {
-				reason = declReason
-			}
-			refs = append(refs, globRef{id, "except", g.Value, deadOK, declOK, reason})
+			refs = append(refs, globRef{id, "except", e.Glob, deadOK, e.Declared, reason})
 		}
 	}
 	return refs, decls, nil

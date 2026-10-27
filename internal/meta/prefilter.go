@@ -210,8 +210,8 @@ func diffNewFindings(base, stripped []finding.Finding, literal map[string]string
 // was nothing to ask", because only the latter leaves the prefilter unproven.
 //
 // The walk goes through fixturetest.EvalIn so these runs inherit exactly what a
-// `formwork test` fixture run inherits and no more: no repo allowlist, and no
-// scan.ignore/scan.gitignore pruning. That matters here specifically — a
+// `formwork test` fixture run inherits and no more: no scan.ignore/scan.gitignore
+// pruning. That matters here specifically — a
 // repo-level prune would hide the fire fixture that proves the prefilter
 // load-bearing, and the check would report a clean bill on the evidence it just
 // discarded.

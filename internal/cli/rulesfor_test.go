@@ -385,28 +385,6 @@ func TestRulesForCanonicalizesCaseOnInsensitiveFS(t *testing.T) {
 	}
 }
 
-func TestRulesForAllowlistedPathShowsSuppression(t *testing.T) {
-	// Finding 4: an allowlisted path IS governed but every finding there is
-	// suppressed — display must carry the suppression like the engine does
-	// (finding.SuppressedBy), not report bare governance.
-	root := explainRepo(t)
-	code, out, _ := runCLI(t, "rules-for", "-C", root, "internal/old/db.go")
-	if code != 0 {
-		t.Fatalf("exit %d:\n%s", code, out)
-	}
-	if !strings.Contains(out, "guard-pool") {
-		t.Fatalf("allowlisted path is still governed; rule must be listed:\n%s", out)
-	}
-	if !strings.Contains(out, "suppressed") || !strings.Contains(out, "allowlists/pool.txt") {
-		t.Fatalf("suppression must be disclosed with the allowlist file:\n%s", out)
-	}
-	// JSON: structural field, matching the engine's SuppressedBy shape.
-	code, jout, _ := runCLI(t, "rules-for", "-C", root, "-format", "json", "internal/old/db.go")
-	if code != 0 || !strings.Contains(jout, `"suppressed_by"`) {
-		t.Fatalf("JSON must carry suppressed_by (exit %d):\n%s", code, jout)
-	}
-}
-
 func TestRulesForSymlinkPathIsLoud(t *testing.T) {
 	// Finding 5: the walk's third skip channel — a committed non-source
 	// symlink is silently skipped, so listing rules for its path asserts

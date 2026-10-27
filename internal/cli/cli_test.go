@@ -75,9 +75,8 @@ func TestCheckSummaryAppendsSuppressedCount(t *testing.T) {
 	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"),
 		"rules:\n  - id: no-banana\n    type: forbidden-pattern\n"+
 			"    scope: {include: ['**/*.txt']}\n    params: {pattern: banana}\n"+
-			"    except: {allowlist: allowlists/legacy.txt}\n")
-	mustWrite(t, filepath.Join(root, ".formwork", "allowlists", "legacy.txt"), "hit.txt\n")
-	mustWrite(t, filepath.Join(root, "hit.txt"), "banana\n")
+			"    except: {marker: true}\n")
+	mustWrite(t, filepath.Join(root, "hit.txt"), "banana // formwork:allow no-banana legacy data\n")
 	code, out, _ := runCLI(t, "check", "-C", root)
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0\noutput:\n%s", code, out)
@@ -239,7 +238,10 @@ func TestCheckReasonlessMarkerStillFails(t *testing.T) {
 	}
 }
 
-func TestCheckAllowlistSuppressionExitsZero(t *testing.T) {
+// A corpus still declaring except.allowlist is a config error, never a run
+// with the list quietly ignored: the finding the list used to forgive would
+// otherwise surface as a surprise FAIL instead of naming the removed key.
+func TestCheckExceptAllowlistExits2(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
 	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"),
@@ -248,9 +250,9 @@ func TestCheckAllowlistSuppressionExitsZero(t *testing.T) {
 			"    except: {allowlist: allowlists/legacy.txt}\n")
 	mustWrite(t, filepath.Join(root, ".formwork", "allowlists", "legacy.txt"), "f.txt\n")
 	mustWrite(t, filepath.Join(root, "f.txt"), "banana\n")
-	code, out, _ := runCLI(t, "check", "-C", root)
-	if code != 0 || !strings.Contains(out, "[no-banana] OK") {
-		t.Fatalf("exit = %d\noutput:\n%s", code, out)
+	code, _, errOut := runCLI(t, "check", "-C", root)
+	if code != 2 || !strings.Contains(errOut, "allowlist") {
+		t.Fatalf("exit = %d, want 2 naming allowlist\nstderr:\n%s", code, errOut)
 	}
 }
 

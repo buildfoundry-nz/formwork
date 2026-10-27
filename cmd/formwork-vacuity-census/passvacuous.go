@@ -125,9 +125,7 @@ func declaredInertExcept(r *config.Rule, ffs *scan.FileSet, gm *globMeasure) boo
 // files) — the same discipline as satisfies() in probe.go.
 //
 // Preprocess and Marker are carried across because they change what the checker
-// SEES; Allowlist is dropped because its entries are repo-relative and a
-// fixture tree has its own path namespace, the same collision EvalIn and
-// satisfies() clear it for.
+// SEES.
 func judgesAnything(r *config.Rule, fs *scan.FileSet) (bool, error) {
 	fresh, err := r.Fresh()
 	if err != nil {
@@ -139,7 +137,6 @@ func judgesAnything(r *config.Rule, fs *scan.FileSet) (bool, error) {
 	}
 	probe.Preprocess = r.Preprocess
 	probe.Marker = r.Marker
-	probe.Allowlist = nil
 	fds, err := engine.Run([]*config.Rule{probe}, fs, 1)
 	if err != nil {
 		return false, err

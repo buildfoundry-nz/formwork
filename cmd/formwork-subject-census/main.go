@@ -7,8 +7,8 @@
 //
 // Product enforcement is formwork type:command
 // (.formwork/rules/call-anchor-sees-a-subject.yaml) with origin on this file.
-// Exit 0 = every live anchor resolves and no stale debt entries, 1 = offenders
-// or staleness listed, 2 = usage/env error.
+// Exit 0 = every live anchor resolves, 1 = offenders listed, 2 = usage/env
+// error.
 //
 // # The hole this closes, and the half that was already closed
 //
@@ -82,8 +82,8 @@ type stats struct {
 
 // detect scans root/.formwork/rules/*.yaml and returns every covered arm whose
 // anchor resolves to no in-scope call, plus corpus stats. It reads the corpus
-// and the product tree ONLY; allowlist reconciliation is main's job, so tests
-// exercise detection against bare fixture trees.
+// and the product tree ONLY; the verdict is main's job, so tests exercise
+// detection against bare fixture trees.
 func detect(root string) ([]census.Finding, stats, error) {
 	var st stats
 	var out []census.Finding
@@ -166,12 +166,8 @@ func main() {
 	}
 	fmt.Printf("census: %d rule file(s), %d arm(s), %d anchor(s) resolved, %d waived\n",
 		st.files, st.arms, st.anchored, st.waived)
-	debt, err := census.ReadDebtList(filepath.Join(root, ".formwork", "allowlists", "blind-call-anchors.txt"))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "formwork-subject-census:", err)
-		os.Exit(2)
-	}
-	problems := census.Reconcile(os.Stdout, "call-anchor-sees-a-subject", flags, debt,
+	// No debt list: a blind anchor is cured or the census fails.
+	problems := census.Reconcile(os.Stdout, "call-anchor-sees-a-subject", flags,
 		"the anchor matches no call in scope: the rule can no longer see its subject")
 	if problems > 0 {
 		os.Exit(1)

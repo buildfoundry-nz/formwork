@@ -59,7 +59,7 @@ func TestLintFailsClosedOnUnreadableInScopeFileWhicheverChecksRun(t *testing.T) 
 		rules string
 	}{
 		{
-			// No allowlist, no marker, no prefilter: nothing consumes engine
+			// No marker, no prefilter: nothing consumes engine
 			// findings, so lint never ran the engine and never read a file.
 			name: "no check needs the engine",
 			rules: "rules:\n" +

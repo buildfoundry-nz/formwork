@@ -100,7 +100,7 @@ func curesByRule(rls []*config.Rule) map[string]string {
 }
 
 // jsonSuppressed names one suppressed finding (#91): what was exempted and
-// through which channel ("marker" or "allowlist:<file>:<line>"), so the
+// through which channel ("marker"), so the
 // exemption surface is auditable from check output, not just countable.
 type jsonSuppressed struct {
 	Rule         string `json:"rule"`

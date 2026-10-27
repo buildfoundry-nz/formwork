@@ -69,14 +69,13 @@ func skipUnlessChmodEnforced(t *testing.T) {
 }
 
 func TestLintEnumeratesSuppressedFindings(t *testing.T) {
-	// G1a: a suppressed finding (whether marker- or allowlist-exempted) is
-	// listed in the escape-hatch enumeration after that rule's other lines
+	// G1a: a marker-suppressed finding is listed in the escape-hatch
+	// enumeration after that rule's other lines
 	// — an exemption quietly doing its job must be as visible as one that
 	// is merely configured.
 	failed, out := lint(t, map[string]string{
 		".formwork/formwork.yaml":                   "version: 1\n",
 		".formwork/rules/r.yaml":                    exemptLintRule,
-		".formwork/allowlists/legacy.txt":           "hit.txt\n",
 		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
 		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
 		"hit.txt":    "banana\n",
@@ -86,12 +85,16 @@ func TestLintEnumeratesSuppressedFindings(t *testing.T) {
 		t.Fatalf("failed=%d\n%s", failed, out)
 	}
 	for _, want := range []string{
-		"  no-banana: suppressed hit.txt:1 (allowlist:allowlists/legacy.txt:1)",
 		"  no-banana: suppressed marker.txt:1 (marker)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
+	}
+	// hit.txt carries no marker: its finding is a failure, never listed as
+	// suppressed.
+	if strings.Contains(out, "suppressed hit.txt") {
+		t.Fatalf("unmarked finding listed as suppressed:\n%s", out)
 	}
 }
 
@@ -123,7 +126,6 @@ func TestLintSurvivesEngineErrorAndStillPrintsEscapeHatches(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		".formwork/formwork.yaml":                   "version: 1\n",
 		".formwork/rules/r.yaml":                    exemptLintRule,
-		".formwork/allowlists/legacy.txt":           "hit.txt\n",
 		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
 		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
 		"hit.txt": "banana\n",
@@ -153,7 +155,6 @@ func TestLintSurvivesEngineErrorAndStillPrintsEscapeHatches(t *testing.T) {
 	for _, want := range []string{
 		"escape hatches:",
 		"  no-banana: marker enabled",
-		"  no-banana: allowlist allowlists/legacy.txt (1 entries)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
@@ -420,8 +421,8 @@ func TestLintEmitsPrefilterVerdictBeforeMainEngineError(t *testing.T) {
 // D2 keeps the witness that had the cost attached:
 // TestLintDoesNotExecuteCommandRules in lint_engine_scope_test.go, which catches
 // a narrowing regression by the sentinel a heavy rule would leave behind. What
-// is no longer pinned is the weaker half — that a run with no allowlist, marker
-// or prefilter dispatches no engine at all — because after #30 lint reads every
+// is no longer pinned is the weaker half — that a run with no marker or
+// prefilter dispatches no engine at all — because after #30 lint reads every
 // governed file regardless, so nothing observable is left to distinguish the two.
 // A future change that quietly restores the engine run for such a repo would
 // cost matching time and would go unnoticed here.

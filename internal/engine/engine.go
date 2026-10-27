@@ -158,10 +158,6 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 	if workers <= 0 {
 		workers = runtime.GOMAXPROCS(0)
 	}
-	// The walk reaches the suppression seam, because whether an allowlist entry
-	// and a finding name the same file is a question about the filesystem.
-	ex := newExemptions(fset)
-
 	var (
 		mu       sync.Mutex
 		findings []finding.Finding
@@ -210,7 +206,7 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 							}
 						}
 						t0 := time.Now()
-						fds, err := evalFile(pr.rule, f, ex)
+						fds, err := evalFile(pr.rule, f)
 						mu.Lock()
 						timing[pr.rule.ID] += time.Since(t0)
 						if err != nil {
@@ -369,9 +365,7 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 			}
 		} else {
 			for _, m := range matches {
-				fd := toFinding(r, "", m)
-				suppressAllowlist(r, &fd, ex)
-				findings = append(findings, fd)
+				findings = append(findings, toFinding(r, "", m))
 			}
 		}
 		mu.Unlock()
@@ -502,7 +496,7 @@ func toFinding(r *config.Rule, fallbackPath string, m rules.Match) finding.Findi
 // evalFile runs one rule over one file: picks the rule's preprocess variant,
 // checks it, and applies exemption suppression against the raw file (markers
 // live in comments, which preprocessors erase — phase-3a design §3).
-func evalFile(r *config.Rule, f *scan.File, ex *exemptions) ([]finding.Finding, error) {
+func evalFile(r *config.Rule, f *scan.File) ([]finding.Finding, error) {
 	work, err := f.Variant(r.Preprocess)
 	if err != nil {
 		return nil, fmt.Errorf("rule %s: %s: %w", r.ID, f.Path(), err)
@@ -514,7 +508,7 @@ func evalFile(r *config.Rule, f *scan.File, ex *exemptions) ([]finding.Finding, 
 	out := make([]finding.Finding, 0, len(matches))
 	for _, m := range matches {
 		fd := toFinding(r, f.Path(), m)
-		if err := suppress(r, f, &fd, ex); err != nil {
+		if err := suppress(r, f, &fd); err != nil {
 			return nil, err
 		}
 		out = append(out, fd)
@@ -523,65 +517,22 @@ func evalFile(r *config.Rule, f *scan.File, ex *exemptions) ([]finding.Finding, 
 }
 
 // suppress marks fd Suppressed when the rule's inline marker (same raw line,
-// reason mandatory — internal/marker owns the grammar) or allowlist (exact
-// path) exempts it. Scope-level findings (no path) are never exemptable.
-func suppress(r *config.Rule, raw *scan.File, fd *finding.Finding, ex *exemptions) error {
-	if fd.Path == "" {
+// reason mandatory — internal/marker owns the grammar) exempts it.
+// Scope-level findings (no path) are never exemptable, and neither are
+// finalizer findings: there is no per-file raw content to marker-scan.
+func suppress(r *config.Rule, raw *scan.File, fd *finding.Finding) error {
+	if fd.Path == "" || !r.Marker || fd.Line <= 0 || fd.Path != raw.Path() {
 		return nil
 	}
-	if r.Marker && fd.Line > 0 && fd.Path == raw.Path() {
-		lines, err := raw.Lines()
-		if err != nil {
-			return fmt.Errorf("rule %s: marker scan of %s: %w", r.ID, raw.Path(), err)
-		}
-		if fd.Line <= len(lines) && marker.Classify(lines[fd.Line-1], r.ID) == marker.Reasoned {
-			fd.Suppressed = true
-			fd.SuppressedBy = "marker"
-			return nil
-		}
+	lines, err := raw.Lines()
+	if err != nil {
+		return fmt.Errorf("rule %s: marker scan of %s: %w", r.ID, raw.Path(), err)
 	}
-	suppressAllowlist(r, fd, ex)
+	if fd.Line <= len(lines) && marker.Classify(lines[fd.Line-1], r.ID) == marker.Reasoned {
+		fd.Suppressed = true
+		fd.SuppressedBy = "marker"
+	}
 	return nil
-}
-
-// suppressAllowlist applies allowlist suppression only; used directly for
-// finalizer findings, where there is no per-file raw content to marker-scan.
-//
-// Two arms, in this order and not the other. The EXACT arm is the contract —
-// an allowlist entry is a path, matched as written — and it stays first and
-// untouched, because it is the only arm that can answer for a finding whose
-// path this run's FileSet does not hold at all: a finalizer is free to report a
-// path it synthesized, and folding first would have quietly stopped suppressing
-// those.
-//
-// The FOLD arm is a fallback for the one case exact equality gets wrong: two
-// byte sequences that name one file. On macOS/APFS an editor saves the entry
-// NFC and readdir hands the walk the NFD bytes, so `e.Path == fd.Path` is false
-// for a file the operator plainly exempted — and the failure is silent, because
-// a finding that is merely NOT suppressed is indistinguishable from one nobody
-// exempted (#308's class at this seam). exemptions.folded owns the
-// resolution and asks scan.(*FileSet).Produced for it; the entry it returns is
-// the one attributed, so the operator is sent to the line they actually wrote.
-func suppressAllowlist(r *config.Rule, fd *finding.Finding, ex *exemptions) {
-	if fd.Suppressed || fd.Path == "" || r.Allowlist == nil {
-		return
-	}
-	for _, e := range r.Allowlist.Entries {
-		if e.Path == fd.Path {
-			allowlisted(fd, r.Allowlist, e)
-			return
-		}
-	}
-	if e, ok := ex.folded(r)[fd.Path]; ok {
-		allowlisted(fd, r.Allowlist, e)
-	}
-}
-
-// allowlisted marks fd exempt and attributes it to the entry that answered, so
-// both arms above render one attribution rather than two spellings of it.
-func allowlisted(fd *finding.Finding, al *config.Allowlist, e config.AllowlistEntry) {
-	fd.Suppressed = true
-	fd.SuppressedBy = fmt.Sprintf("allowlist:%s:%d", al.File, e.Line)
 }
 
 func checkFile(r *config.Rule, f *scan.File) (matches []rules.Match, err error) {

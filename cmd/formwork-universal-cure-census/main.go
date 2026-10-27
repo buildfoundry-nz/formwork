@@ -5,8 +5,8 @@
 //
 // Product enforcement is formwork type:command
 // (.formwork/rules/exists-rule-cure-not-universal.yaml) with origin on this
-// file. Exit 0 = no new mis-paired arms and no stale debt entries,
-// 1 = offenders or staleness listed, 2 = usage/env error.
+// file. Exit 0 = no mis-paired arms, 1 = offenders listed, 2 = usage/env
+// error.
 //
 // # The hole
 //
@@ -36,13 +36,10 @@
 // that says "each" (the entitlements-audit-10001 shape, pinned by
 // testdata/pass-4).
 //
-// # Known debt
+// # No known debt
 //
-// First-run census (2026-07-28): 9 arms across 8 files trip, all pre-existing,
-// all carried in .formwork/allowlists/exists-rule-cure-not-universal-files.txt
-// rather than mass-rewritten in the commit that installed the ratchet. The
-// list is SELF-CLEANING: an entry whose file stops tripping (cured or
-// deleted) fails this census as stale, so curing an arm forces its entry out.
+// Every flagged arm is a finding. There is no list to carry one in: a
+// mis-paired arm is cured or the census fails.
 package main
 
 import (
@@ -107,8 +104,8 @@ func cureHasUniversal(lines []string, start, end int) bool {
 
 // detect scans root/.formwork/rules/*.yaml and returns every arm that pairs
 // `mode: exists` with a universal-obligation cure, plus corpus stats. It
-// reads the corpus ONLY; allowlist reconciliation is main's job, so tests
-// exercise detection against bare fixture trees.
+// reads the corpus ONLY; the verdict is main's job, so tests exercise
+// detection against bare fixture trees.
 //
 // Arms are walked as yaml.Node mappings so rematerialised keys (id not first)
 // still parse the way the engine does, and a comment is never a cure (#14091).
@@ -222,18 +219,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "census:", err)
 		os.Exit(2)
 	}
-	debtPath := filepath.Join(root, ".formwork", "allowlists", "exists-rule-cure-not-universal-files.txt")
-	debt, err := census.ReadDebtList(debtPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "census: read known-debt list:", err)
-		os.Exit(2)
-	}
-
 	fmt.Printf("exists-rule-cure census: %d rule files, %d arms, %d mode:exists arms\n",
 		st.files, st.arms, st.existsArms)
 
 	const why = "pairs mode: exists with a universal cure (every/each/all of) — an existential detector cannot discharge a universal obligation (audit R3)"
-	if census.Reconcile(os.Stdout, "exists-rule-cure-not-universal", flags, debt, why) > 0 {
+	if census.Reconcile(os.Stdout, "exists-rule-cure-not-universal", flags, why) > 0 {
 		os.Exit(1)
 	}
 }

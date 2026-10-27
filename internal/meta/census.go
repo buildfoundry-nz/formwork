@@ -343,13 +343,10 @@ func enumerateEscapeHatches(cfg *config.Config, root string, findings []finding.
 				// satisfy this type assertion even though markers work for
 				// their per-file findings — this annotation is a visibility
 				// hint, not a correctness claim (phase-3a carryover, B2).
-				lines = append(lines, fmt.Sprintf("  %s: marker enabled (finalizer findings: allowlist-only)", r.ID))
+				lines = append(lines, fmt.Sprintf("  %s: marker enabled (finalizer findings: unexemptable)", r.ID))
 			} else {
 				lines = append(lines, fmt.Sprintf("  %s: marker enabled", r.ID))
 			}
-		}
-		if al := r.Allowlist; al != nil {
-			lines = append(lines, fmt.Sprintf("  %s: allowlist %s (%d entries)", r.ID, al.File, len(al.Entries)))
 		}
 		// findings is already sorted by (rule id, path, line) — see
 		// engine.Run — so this subsequence is already deterministically

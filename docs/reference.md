@@ -105,8 +105,7 @@ and list the known packs.
 
 Library rules load first. A local `.formwork/rules/` file that restates the same
 `id` replaces the library rule — that is how a mixed binding (generic logic,
-repo-specific globs or allowlist) is expressed. Library rules cannot carry
-`except.allowlist` (that path is repo-local); redeclare locally to bind one.
+repo-specific globs) is expressed.
 
 `formwork lint` does not demand local fixtures or a non-empty scope for a
 library-sourced rule. Those proofs live in the pack: `formwork test -C
@@ -164,7 +163,6 @@ rules:
     except:                     # optional; see Exemptions
       paths: ["legacy/**"]
       marker: true
-      allowlist: allowlists/legacy.txt
     cure: "Delete the TODO or file an issue and link it."
     origin: "#412"              # what wound this rule closed
     tags: [fast, go]
@@ -1187,8 +1185,10 @@ code-only projection. `decomment-go` implements Go quoting, not Dart quoting.
 
 ## Exemptions
 
-Three channels. All three are enumerated by `formwork lint`'s escape-hatch
-census, and none of them is silent.
+Two channels. Both are enumerated by `formwork lint`'s escape-hatch census, and
+neither is silent. There is no allowlist: a list of paths whose findings are
+forgiven is a violation carried, not cured, and `except.allowlist` is refused at
+load (exit 2).
 
 ### Inline markers
 
@@ -1211,15 +1211,9 @@ suppressed (exempted, not failures):
   [no-todo] a.go:2: forbidden pattern matched: TODO (marker)
 ```
 
-### Allowlist files
-
-`except: {allowlist: allowlists/legacy.txt}`, relative to `.formwork/`. One
-repo-relative path per line. Ratchets: entries are meant to be removed, and
-`exemption-hygiene` reports an entry that no longer trips the rule.
-
 ### `except.paths`
 
-Globs carved out of the rule's scope. Distinct from the other two: it is a
+Globs carved out of the rule's scope. Distinct from markers: it is a
 scope **subtraction**, so the rule never evaluates the file and there is no
 finding to suppress. The census reports how many in-scope files each entry
 actually **removed**, so a dead entry reads `0 file(s)` rather than printing

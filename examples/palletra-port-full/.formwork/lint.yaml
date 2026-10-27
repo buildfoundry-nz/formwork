@@ -139,12 +139,11 @@ skip:
       in the corpus; the only excludes the check does not report are the ones
       carrying the justification comment it deliberately accepts. The cost is
       smaller than this entry used to state. It said the corpus "also stops
-      checking stale allowlist entries and reasonless formwork:allow markers";
-      there are none to check — no rule here declares `except.allowlist`, and
+      checking reasonless formwork:allow markers"; there are none to check —
       the one rule declaring `except.marker: true`,
       integration-tests-forbid-mocked-wire-providers, has an empty scope like
-      every other rule whose verdict comes from files, so both of those arms
-      are already inert on this corpus whether or not this skip exists.
+      every other rule whose verdict comes from files, so that arm is already
+      inert on this corpus whether or not this skip exists.
       Re-derived on every run of `make corpus-disclosure-proof`; this entry
       read 995 from 2026-08-24 and 993 from 2026-08-26, both typed by hand and
       both stale.

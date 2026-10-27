@@ -18,14 +18,12 @@ const exemptRules = `rules:
     except:
       paths: ["vendor/**"]
       marker: true
-      allowlist: allowlists/legacy.txt
 `
 
 func TestLoadPreprocessAndExcept(t *testing.T) {
 	root := writeRepo(t, map[string]string{
-		".formwork/formwork.yaml":         validRoot,
-		".formwork/rules/r.yaml":          exemptRules,
-		".formwork/allowlists/legacy.txt": "# grandfathered\n\nsrc/old.go\ndocs/gone.md\n",
+		".formwork/formwork.yaml": validRoot,
+		".formwork/rules/r.yaml":  exemptRules,
 	})
 	cfg, err := config.Load(root)
 	if err != nil {
@@ -41,22 +39,6 @@ func TestLoadPreprocessAndExcept(t *testing.T) {
 	if got := r.ExceptPaths; len(got) != 1 || got[0] != "vendor/**" {
 		t.Fatalf("ExceptPaths = %v", got)
 	}
-	al := r.Allowlist
-	if al == nil || al.File != "allowlists/legacy.txt" {
-		t.Fatalf("Allowlist = %+v", al)
-	}
-	want := []config.AllowlistEntry{
-		{Path: "src/old.go", Line: 3},
-		{Path: "docs/gone.md", Line: 4},
-	}
-	if len(al.Entries) != len(want) {
-		t.Fatalf("Entries = %+v", al.Entries)
-	}
-	for i := range want {
-		if al.Entries[i] != want[i] {
-			t.Fatalf("Entries[%d] = %+v, want %+v", i, al.Entries[i], want[i])
-		}
-	}
 }
 
 func TestLoadDefaultsAreRawAndUnexempted(t *testing.T) {
@@ -70,8 +52,8 @@ func TestLoadDefaultsAreRawAndUnexempted(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := cfg.Rules[0]
-	if r.Preprocess != "" || r.Marker || r.Allowlist != nil {
-		t.Fatalf("defaults wrong: preprocess=%q marker=%v allowlist=%+v", r.Preprocess, r.Marker, r.Allowlist)
+	if r.Preprocess != "" || r.Marker || len(r.ExceptPaths) != 0 {
+		t.Fatalf("defaults wrong: preprocess=%q marker=%v except.paths=%v", r.Preprocess, r.Marker, r.ExceptPaths)
 	}
 }
 
@@ -87,15 +69,20 @@ func TestLoadUnknownPreprocessorErrors(t *testing.T) {
 	}
 }
 
-func TestLoadMissingAllowlistErrors(t *testing.T) {
+// except.allowlist is not an exemption channel: a list of paths whose
+// findings are forgiven is refused at load, so a corpus carrying one exits 2
+// rather than running with the list silently ignored. The file is present, so
+// the refusal is the key's, not a missing-file error.
+func TestLoadRefusesExceptAllowlist(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		".formwork/formwork.yaml": validRoot,
 		".formwork/rules/r.yaml": "rules:\n  - id: bad\n    type: forbidden-pattern\n" +
 			"    scope: {include: ['**']}\n    params: {pattern: x}\n" +
-			"    except: {allowlist: allowlists/nope.txt}\n",
+			"    except: {allowlist: allowlists/legacy.txt}\n",
+		".formwork/allowlists/legacy.txt": "src/old.go\n",
 	})
 	_, err := config.Load(root)
-	if err == nil || !strings.Contains(err.Error(), "allowlists/nope.txt") {
-		t.Fatalf("missing allowlist accepted: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "field allowlist not found") {
+		t.Fatalf("except.allowlist accepted: %v", err)
 	}
 }

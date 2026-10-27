@@ -67,7 +67,7 @@ func (e *Envelope) LoadRules() (*Config, error) {
 				return nil, fmt.Errorf("config: library %s: reading %s: %w", pack, name, err)
 			}
 			src := "library:" + pack + "/" + name
-			if err := loadRuleFile(cfg, seen, index, src, data, e.dir, pack); err != nil {
+			if err := loadRuleFile(cfg, seen, index, src, data, pack); err != nil {
 				return nil, err
 			}
 		}
@@ -78,7 +78,7 @@ func (e *Envelope) LoadRules() (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("config: reading %s: %w", rf, err)
 		}
-		if err := loadRuleFile(cfg, seen, index, rf, data, e.dir, ""); err != nil {
+		if err := loadRuleFile(cfg, seen, index, rf, data, ""); err != nil {
 			return nil, err
 		}
 	}
@@ -104,16 +104,13 @@ func validateLibraryNames(names []string) error {
 // name when the bytes came from a stdlib pack, empty when they came from the
 // adopting repo. Local duplicate ids fail; a local id that already exists on
 // a library rule replaces it (local wins).
-func loadRuleFile(cfg *Config, seen map[string]string, index map[string]int, src string, data []byte, dir, library string) error {
+func loadRuleFile(cfg *Config, seen map[string]string, index map[string]int, src string, data []byte, library string) error {
 	var spec fileSpec
 	if err := strictUnmarshal(data, &spec); err != nil {
 		return fmt.Errorf("config: %s: %w", src, err)
 	}
 	for _, rs := range spec.Rules {
-		if library != "" && rs.Except.Allowlist != "" {
-			return fmt.Errorf("config: %s: library rule %s: except.allowlist is repo-local; redeclare the rule locally to bind an allowlist", src, rs.ID)
-		}
-		rule, err := compile(rs, dir)
+		rule, err := compile(rs)
 		if err != nil {
 			return fmt.Errorf("config: %s: %w", src, err)
 		}

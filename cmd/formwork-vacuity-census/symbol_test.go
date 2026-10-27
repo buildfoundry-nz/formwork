@@ -344,7 +344,7 @@ func TestUndecidedSymbolAnchorsAreDisclosed(t *testing.T) {
 // except.marker is what arms the marker channel: without it the engine never
 // consults an inline formwork:allow at all, the comment below is inert, and
 // this arm silently stops testing suppression (it did, until #12494 caught it).
-func TestAllowlistSuppressedCallSiteIsStillLive(t *testing.T) {
+func TestMarkerSuppressedCallSiteIsStillLive(t *testing.T) {
 	root := writeCorpus(t, `rules:
   - id: suppressed-but-live
     type: go/call-confined-to-func-name

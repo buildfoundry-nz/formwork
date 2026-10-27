@@ -26,23 +26,23 @@ func TestHumanEnumeratesSuppressedFindings(t *testing.T) {
 	rls := []*config.Rule{
 		mustRule(t, "a-clean", finding.SeverityError, ""),
 		mustRule(t, "b-marked", finding.SeverityError, ""),
-		mustRule(t, "c-allowlisted", finding.SeverityError, ""),
+		mustRule(t, "c-also-marked", finding.SeverityError, ""),
 	}
 	findings := []finding.Finding{
 		{RuleID: "b-marked", Severity: finding.SeverityError, Path: "x.go", Line: 7, Message: "bad",
 			Suppressed: true, SuppressedBy: "marker"},
-		{RuleID: "c-allowlisted", Severity: finding.SeverityError, Path: "y.go", Message: "waived",
-			Suppressed: true, SuppressedBy: "allowlist:allow.txt:3"},
+		{RuleID: "c-also-marked", Severity: finding.SeverityError, Path: "y.go", Message: "waived",
+			Suppressed: true, SuppressedBy: "marker"},
 	}
 	var sb strings.Builder
 	report.Human(&sb, rls, findings, report.ScanSummary{})
 	want := `[a-clean] OK
 [b-marked] OK
-[c-allowlisted] OK
+[c-also-marked] OK
 scan: 0 file(s) scanned
 suppressed (exempted, not failures):
   [b-marked] x.go:7: bad (marker)
-  [c-allowlisted] y.go: waived (allowlist:allow.txt:3)
+  [c-also-marked] y.go: waived (marker)
 formwork: 3/3 rules passed, 0 finding(s), 2 suppressed
 `
 	if got := sb.String(); got != want {
@@ -56,11 +56,11 @@ func TestHumanEnumeratesPathlessSuppressedFinding(t *testing.T) {
 	rls := []*config.Rule{mustRule(t, "a-scope", finding.SeverityError, "")}
 	findings := []finding.Finding{
 		{RuleID: "a-scope", Severity: finding.SeverityError, Message: "scope-level bad",
-			Suppressed: true, SuppressedBy: "allowlist:allow.txt:1"},
+			Suppressed: true, SuppressedBy: "marker"},
 	}
 	var sb strings.Builder
 	report.Human(&sb, rls, findings, report.ScanSummary{})
-	if !strings.Contains(sb.String(), "  [a-scope] scope-level bad (allowlist:allow.txt:1)\n") {
+	if !strings.Contains(sb.String(), "  [a-scope] scope-level bad (marker)\n") {
 		t.Fatalf("a path-less suppressed finding must still be named:\n%s", sb.String())
 	}
 }
@@ -88,7 +88,7 @@ func TestHumanSuppressedCountDerivesFromTheEnumeration(t *testing.T) {
 	for i, f := range []finding.Finding{
 		{RuleID: "r0", Path: "a.go", Line: 1, Message: "m0", SuppressedBy: "marker"},
 		{RuleID: "r1", Path: "b.go", Message: "m1", SuppressedBy: "marker"},
-		{RuleID: "r2", Message: "m2", SuppressedBy: "allowlist:allow.txt:9"},
+		{RuleID: "r2", Message: "m2", SuppressedBy: "marker"},
 	} {
 		rls = append(rls, mustRule(t, "r"+strconv.Itoa(i), finding.SeverityError, ""))
 		f.Severity = finding.SeverityError

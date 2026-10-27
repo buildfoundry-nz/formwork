@@ -122,7 +122,7 @@ func TestAnchorLiveFalseWhenNothingMatches(t *testing.T) {
 }
 
 // The end-to-end shape: a renamed subject leaves the arm blind and it is
-// flagged, keyed FILE:ARM-ID for the shrink-only debt list.
+// flagged against the rule file and arm that went blind.
 func TestDetectFlagsBlindAnchor(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "api/a.go", `package api
@@ -146,8 +146,8 @@ func caller() { metriclock.LockSQLRenamed() }
 	if len(flags) != 1 {
 		t.Fatalf("want 1 blind anchor, got %d: %+v", len(flags), flags)
 	}
-	if got := flags[0].Key(); got != ".formwork/rules/r.yaml:page-metrics-lock-sql-confined" {
-		t.Errorf("debt key = %q", got)
+	if got := flags[0]; got.File != ".formwork/rules/r.yaml" || got.Arm != "page-metrics-lock-sql-confined" {
+		t.Errorf("flag = %+v", got)
 	}
 }
 

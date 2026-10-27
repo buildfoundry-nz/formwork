@@ -105,9 +105,9 @@ func Run(rls []*Rule, fset *FileSet, workers int) ([]Finding, error) {
 	return engine.Run(rls, fset, workers)
 }
 
-// Unsuppressed drops findings an allowlist has silenced. An analyser asking
+// Unsuppressed drops findings a marker has silenced. An analyser asking
 // whether a rule CAN fail wants the unsuppressed set: a rule whose every
-// finding is allowlisted is not a rule that fires.
+// finding is marker-suppressed is not a rule that fires.
 func Unsuppressed(fs []Finding) []Finding { return finding.Unsuppressed(fs) }
 
 // Rule types: what a rule is made of, for analysers that classify by cost or

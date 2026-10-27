@@ -19,7 +19,7 @@ library: [generic]
 ```
 
 A local `.formwork/rules/` file that restates the same `id` replaces the pack
-rule (rebind globs or attach an allowlist).
+rule (rebind globs).
 
 Not in this pack: `type: command` detectors that `go run` a product-local
 script, and CI-wiring pins that name a specific workflow job. Those stay in

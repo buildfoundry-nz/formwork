@@ -29,7 +29,6 @@ func satisfies(r *config.Rule, root string, f *scan.File) bool {
 	if err != nil {
 		return false
 	}
-	fresh.Allowlist = nil
 	fds, err := engine.Run([]*config.Rule{fresh}, &scan.FileSet{Root: root, Files: []*scan.File{f}}, 1)
 	if err != nil {
 		return false
@@ -45,15 +44,10 @@ func satisfies(r *config.Rule, root string, f *scan.File) bool {
 // engine.Run drops f before any checker sees it. Probe with the rule as written
 // and every entry in the corpus reports "the rule does not fire here", the arm
 // gates the whole corpus, and its own test passes while measuring nothing.
-// Allowlist is cleared for the same reason satisfies does it — the question is
-// what THIS rule does to THIS file, not what a second exemption channel would
-// then do about it, and dropping it can only produce more findings, which is
-// generous to the author.
 //
 // SUPPRESSED findings count as firing. The question is whether the rule reaches
-// f at all, and a marker- or allowlist-suppressed finding proves it does; that
-// is also how formwork lint's own exemption-hygiene reads its allowlist
-// staleness ("suppressed findings count as still trips"). An error is returned
+// f at all, and a marker-suppressed finding proves it does ("suppressed
+// findings count as still trips"). An error is returned
 // rather than folded into a verdict: a probe that could not run must never read
 // as "the exception excuses nothing".
 func exceptExcuses(r *config.Rule, root string, f *scan.File) (bool, error) {
@@ -61,7 +55,6 @@ func exceptExcuses(r *config.Rule, root string, f *scan.File) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	fresh.Allowlist = nil
 	fresh.ExceptPaths = nil
 	fds, err := engine.Run([]*config.Rule{fresh}, &scan.FileSet{Root: root, Files: []*scan.File{f}}, 1)
 	if err != nil {
@@ -80,7 +73,6 @@ func satisfiesSet(r *config.Rule, root string, fs []*scan.File) bool {
 	if err != nil {
 		return false
 	}
-	fresh.Allowlist = nil
 	fds, err := engine.Run([]*config.Rule{fresh}, &scan.FileSet{Root: root, Files: fs}, 1)
 	if err != nil {
 		return false

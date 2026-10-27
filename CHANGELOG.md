@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.11.0
+
+### Removed (breaking)
+
+- **`except.allowlist` is gone.** A file of paths whose findings a rule
+  forgives carries a violation instead of curing it, so the engine no longer
+  offers one. A rule declaring `except: {allowlist: …}` is now refused at load
+  (exit 2, `field allowlist not found`) rather than run with the list ignored.
+  The exemption channels left are inline `formwork:allow` markers and
+  `except.paths`. Gone with it: the `allowlist:<file>:<line>` suppression
+  attribution, `exemption-hygiene`'s stale/absent allowlist-entry arm, the
+  escape-hatch census's allowlist line, `explain`'s `allowlist` field and
+  `rules-for`'s `suppressed_by`. A finalizer finding is now unexemptable, as
+  the census line for a marker-enabled finalizer rule says. Migration: cure
+  each listed path, or move a genuinely out-of-scope path to `except.paths`.
+- **The rule-corpus censuses read no known-debt list.**
+  `formwork-subject-census` and `formwork-universal-cure-census` no longer open
+  `.formwork/allowlists/*.txt`. Every flagged arm is a finding, as
+  `formwork-anchor-census` already had it. `census.ReadDebtList` and
+  `Finding.Key` are removed, and `census.Reconcile` takes no debt map.
+- **`generic`'s `concurrent-tests-use-sync-primitives` has no opt-out
+  comment.** `// audit-16-#5-concurrent-allowlist: <reason>` no longer
+  satisfies the rule. A `*Concurrent*` test must coordinate real concurrency.
+
 ## 0.10.2
 
 ### Added

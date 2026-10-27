@@ -23,7 +23,7 @@
 //     example: docs/quickstart.md walks the reader through building a rule in a
 //     repository that is not this one, so its `internal/handler/orders.go` names
 //     a file in the tutorial's tree, and docs/reference.md's YAML shows what an
-//     `except:` clause looks like, not where an allowlist lives. Paths inside a
+//     `except:` clause looks like, not a path in this repository. Paths inside a
 //     fence belong to the example's world. An inline span in prose is the author
 //     pointing at something here. TestCitationScannerStopsAtFencedBlocks pins
 //     that the distinction is load-bearing rather than decorative.
@@ -518,7 +518,6 @@ func TestCitationScannerLeavesEverythingElseAlone(t *testing.T) {
 		{"a command line", "run `go build ./cmd/formwork` first"},
 		{"a make invocation carrying a variable", "`make test PKG=./internal/engine`"},
 		{"a shebang", "a `#!/bin/sh` shim"},
-		{"a YAML clause showing an allowlist", "`except: {allowlist: allowlists/legacy.txt}`"},
 		{"a relative-parent example", "a scope entry of `x/..`"},
 		{"a fixture template", "`.formwork/fixtures/<rule-id>/` holds them"},
 		{"a verdict line", "prints `0/0 rules passed`"},

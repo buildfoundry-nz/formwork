@@ -170,36 +170,11 @@ func TestRunMarkerPrefixCollisionMarkerIDIsPrefixOfRuleID(t *testing.T) {
 	}
 }
 
-func TestRunAllowlistSuppressesExactPath(t *testing.T) {
-	r := mustRule(t, "no-hit", finding.SeverityError, []string{"**"}, matchLineOne())
-	r.Allowlist = &config.Allowlist{
-		File:    "allowlists/legacy.txt",
-		Entries: []config.AllowlistEntry{{Path: "old.go", Line: 3}},
-	}
-	fset := memFileSet(map[string]string{"old.go": "x\n", "new.go": "x\n"})
-	got, err := engine.Run([]*config.Rule{r}, fset, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("findings = %+v", got)
-	}
-	// Findings are sorted by path: new.go then old.go.
-	if got[0].Path != "new.go" || got[0].Suppressed {
-		t.Fatalf("new.go wrongly suppressed: %+v", got[0])
-	}
-	if got[1].Path != "old.go" || !got[1].Suppressed ||
-		got[1].SuppressedBy != "allowlist:allowlists/legacy.txt:3" {
-		t.Fatalf("old.go not suppressed by allowlist: %+v", got[1])
-	}
-}
-
 func TestRunScopeLevelFindingsAreNotExemptable(t *testing.T) {
 	fin := &fakeFinalizer{}
 	fin.final = []rules.Match{{Message: "scope-level"}}
 	r := mustRule(t, "no-hit", finding.SeverityError, []string{"**"}, fin)
 	r.Marker = true
-	r.Allowlist = &config.Allowlist{File: "a.txt", Entries: []config.AllowlistEntry{{Path: "", Line: 1}}}
 	got, err := engine.Run([]*config.Rule{r}, memFileSet(map[string]string{"a.go": "x\n"}), 1)
 	if err != nil {
 		t.Fatal(err)
@@ -209,19 +184,19 @@ func TestRunScopeLevelFindingsAreNotExemptable(t *testing.T) {
 	}
 }
 
-func TestRunAllowlistSuppressesFinalizerFileFinding(t *testing.T) {
+// A finalizer finding names a file but was produced from no per-file raw
+// content, so no channel can exempt it: a reasoned marker on the very line it
+// names still leaves it a failure.
+func TestRunFinalizerFileFindingIsNotExemptable(t *testing.T) {
 	fin := &fakeFinalizer{}
-	fin.final = []rules.Match{{Path: "old.go", Message: "file-level"}}
+	fin.final = []rules.Match{{Path: "old.go", Line: 1, Message: "file-level"}}
 	r := mustRule(t, "no-hit", finding.SeverityError, []string{"**"}, fin)
-	r.Allowlist = &config.Allowlist{
-		File:    "allowlists/legacy.txt",
-		Entries: []config.AllowlistEntry{{Path: "old.go", Line: 1}},
-	}
-	got, err := engine.Run([]*config.Rule{r}, memFileSet(map[string]string{"old.go": "x\n"}), 1)
+	r.Marker = true
+	got, err := engine.Run([]*config.Rule{r}, memFileSet(map[string]string{"old.go": "x // formwork:allow no-hit a reason\n"}), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || !got[0].Suppressed {
-		t.Fatalf("finalizer file-level finding not suppressed: %+v", got)
+	if len(got) != 1 || got[0].Suppressed {
+		t.Fatalf("finalizer file-level finding suppressed: %+v", got)
 	}
 }

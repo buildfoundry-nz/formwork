@@ -506,7 +506,7 @@ What each check catches:
 | `empty-scope` | a scope matching no files: a rule that *cannot* fire is not a passing rule |
 | `lane-reachability` | a rule no lane ever runs |
 | `lane-nonempty` | a lane that selects no rules |
-| `exemption-hygiene` | dead exclusions, stale allowlist entries, unjustified escapes |
+| `exemption-hygiene` | dead exclusions, reasonless markers, unjustified escapes |
 
 Run it in CI alongside `check`. A suite nobody audits becomes decoration within a
 year — the rules stay in the file, they stop matching anything, and everyone goes

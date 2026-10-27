@@ -195,7 +195,6 @@ func explainRepo(t *testing.T) string {
     except:
       paths: ["cmd/legacy/main.go"]
       marker: true
-      allowlist: allowlists/pool.txt
     cure: "Use internal/db.Pool."
     origin: "#42"
     tags: [go]
@@ -207,7 +206,6 @@ func explainRepo(t *testing.T) string {
     params:
       pattern: 'HACK'
 `)
-	writeFile(t, root, ".formwork/allowlists/pool.txt", "internal/old/db.go\ninternal/old/tx.go\n")
 	writeFile(t, root, ".formwork/fixtures/guard-pool/fire-1/x.go", "package x\n")
 	writeFile(t, root, ".formwork/fixtures/guard-pool/pass-1/x.go", "package x\n")
 	writeFile(t, root, ".formwork/fixtures/bare-rule/fire-1/x.txt", "HACK\n")
@@ -230,8 +228,6 @@ func TestExplainPrintsRuleInFull(t *testing.T) {
 		`pgxpool\.New`,             // param value
 		"cmd/legacy/main.go",       // except.paths
 		"marker",                   // marker suppression enabled
-		"allowlists/pool.txt",      // allowlist file
-		"2 entr",                   // allowlist entry count
 		"Use internal/db.Pool.",    // cure
 		"#42",                      // origin
 		"go",                       // tags
@@ -287,11 +283,7 @@ func TestExplainJSONRoundTrips(t *testing.T) {
 		Params struct {
 			Pattern string `json:"pattern"`
 		} `json:"params"`
-		Fixtures  []string `json:"fixtures"`
-		Allowlist *struct {
-			File    string   `json:"file"`
-			Entries []string `json:"entries"`
-		} `json:"allowlist"`
+		Fixtures []string `json:"fixtures"`
 	}
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
@@ -301,9 +293,6 @@ func TestExplainJSONRoundTrips(t *testing.T) {
 	}
 	if len(got.Fixtures) != 2 || got.Fixtures[0] != "fire-1" || got.Fixtures[1] != "pass-1" {
 		t.Fatalf("fixtures: %+v", got.Fixtures)
-	}
-	if got.Allowlist == nil || got.Allowlist.File != "allowlists/pool.txt" || len(got.Allowlist.Entries) != 2 {
-		t.Fatalf("allowlist: %+v", got.Allowlist)
 	}
 }
 

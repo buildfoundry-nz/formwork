@@ -524,7 +524,6 @@ func fixtureVerdicts(r *config.Rule, root string, rw *row, gm *globMeasure) ([]v
 		if err != nil {
 			return nil, err
 		}
-		fresh.Allowlist = nil // allowlist paths are repo-relative, fixture paths are not
 		fds, err := engine.Run([]*config.Rule{fresh}, ffs, 1)
 		if err != nil {
 			return nil, fmt.Errorf("rule %s fixture %s: %w", r.ID, e.Name(), err)

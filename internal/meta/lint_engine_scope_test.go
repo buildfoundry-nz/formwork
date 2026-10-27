@@ -28,17 +28,17 @@ func lintRoot(t *testing.T, root string) (int, string) {
 	return failed, sb.String()
 }
 
-// lint runs the engine only to answer its OWN questions — allowlist staleness
-// and the suppressed-finding listing — both of which concern only rules that
-// opted in via `except: {marker:}` / `except: {allowlist:}`, plus the prefilter
-// rules whose findings prefilterLoadBearing reuses as its base pass.
+// lint runs the engine only to answer its OWN questions — the suppressed-finding
+// listing, which concerns only rules that opted in via `except: {marker:}`,
+// plus the prefilter rules whose findings prefilterLoadBearing reuses as its
+// base pass.
 //
 // It must therefore NOT dispatch the heavy `command`/`git-diff` escapes. Those
 // belong to `formwork check`, which is the enforcement run. Executing them here
 // is pure waste: nothing lint reports reads their findings.
 //
 // The regression this pins is not hypothetical. The predicate was a whole-config
-// ANY over (allowlist || marker), but the run it gated was
+// ANY over the opted-in rules, but the run it gated was
 // `engine.Run(cfg.Rules, ...)` — every rule. So ONE opted-in rule anywhere made
 // lint execute EVERY command rule in the config. In the validating port that
 // meant two whole-tree resolved-Dart-AST scans (~1,570 files, a Flutter
@@ -57,12 +57,11 @@ func TestLintDoesNotExecuteCommandRules(t *testing.T) {
 		".formwork/rules/r.yaml": "rules:\n" +
 			"  - id: no-banana\n    type: forbidden-pattern\n" +
 			"    scope: {include: ['**/*.txt']}\n    params: {pattern: banana}\n" +
-			"    except: {marker: true, allowlist: allowlists/legacy.txt}\n" +
+			"    except: {marker: true}\n" +
 			// The heavy escape that must stay unexecuted.
 			"  - id: heavy-escape\n    type: command\n" +
 			"    scope: {include: ['**/*.txt']}\n" +
 			"    params: {cmd: [sh, -c, 'printf x > lint-executed.sentinel']}\n",
-		".formwork/allowlists/legacy.txt":           "# legacy\nhit.txt\n",
 		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
 		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
 		"hit.txt": "banana\n",
@@ -79,7 +78,7 @@ func TestLintDoesNotExecuteCommandRules(t *testing.T) {
 
 // Narrowing the engine run must not break prefilterLoadBearing, which reuses the
 // main run's findings as the as-written base for every prefilter-carrying rule.
-// A rule with a prefilter but with neither `marker:` nor `allowlist:` is outside
+// A rule with a prefilter but without `marker:` is outside
 // the opted-in set, so a naive narrowing would hand that check an EMPTY base and
 // it would read "the prefilter changed nothing" from findings it never made — a
 // false green in the one check that exists to prove prefilters are pure
@@ -96,7 +95,7 @@ func TestLintDoesNotExecuteCommandRules(t *testing.T) {
 // rule turns the engine run on, and a DIFFERENT, non-opted-in rule carries the
 // prefilter whose findings the differential then reuses as its base.
 //
-// Narrow the run to (allowlist || marker) alone and this check reads its base
+// Narrow the run to the marker opt-ins alone and this check reads its base
 // from a finding set that never contained the prefilter rule — an empty base is
 // indistinguishable from "the prefilter changed nothing", so a load-bearing
 // prefilter passes silently. That is a false green in the check whose entire

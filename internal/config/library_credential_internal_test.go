@@ -20,12 +20,12 @@ func TestLibraryRuleRefusesACredential(t *testing.T) {
       require_absent: [{credential: '^// owner', holders: 1}]
     cure: c
 `)
-	err := loadRuleFile(&Config{}, map[string]string{}, map[string]int{}, "library:generic/lib.yaml", data, t.TempDir(), "generic")
+	err := loadRuleFile(&Config{}, map[string]string{}, map[string]int{}, "library:generic/lib.yaml", data, "generic")
 	if err == nil || !strings.Contains(err.Error(), "a library rule cannot carry a credential") {
 		t.Fatalf("want the library refusal, got %v", err)
 	}
 	// The same rule declared locally loads.
-	if err := loadRuleFile(&Config{}, map[string]string{}, map[string]int{}, "local.yaml", data, t.TempDir(), ""); err != nil {
+	if err := loadRuleFile(&Config{}, map[string]string{}, map[string]int{}, "local.yaml", data, ""); err != nil {
 		t.Fatalf("a local rule may carry a credential: %v", err)
 	}
 }

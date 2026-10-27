@@ -226,31 +226,24 @@ type excludeOut struct {
 	Comment string `json:"comment,omitempty"`
 }
 
-// allowlistOut is a rule's allowlist file plus its entry paths.
-type allowlistOut struct {
-	File    string   `json:"file"`
-	Entries []string `json:"entries"`
-}
-
 // explainOut is the full JSON rendering of one rule.
 type explainOut struct {
-	ID          string        `json:"id"`
-	Type        string        `json:"type"`
-	Severity    string        `json:"severity"`
-	Cost        string        `json:"cost"`
-	Preprocess  string        `json:"preprocess,omitempty"`
-	Include     []string      `json:"include"`
-	Exclude     []excludeOut  `json:"exclude,omitempty"`
-	MinFiles    int           `json:"min_files,omitempty"`
-	ExceptPaths []string      `json:"except_paths,omitempty"`
-	Marker      bool          `json:"marker"`
-	Allowlist   *allowlistOut `json:"allowlist,omitempty"`
-	Params      any           `json:"params,omitempty"`
-	Cure        string        `json:"cure,omitempty"`
-	Origin      string        `json:"origin,omitempty"`
-	Tags        []string      `json:"tags,omitempty"`
-	Lanes       []string      `json:"lanes"`
-	Fixtures    []string      `json:"fixtures"`
+	ID          string       `json:"id"`
+	Type        string       `json:"type"`
+	Severity    string       `json:"severity"`
+	Cost        string       `json:"cost"`
+	Preprocess  string       `json:"preprocess,omitempty"`
+	Include     []string     `json:"include"`
+	Exclude     []excludeOut `json:"exclude,omitempty"`
+	MinFiles    int          `json:"min_files,omitempty"`
+	ExceptPaths []string     `json:"except_paths,omitempty"`
+	Marker      bool         `json:"marker"`
+	Params      any          `json:"params,omitempty"`
+	Cure        string       `json:"cure,omitempty"`
+	Origin      string       `json:"origin,omitempty"`
+	Tags        []string     `json:"tags,omitempty"`
+	Lanes       []string     `json:"lanes"`
+	Fixtures    []string     `json:"fixtures"`
 }
 
 func runExplain(args []string, stdout, stderr io.Writer) int {
@@ -299,13 +292,6 @@ func runExplain(args []string, stdout, stderr io.Writer) int {
 	}
 	for _, e := range rule.ExcludeEntries() {
 		out.Exclude = append(out.Exclude, excludeOut{Glob: e.Glob, Comment: e.Comment})
-	}
-	if rule.Allowlist != nil {
-		al := &allowlistOut{File: rule.Allowlist.File, Entries: make([]string, 0, len(rule.Allowlist.Entries))}
-		for _, e := range rule.Allowlist.Entries {
-			al.Entries = append(al.Entries, e.Path)
-		}
-		out.Allowlist = al
 	}
 	// Both params renderings are guarded HERE, before the format branch, so
 	// neither format can ever print a rule with silently-missing params — a
@@ -363,7 +349,7 @@ func renderExplain(w io.Writer, paramsYAML string, out explainOut) int {
 	if out.MinFiles > 0 {
 		fmt.Fprintf(w, "  min_files: %d\n", out.MinFiles)
 	}
-	if len(out.ExceptPaths) > 0 || out.Marker || out.Allowlist != nil {
+	if len(out.ExceptPaths) > 0 || out.Marker {
 		fmt.Fprintln(w, "except:")
 		if len(out.ExceptPaths) > 0 {
 			fmt.Fprintln(w, "  paths:")
@@ -372,9 +358,6 @@ func renderExplain(w io.Writer, paramsYAML string, out explainOut) int {
 			}
 		}
 		fmt.Fprintf(w, "  marker: %v\n", out.Marker)
-		if out.Allowlist != nil {
-			fmt.Fprintf(w, "  allowlist: %s (%d entries)\n", out.Allowlist.File, len(out.Allowlist.Entries))
-		}
 	}
 	if paramsYAML != "" {
 		fmt.Fprintln(w, "params:")

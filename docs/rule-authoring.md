@@ -174,20 +174,21 @@ be right in cases a clever regex is wrong in, and you find those out later.
 
 ## Exemption hygiene: every channel is a ratchet
 
-Three channels, and all three are meant to shrink:
+Two channels, and both are meant to shrink:
 
 - **markers** (`formwork:allow <id> <reason>`) — for a specific, reasoned
   exception at a specific line.
-- **allowlist files** — for a known backlog you intend to burn down. Entries
-  come out; they do not go in casually.
-- **`except.paths`** — a scope subtraction. Blunter than the others: the rule
+- **`except.paths`** — a scope subtraction. Blunter than a marker: the rule
   never looks, so there is no finding to audit.
+
+There is no allowlist file. A known backlog is cured, not listed: the engine
+refuses `except.allowlist` at load.
 
 The failure mode is not adding an exemption. It is adding one and never
 revisiting it, until the count is large enough that nobody reads the list.
 
-> **Enforcers:** `exemption-hygiene` reports a reasonless marker and an
-> allowlist entry that no longer trips the rule. `scan-ignore-tracked` fails any
+> **Enforcers:** `exemption-hygiene` reports a reasonless marker and a dead
+> `scope.exclude` with no justification comment. `scan-ignore-tracked` fails any
 > git-tracked path a `scan.ignore` glob hides. The census reports how many
 > in-scope files each `except.paths` entry actually **removed**, so a dead entry
 > reads `0 file(s)` instead of printing like a live one. Whether an exemption

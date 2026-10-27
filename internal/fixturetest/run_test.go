@@ -164,61 +164,6 @@ func TestRunSkipsRulesWithoutFixtures(t *testing.T) {
 	}
 }
 
-func TestRunFireFixtureIgnoresRepoAllowlist(t *testing.T) {
-	// The rule's allowlist suppresses sub/f.txt at the repo level. The fixture
-	// tree happens to contain a colliding path (fixture-root-relative, not
-	// repo-relative) — the allowlist must not bleed into fixture evaluation,
-	// or the fixture's declared violation gets silently suppressed.
-	root := writeRepo(t, map[string]string{
-		".formwork/formwork.yaml":         "version: 1\n",
-		".formwork/allowlists/legacy.txt": "sub/f.txt\n",
-		".formwork/rules/r.yaml": "rules:\n  - id: no-banana\n    type: forbidden-pattern\n" +
-			"    scope: {include: ['**']}\n    params: {pattern: banana}\n" +
-			"    except: {allowlist: allowlists/legacy.txt}\n",
-		".formwork/fixtures/no-banana/fire-1/sub/f.txt": "banana want: no-banana\n",
-		".formwork/fixtures/no-banana/pass-1/f.txt":     "clean\n",
-	})
-	cfg, err := config.Load(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var sb strings.Builder
-	failed, err := fixturetest.Run(cfg, fullIDs(cfg), root, 2, &sb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if failed != 0 || !strings.Contains(sb.String(), "[no-banana] OK — 2 fixture(s)") {
-		t.Fatalf("failed=%d\n%s", failed, sb.String())
-	}
-}
-
-func TestRunPassFixtureAtAllowlistedPathStillFails(t *testing.T) {
-	// Symmetric direction: a pass fixture with a violation at a path that
-	// happens to collide with a repo allowlist entry must still fail — the
-	// allowlist must not suppress it inside the fixture tree.
-	root := writeRepo(t, map[string]string{
-		".formwork/formwork.yaml":         "version: 1\n",
-		".formwork/allowlists/legacy.txt": "sub/f.txt\n",
-		".formwork/rules/r.yaml": "rules:\n  - id: no-banana\n    type: forbidden-pattern\n" +
-			"    scope: {include: ['**']}\n    params: {pattern: banana}\n" +
-			"    except: {allowlist: allowlists/legacy.txt}\n",
-		".formwork/fixtures/no-banana/fire-1/f.txt":     "banana want: no-banana\n",
-		".formwork/fixtures/no-banana/pass-1/sub/f.txt": "a banana snuck in\n",
-	})
-	cfg, err := config.Load(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var sb strings.Builder
-	failed, err := fixturetest.Run(cfg, fullIDs(cfg), root, 2, &sb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if failed != 1 || !strings.Contains(sb.String(), "pass-1: unexpected finding sub/f.txt:1") {
-		t.Fatalf("failed=%d\n%s", failed, sb.String())
-	}
-}
-
 func TestRunPassFixtureWithMarkerSuppressedViolation(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		".formwork/formwork.yaml": "version: 1\n",
@@ -244,11 +189,10 @@ func TestRunPassFixtureWithMarkerSuppressedViolation(t *testing.T) {
 
 func TestFixtureRunsAreScanIgnoreFree(t *testing.T) {
 	// scan.ignore globs are repo-root-relative; fixture trees have their own
-	// path namespace (same reasoning as the allowlist nil in runFixture). A
-	// repo-level ignore must never blind a fixture: this fire fixture keeps
-	// its violation under vendor/, which the repo config ignores.
+	// path namespace. A repo-level ignore must never blind a fixture: this fire
+	// fixture keeps its violation under vendor/, which the repo config ignores.
 	// Discriminating pin — verified red by temporarily threading the repo
-	// globs into runFixture's Walk (see the comment beside the allowlist nil).
+	// globs into runFixture's Walk (see the comment on EvalIn).
 	root := writeRepo(t, map[string]string{
 		".formwork/formwork.yaml":                             "version: 1\nscan:\n  ignore:\n    - glob: 'vendor/**'\n      reason: vendored source\n",
 		".formwork/rules/r.yaml":                              testConfig,

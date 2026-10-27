@@ -23,10 +23,10 @@ type Finding struct {
 	Message  string
 
 	// Suppressed marks a finding exempted by an inline formwork:allow marker
-	// or an allowlist entry (spec §5). Suppressed findings never affect the
-	// exit code; lint consumes them for staleness detection.
+	// (spec §5). Suppressed findings never affect the exit code; lint
+	// enumerates them in its escape-hatch census.
 	Suppressed   bool
-	SuppressedBy string // "marker" or "allowlist:<file>:<line>"
+	SuppressedBy string // "marker"
 }
 
 // Sort orders findings deterministically by (RuleID, Path, Line, Message).

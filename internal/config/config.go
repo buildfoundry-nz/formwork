@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/bmatcuk/doublestar/v4"
@@ -35,10 +34,9 @@ type Rule struct {
 	// (#53). Empty means undeclared, which lint reports rather than skips.
 	FixtureExempt string
 
-	Preprocess  string     // preprocess variant name; "" means raw
-	Marker      bool       // honor inline formwork:allow markers
-	Allowlist   *Allowlist // loaded except.allowlist, nil when absent
-	ExceptPaths []string   // except.paths carve-out globs (read-only after construction)
+	Preprocess  string   // preprocess variant name; "" means raw
+	Marker      bool     // honor inline formwork:allow markers
+	ExceptPaths []string // except.paths carve-out globs (read-only after construction)
 
 	// Library is the pack name this rule was loaded from (e.g. "generic").
 	// Empty means the rule was declared in the adopting repo. Lint's
@@ -67,20 +65,6 @@ type Rule struct {
 type ExcludeEntry struct {
 	Glob    string
 	Comment string
-}
-
-// Allowlist is a loaded exemption file: exact repo-relative paths whose
-// findings for the owning rule are suppressed (phase-3a design §3).
-type Allowlist struct {
-	File    string // as configured, relative to .formwork/
-	Entries []AllowlistEntry
-}
-
-// AllowlistEntry is one path plus its 1-based line in the allowlist file
-// (used by lint staleness messages).
-type AllowlistEntry struct {
-	Path string
-	Line int
 }
 
 // New builds a compiled rule directly. Load uses it; engine and report tests
@@ -249,9 +233,9 @@ func (r *Rule) Fresh() (*Rule, error) {
 
 // CloneWithChecker returns a shallow copy of the rule with its checker
 // replaced. Used by lint's load-bearing-prefilter differential to evaluate a
-// prefilter-stripped variant of a rule. The clone shares the scope slices,
-// params node, and allowlist with the original; all are read-only after
-// construction, so sharing is safe (mirrors Fresh).
+// prefilter-stripped variant of a rule. The clone shares the scope slices and
+// params node with the original; both are read-only after construction, so
+// sharing is safe (mirrors Fresh).
 func (r *Rule) CloneWithChecker(c rules.Checker) *Rule {
 	clone := *r
 	clone.Checker = c
@@ -469,9 +453,8 @@ type scopeSpec struct {
 }
 
 type exceptSpec struct {
-	Paths     []string `yaml:"paths"`
-	Marker    bool     `yaml:"marker"`
-	Allowlist string   `yaml:"allowlist"`
+	Paths  []string `yaml:"paths"`
+	Marker bool     `yaml:"marker"`
 }
 
 var idRE = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -614,7 +597,7 @@ func compileScope(spec scopeConfigSpec) (ScopeConfig, error) {
 	return sc, nil
 }
 
-func compile(spec ruleSpec, dir string) (*Rule, error) {
+func compile(spec ruleSpec) (*Rule, error) {
 	if spec.ID == "" {
 		return nil, errors.New("rule with empty id")
 	}
@@ -674,32 +657,5 @@ func compile(spec ruleSpec, dir string) (*Rule, error) {
 	rule.params = params
 	rule.Preprocess = spec.Preprocess
 	rule.Marker = spec.Except.Marker
-	if spec.Except.Allowlist != "" {
-		al, err := loadAllowlist(dir, spec.Except.Allowlist)
-		if err != nil {
-			return nil, fmt.Errorf("rule %s: %w", spec.ID, err)
-		}
-		rule.Allowlist = al
-	}
 	return rule, nil
-}
-
-// loadAllowlist reads an except.allowlist file (path relative to .formwork/):
-// one exact repo-relative path per line, # comments and blank lines ignored.
-// A missing or unreadable file is a config error — exit 2, never a silent
-// no-exemptions fallback.
-func loadAllowlist(dir, rel string) (*Allowlist, error) {
-	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
-	if err != nil {
-		return nil, fmt.Errorf("allowlist %s: %w", rel, err)
-	}
-	al := &Allowlist{File: rel}
-	for i, raw := range strings.Split(string(data), "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		al.Entries = append(al.Entries, AllowlistEntry{Path: line, Line: i + 1})
-	}
-	return al, nil
 }

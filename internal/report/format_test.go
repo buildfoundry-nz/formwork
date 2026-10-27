@@ -64,7 +64,7 @@ func TestJSONNamesSuppressedFindings(t *testing.T) {
 	fs := []finding.Finding{
 		{RuleID: "a", Severity: finding.SeverityError, Path: "x.go", Line: 3, Message: "bad thing"},
 		{RuleID: "b", Severity: finding.SeverityError, Path: "y.go", Line: 7, Message: "hidden", Suppressed: true, SuppressedBy: "marker"},
-		{RuleID: "c", Severity: finding.SeverityError, Path: "z.go", Line: 9, Message: "waived", Suppressed: true, SuppressedBy: "allowlist:allow.txt:3"},
+		{RuleID: "c", Severity: finding.SeverityError, Path: "z.go", Line: 9, Message: "waived", Suppressed: true, SuppressedBy: "marker"},
 	}
 	var buf bytes.Buffer
 	report.JSON(&buf, []*config.Rule{rule("a"), rule("b"), rule("c")}, fs, report.ScanSummary{}, nil)
@@ -88,7 +88,7 @@ func TestJSONNamesSuppressedFindings(t *testing.T) {
 	if rep.Suppressed[0].Rule != "b" || rep.Suppressed[0].Line != 7 || rep.Suppressed[0].SuppressedBy != "marker" {
 		t.Fatalf("first suppressed entry = %+v", rep.Suppressed[0])
 	}
-	if rep.Suppressed[1].SuppressedBy != "allowlist:allow.txt:3" {
+	if rep.Suppressed[1].Rule != "c" || rep.Suppressed[1].SuppressedBy != "marker" {
 		t.Fatalf("second suppressed entry = %+v", rep.Suppressed[1])
 	}
 	if rep.Summary.Suppressed != len(rep.Suppressed) {
@@ -434,14 +434,14 @@ func TestGitHubReport(t *testing.T) {
 func TestGitHubNamesSuppressedFindingsAsNotices(t *testing.T) {
 	fs := []finding.Finding{
 		{RuleID: "a", Severity: finding.SeverityError, Path: "x.go", Line: 3, Message: "bad thing"},
-		{RuleID: "b", Severity: finding.SeverityError, Path: "y,z.go", Line: 7, Message: "hidden", Suppressed: true, SuppressedBy: "allowlist:allow.txt:3"},
+		{RuleID: "b", Severity: finding.SeverityError, Path: "y,z.go", Line: 7, Message: "hidden", Suppressed: true, SuppressedBy: "marker"},
 		{RuleID: "c", Severity: finding.SeverityError, Message: "scope-wide waived", Suppressed: true, SuppressedBy: "marker"},
 	}
 	var buf bytes.Buffer
 	report.GitHub(&buf, nil, fs, report.ScanSummary{})
 	out := buf.String()
 	for _, want := range []string{
-		"::notice file=y%2Cz.go,line=7::suppressed: hidden (b; allowlist:allow.txt:3)",
+		"::notice file=y%2Cz.go,line=7::suppressed: hidden (b; marker)",
 		"::notice::suppressed: scope-wide waived (c; marker)",
 	} {
 		if !strings.Contains(out, want) {

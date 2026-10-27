@@ -20,7 +20,7 @@ import (
 //
 // SUPPRESSED FINDINGS ARE ENUMERATED, NOT COUNTED (#57). Each one gets a line
 // naming its rule, location, message and the channel that exempted it
-// ("marker", "allowlist:<file>:<line>") — the same facts JSON and GitHub carry
+// ("marker") — the same facts JSON and GitHub carry
 // (#91) — under a heading that says in words that these are exemptions rather
 // than failures. A bare integer told a reader that something was exempted and
 // never what, so the surface could not be audited or burned down from `check`

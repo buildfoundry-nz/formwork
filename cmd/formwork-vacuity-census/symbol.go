@@ -353,15 +353,14 @@ type anchorParamSet struct {
 // call a fully-marked live symbol dead and retire a working gate. This is the
 // same reading exceptExcuses uses ("suppressed findings count as still trips").
 //
-// scope.exclude and except.paths are left as written, unlike Allowlist. A symbol
-// surviving only in a path the rule excludes is invisible TO THE RULE.
+// scope.exclude and except.paths are left as written. A symbol surviving only in
+// a path the rule excludes is invisible TO THE RULE.
 func anchorHits(r *config.Rule, root string, inScope []*scan.File, override map[string]string) (int, error) {
 	checker, err := recompileWith(r, override)
 	if err != nil {
 		return 0, err
 	}
 	probe := r.CloneWithChecker(checker)
-	probe.Allowlist = nil
 	fds, err := engine.Run([]*config.Rule{probe}, &scan.FileSet{Root: root, Files: inScope}, 1)
 	if err != nil {
 		return 0, err

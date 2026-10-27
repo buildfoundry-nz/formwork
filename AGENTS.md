@@ -54,7 +54,7 @@ cannot drift. Any list written in prose can and does.
 **Orchestration and escapes.** Lanes; `formwork check --lane <name> [--staged |
 --range A..B]`; `formwork scope [<path>...] [--staged | --range A..B]`;
 `formwork hooks install|verify`. Exemption
-suppression (`formwork:allow` markers, allowlist files) with `formwork lint`'s
+suppression (`formwork:allow` markers; there are no allowlist files) with `formwork lint`'s
 hygiene checks and an escape-hatch census that enumerates **every** channel by
 which a file can escape a rule — including the ones nobody declared.
 

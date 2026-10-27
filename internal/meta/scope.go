@@ -92,8 +92,8 @@ func RulesMatchingNoFiles(rls []*config.Rule, files []*scan.File) []string {
 // The operative reason is that it never enters engine.Run: exemption is applied
 // there, to findings the engine produced, and these are appended by the caller
 // afterwards. Belt and braces, it also carries no Path, which is what
-// engine.suppressAllowlist returns early on, so even routed through the engine
-// no allowlist entry could match it.
+// engine.suppress returns early on, so even routed through the engine no
+// marker could exempt it.
 //
 // It counts the file set it is GIVEN and never re-walks, which is what lets the
 // caller decide what its mode's floor is a claim about: whole-tree `check` hands

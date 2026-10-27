@@ -217,15 +217,12 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 // Fresh below); EvalIn owns only what a fixture run must not inherit from the
 // repo, so that policy lives in exactly one place rather than once per caller.
 //
-// Allowlists are repo-scoped: their entries are repo-relative paths, but
-// fixture trees have their own, unrelated path namespace (fixture-root-
-// relative). A colliding path must not be suppressed here. Markers stay
-// active — fixtures legitimately exercise marker suppression.
+// Markers stay active — fixtures legitimately exercise marker suppression.
 //
-// scan.ignore is likewise repo-scoped: its globs are repo-root-relative, but
-// this walk's root is the fixture dir. Applying them here would be the same
-// namespace collision the allowlist nil exists to prevent — a fixture that
-// happens to contain vendor/ must still be checked. The same holds for
+// scan.ignore is repo-scoped: its globs are repo-root-relative, but this
+// walk's root is the fixture dir, an unrelated path namespace. Applying them
+// here would be a namespace collision — a fixture that happens to contain
+// vendor/ must still be checked. The same holds for
 // scan.gitignore, and more sharply: the paths a consumer's .gitignore covers
 // (build/, .dart_tool/, node_modules/) are exactly the ones fixture trees like
 // to use, so a repo-level prune would blind fire fixtures that live there — and
@@ -237,8 +234,6 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 // It needs the identical walk semantics — a repo-level prune there would hide
 // exactly the fire fixture that proves a prefilter load-bearing.
 func EvalIn(r *config.Rule, dir, repo string, workers int) ([]finding.Finding, *scan.FileSet, error) {
-	r = r.CloneWithChecker(r.Checker) // never mutate the caller's rule
-	r.Allowlist = nil
 	fset, err := scan.Walk(dir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("fixture %s: %w", dir, err)

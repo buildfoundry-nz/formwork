@@ -149,9 +149,8 @@ func TestLintScanIgnoreTrackedCatchesDeepDescendantOfPrunedDir(t *testing.T) {
 // file-level-ignored file is never in fset.Files) — so deleting either one
 // alone keeps the verdict; mutation-verified that deleting BOTH fails here.
 // The arm is still independently load-bearing where the fallback cannot
-// reach: exemptionHygiene's allowlist "hidden by scan.ignore" diagnosis
-// (which has no fallback), and the case-folded compare against a
-// literal-cased glob doublestar would miss.
+// reach: the case-folded compare against a literal-cased glob doublestar
+// would miss.
 func TestLintScanIgnoreTrackedCatchesFileLevelIgnore(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		".formwork/formwork.yaml":                   "version: 1\nscan:\n  ignore:\n    - glob: '**/*.gen.ts'\n      reason: generated output\n",

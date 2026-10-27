@@ -54,8 +54,8 @@ func Lint(cfg *config.Config, root string, w io.Writer, devOptOutActive bool, sc
 	// Which ones actually survive a rule-less config, checked rather than
 	// assumed (an earlier version of this comment claimed the escape-hatch
 	// census "does not iterate rules at all", which is false — census.go:113
-	// loops cfg.Rules for external-tool rules, scope.exclude, except.paths,
-	// markers and allowlists):
+	// loops cfg.Rules for external-tool rules, scope.exclude, except.paths
+	// and markers):
 	//   - lane-nonempty and lane-reachability run off cfg.Lanes and name each
 	//     dead lane. This is the one that mattered: a config declaring lanes
 	//     with no rules had real, itemised findings that the refusal discarded.
@@ -338,10 +338,9 @@ func lintTree(cfg *config.Config, root string, w io.Writer, fset *scan.FileSet, 
 	}
 
 	// The engine evaluation is only run when something actually consumes its
-	// results: allowlist staleness needs real findings to compare against, the
-	// escape-hatch enumeration's suppressed-finding listing (G1) needs them,
-	// and the prefilter-load-bearing check below reuses them for its base pass.
-	// A repo with no allowlist and no marker opt-in anywhere has nothing for
+	// results: the escape-hatch enumeration's suppressed-finding listing (G1)
+	// needs them, and the prefilter-load-bearing check below reuses them for
+	// its base pass. A repo with no marker opt-in anywhere has nothing for
 	// the engine to tell lint that its own static checks don't already know
 	// (D2, efficiency). A run error is HELD, not surfaced here: the
 	// prefilter-load-bearing check must still emit its verdict first, so a
@@ -384,8 +383,8 @@ func lintTree(cfg *config.Config, root string, w io.Writer, fset *scan.FileSet, 
 	}
 
 	// #30: whether lint failed closed on an unreadable in-scope file used to
-	// depend on which checks happened to run. With no allowlist, no marker and
-	// no prefilter, nothing consumed engine findings, so lint read no file and
+	// depend on which checks happened to run. With no marker and no
+	// prefilter, nothing consumed engine findings, so lint read no file and
 	// passed over a 0o000 one; add a `prefilter:` — which the spec calls a PURE
 	// OPTIMIZATION that must never change a verdict — and the same repo exited 2.
 	//
@@ -414,7 +413,7 @@ func lintTree(cfg *config.Config, root string, w io.Writer, fset *scan.FileSet, 
 	}
 
 	if !pol.skipping(w, "exemption-hygiene") {
-		hygiene, err := exemptionHygiene(cfg, fset, findings)
+		hygiene, err := exemptionHygiene(cfg, fset)
 		if err != nil {
 			enumerateEscapeHatches(cfg, root, findings, fset, gi, devOptOutActive, w)
 			return err
@@ -450,10 +449,9 @@ func laneSelectsAny(l config.Lane, rls []*config.Rule) bool {
 // rulesFeedingLint returns exactly the rules whose engine findings lint reads,
 // which is a strict subset of the config and is what the engine is run over.
 //
-// Three consumers, and nothing else looks at the finding set:
-//   - allowlist staleness — needs findings for allowlist-carrying rules;
+// Two consumers, and nothing else looks at the finding set:
 //   - the escape-hatch enumeration's suppressed-finding listing — only ever has
-//     anything to show for marker- or allowlist-exempt rules;
+//     anything to show for marker-exempt rules;
 //   - prefilterLoadBearing — reuses these findings as the as-written base for
 //     every prefilter-carrying rule, so those must be included or that check
 //     compares a stripped run against a base that never contained the rule.
@@ -477,7 +475,7 @@ func laneSelectsAny(l config.Lane, rls []*config.Rule) bool {
 func rulesFeedingLint(rls []*config.Rule) []*config.Rule {
 	var out []*config.Rule
 	for _, r := range rls {
-		if r.Allowlist != nil || r.Marker {
+		if r.Marker {
 			out = append(out, r)
 			continue
 		}
@@ -500,13 +498,9 @@ func emit(w io.Writer, check string, problems []string) int {
 	return 1
 }
 
-// exemptionHygiene reports stale allowlist entries, reasonless markers, and
-// dead scope.exclude entries that lack a YAML justification comment.
-// findings is the engine's evaluation of rulesFeedingLint(cfg.Rules) over fset
-// (nil when nothing in the config would consume a finding); suppressed findings
-// count as "still trips" (phase-3a design §4). The subset always contains every
-// allowlist- and marker-carrying rule, which is exactly what this check reads,
-// so narrowing the run does not narrow what hygiene can see.
+// exemptionHygiene reports reasonless markers, dead scope.not_declaring
+// entries, and dead scope.exclude entries that lack a YAML justification
+// comment.
 //
 // Dead-exclude hygiene: an exclude that matches zero files in the
 // scanned tree is an exemption nobody can currently exercise. Fail it only
@@ -514,17 +508,7 @@ func emit(w io.Writer, check string, problems []string) int {
 // deliberate preventative shape (vendor/build/generated trees that may be
 // absent on disk). Enumeration of every exclude lives in
 // enumerateEscapeHatches; this arm is the vacuity half only.
-func exemptionHygiene(cfg *config.Config, fset *scan.FileSet, findings []finding.Finding) ([]string, error) {
-	type key struct{ rule, path string }
-	trips := map[key]bool{}
-	for _, f := range findings {
-		trips[key{f.RuleID, f.Path}] = true
-	}
-	exists := map[string]bool{}
-	for _, f := range fset.Files {
-		exists[f.Path()] = true
-	}
-
+func exemptionHygiene(cfg *config.Config, fset *scan.FileSet) ([]string, error) {
 	// D3: one pass over every in-scope file's lines (prefiltered by a plain
 	// substring check) rather than a separate rule × file × line scan per
 	// marker-enabled rule; reasonlessByRule groups the results back by rule
@@ -538,51 +522,6 @@ func exemptionHygiene(cfg *config.Config, fset *scan.FileSet, findings []finding
 	for _, r := range cfg.Rules {
 		if r.Library != "" {
 			continue
-		}
-		if al := r.Allowlist; al != nil {
-			for _, e := range al.Entries {
-				switch {
-				case !exists[e.Path]:
-					// "does not exist" would be false for a file that is on
-					// disk but hidden by a prune — same failure verdict
-					// (the exemption can never fire), truthful diagnosis. Each
-					// channel is named as itself: the cure differs (narrow a
-					// glob in .formwork vs. an entry in .gitignore), so a
-					// reader sent to the wrong file learns nothing.
-					//
-					// The third channel is the SCAN'S OWN SPELLING, and it is
-					// asked first because it is the only affirmative answer
-					// here: the other two say which mechanism removed the file,
-					// this one says the scan read it. `exists` is an exact
-					// string map, and on macOS/APFS an entry an editor saved
-					// NFC names a directory entry readdir returns NFD — a miss
-					// that read as absence and sent the operator to create a
-					// file they are looking at (#308's class, at this caller).
-					//
-					// ASKED, NOT RECOMPUTED. scan.(*FileSet).Produced owns this
-					// question on the filesystem's device+inode oracle, and a
-					// second copy of that oracle on this side of the package
-					// boundary is exactly the divergence #151 is about. Its
-					// cost is one pass over Files, reached only for an entry
-					// that is already a problem — a healthy corpus has none.
-					//
-					// THE VERDICT DOES NOT MOVE. The engine compares allowlist
-					// paths with `==` (engine.go:479), so the entry still
-					// cannot suppress anything and is still reported; calling
-					// it live here would certify an exemption the run ignores.
-					if fset.Produced(e.Path) {
-						problems = append(problems, fmt.Sprintf("%s: allowlist %s:%d: %s is spelled differently on disk (unicode normalization) — allowlist paths are matched byte-for-byte, so exemption is inert; re-add the entry with the bytes the scan carries", r.ID, al.File, e.Line, e.Path))
-					} else if g, ok := ignoredBy(e.Path, fset.Ignored); ok {
-						problems = append(problems, fmt.Sprintf("%s: allowlist %s:%d: %s hidden by scan.ignore (%s) — exemption is inert", r.ID, al.File, e.Line, e.Path, g))
-					} else if rec, ok := hidingRecord(e.Path, fset.Ignored, false, scan.SourceGitignore); ok {
-						problems = append(problems, fmt.Sprintf("%s: allowlist %s:%d: %s hidden by scan.gitignore (%s) — exemption is inert", r.ID, al.File, e.Line, e.Path, rec.Rule))
-					} else {
-						problems = append(problems, fmt.Sprintf("%s: allowlist %s:%d: %s does not exist", r.ID, al.File, e.Line, e.Path))
-					}
-				case !trips[key{r.ID, e.Path}]:
-					problems = append(problems, fmt.Sprintf("%s: allowlist %s:%d: %s no longer trips the rule (stale)", r.ID, al.File, e.Line, e.Path))
-				}
-			}
 		}
 		// scope.exclude: fail a dead (matches-zero-files) entry with no
 		// justification comment. Live excludes need no comment; commented
@@ -611,16 +550,12 @@ func exemptionHygiene(cfg *config.Config, fset *scan.FileSet, findings []finding
 	return problems, nil
 }
 
-// ignoredBy reports which scan.ignore glob (if any) hides path: a file-level
-// match, or any ancestor recorded as a pruned dir (the walk never descended,
-// so descendants of a pruned dir have no records of their own).
-func ignoredBy(path string, ignored []scan.Ignored) (string, bool) {
-	return ignoredByFold(path, ignored, false)
-}
-
-// ignoredByFold is ignoredBy with optional case folding, for core.ignorecase
-// repositories where the index spelling of a path can legitimately differ
-// from the on-disk (walk) spelling by case alone (#90). The folded prefix
+// ignoredByFold reports which scan.ignore glob (if any) hides path: a
+// file-level match, or any ancestor recorded as a pruned dir (the walk never
+// descended, so descendants of a pruned dir have no records of their own).
+// Case folding is optional, for core.ignorecase repositories where the index
+// spelling of a path can legitimately differ from the on-disk (walk) spelling
+// by case alone (#90). The folded prefix
 // compare slices at byte length, so it is sound for ASCII/length-preserving
 // case pairs — the realistic APFS divergence; a fold that changes encoded
 // length (ſ→s) can still miss, a disclosed residual beside NFC/NFD (spec §9).

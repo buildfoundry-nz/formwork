@@ -3,7 +3,6 @@
 package cli
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/engine"
 	"github.com/buildfoundry-nz/formwork/internal/finding"
-	"github.com/buildfoundry-nz/formwork/internal/fixturetest"
 	"github.com/buildfoundry-nz/formwork/internal/meta"
 	"github.com/buildfoundry-nz/formwork/internal/report"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
@@ -133,6 +131,9 @@ func parseAndLoad(fs *flag.FlagSet, args []string, root *string, stderr io.Write
 // loadGated is parseAndLoad's envelope-gate-load half: one envelope read,
 // the engine gate on those same bytes, then rule loading.
 func loadGated(root string, stderr io.Writer) (cfg *config.Config, ok bool) {
+	if loadHook != nil {
+		loadHook()
+	}
 	env, err := config.ReadEnvelope(root)
 	if err != nil {
 		fmt.Fprintln(stderr, "formwork:", err)
@@ -148,6 +149,10 @@ func loadGated(root string, stderr io.Writer) (cfg *config.Config, ok bool) {
 	}
 	return cfg, true
 }
+
+// loadHook is a test seam, called once per corpus load, so a test can pin that
+// a multi-rule selection shares one load. Nil outside tests.
+var loadHook func()
 
 // scopeToRule returns a shallow copy of cfg narrowed to the single rule named
 // by id, or ok=false if no rule matches — the caller must then exit 2. A
@@ -639,80 +644,6 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		if f.Severity == finding.SeverityError {
 			return 1
 		}
-	}
-	return 0
-}
-
-func runTest(args []string, stdout, stderr io.Writer) int {
-	fs, root := newFlagSet("test", "repository root", stderr)
-	workers := fs.Int("workers", 0, "worker count (0 or absent = GOMAXPROCS; a negative count is refused)")
-	rule := fs.String("rule", "", "run only the named rule's fixtures (default: all rules)")
-	cfg, ok := parseAndLoad(fs, args, root, stderr)
-	if !ok {
-		return 2
-	}
-	// Ahead of every config-CONTENT guard below, for runCheck's reason: a caller
-	// who mistyped a flag needs to hear about the flag, and the zero-rules
-	// refusal further down would otherwise answer `--workers -1` with advice
-	// about rule files.
-	if !workersValueUsable(*workers, stderr) {
-		return 2
-	}
-	// Collect the full id set BEFORE --rule scoping: the orphan check inside
-	// Run compares fixture dirs against every rule the corpus declares, so a
-	// scoped run must not read sibling rules' fixtures as orphans (#58).
-	allIDs := make([]string, 0, len(cfg.Rules))
-	for _, r := range cfg.Rules {
-		allIDs = append(allIDs, r.ID)
-	}
-	// Zero rules CONFIGURED means there is nothing this command could report on,
-	// so "0/0 rules passed, 0 fixture(s) run" at exit 0 is a green verdict over
-	// nothing (#151 row 12).
-	//
-	// But the refusal must not TAKE the better diagnosis with it. Run reports
-	// orphan fixture trees — dirs on disk matching no rule id — as FAIL
-	// verdicts counted in `failed`. Calling it here with a capturing writer
-	// surfaces that specific, actionable diagnosis (it names the dead trees)
-	// for the case where rule files vanished but their fixtures did not.
-	// Guarding ahead of Run instead replaced "these 3 fixture dirs can never
-	// run" with "there are no fixtures", which was both less useful and
-	// untrue. Zero rules is still exit 2 (a config error). When rules exist,
-	// the same orphans are findings (exit 1) and other rules still run (#9).
-	//
-	// Deliberately NOT the same condition as "zero fixtures ran". A configured
-	// rule with no fixture directory also prints "0/0 rules passed" at exit 0 —
-	// but it prints `[id] SKIP — no fixtures` and a skipped count first, and
-	// lint's fixture-coverage check fails on it. That one is disclosed, not
-	// silent, which is the whole difference.
-	if len(cfg.Rules) == 0 {
-		var buf bytes.Buffer
-		failed, err := fixturetest.Run(cfg, allIDs, *root, *workers, &buf)
-		if err != nil {
-			fmt.Fprintln(stderr, "formwork:", err)
-			return 2
-		}
-		if failed > 0 {
-			fmt.Fprint(stderr, buf.String())
-			return 2
-		}
-		fmt.Fprintln(stderr, "formwork:", noRulesReason(cfg, "there are no fixtures to run and nothing this command could report on"))
-		return 2
-	}
-	if *rule != "" {
-		scoped, matched := scopeToRule(cfg, *rule)
-		if !matched {
-			fmt.Fprintf(stderr, "formwork: no rule matches --rule %q\n", *rule)
-			return 2
-		}
-		cfg = scoped
-	}
-	failed, err := fixturetest.Run(cfg, allIDs, *root, *workers, stdout)
-	if err != nil {
-		fmt.Fprintln(stderr, "formwork:", err)
-		return 2
-	}
-	if failed > 0 {
-		return 1
 	}
 	return 0
 }

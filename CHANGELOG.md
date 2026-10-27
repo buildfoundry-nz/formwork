@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`formwork test` now fails a pass fixture that could never have failed its
+  rule.** `PASS-FIXTURE-VACUOUS` (the rule reaches no file of the fixture and
+  would have judged nothing in it) and `PASS-FIXTURE-BLIND` (a
+  `go/call-confined-to-func-name` or `go/guard-precedes-call` fixture holding no
+  occurrence of the anchored symbol/sink) fail the arm and the rule, exit 1, by
+  default. A corpus with such fixtures that passed before fails now; fix the
+  fixture so it exercises the rule (#49). A pass fixture standing at an
+  `except.paths` entry declared inert with `# except-declaration: <reason>` (a
+  bare marker declares nothing) is excused, exactly as the vacuity census
+  excuses it; both read the marker through `internal/vacuity` (#49). The
+  marker is read from the corpus's own `.formwork/rules/*.yaml` only, so a
+  `library:` pack rule's declared-inert entry does not excuse its fixture (#49).
+
+### Added
+
+- `formwork test` reports each pass arm's `vacuity` (`judged`, `vacuous`,
+  `blind`, `not-judged`) in `--format json`, and an OK rule with `not-judged`
+  pass arms (`command`, `git-diff`, any non-fast rule) says so in the human
+  output instead of staying silent. The verdicts live in the new
+  `internal/vacuity`, which the vacuity census now calls for
+  `PASS-FIXTURE-VACUOUS` (#49).
+
+- `formwork test --rule` takes several rules in one call, repeated
+  (`--rule a --rule b`) or comma-separated (`--rule a,b`), so one corpus load
+  serves the whole selection. Any unknown id is exit 2 with nothing run (#49).
+- `formwork test --format json` writes a versioned (`version: 1`) per-rule,
+  per-arm result document; the human output is rendered from the same
+  structured results and is unchanged (#49).
+
 ## 0.12.0
 
 ### Changed (breaking)

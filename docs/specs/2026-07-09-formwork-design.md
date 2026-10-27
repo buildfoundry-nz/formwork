@@ -664,8 +664,14 @@ The validating target's synth-test discipline, built into the engine:
 - `formwork test` runs as a plain CI step — no build-tag isolation, so the
   historical "synths compiled out, job passed vacuously" failure mode cannot
   recur.
-- `formwork test [--rule <id>]` narrows a run to one rule's fixtures for the
-  inner loop while porting; with no `--rule` every rule runs, so CI is
+- `formwork test [--rule <id>[,<id>…]]` narrows a run to the named rules'
+  fixtures for the inner loop while porting; the flag repeats and
+  comma-splits so one corpus load serves the whole selection (#49), and an
+  unknown id among known ones is still exit 2 with nothing run;
+  `formwork test --format human|json` adds a machine-readable per-rule, per-arm
+  result (versioned; exit codes identical to human, nothing on stdout at exit 2)
+  rendered from the same structured results the human text is, so the two cannot
+  disagree (#49); with no `--rule` every rule runs, so CI is
   unaffected. Selection is **fail-closed**: a `--rule` naming no configured rule
   is exit 2, never an empty run reported as "0/0 passed" — a selector that
   silently matches nothing is the same misconfigured-rule-passes hazard the
@@ -689,6 +695,27 @@ The validating target's synth-test discipline, built into the engine:
   would silently suppress the fixture's declared finding); inline
   `formwork:allow` markers do still apply, since fixtures legitimately
   exercise marker suppression.
+- **Pass-fixture vacuity (#49).** A pass fixture is green by definition, so
+  `formwork test` also asks whether it could ever have failed: for each pass
+  arm that otherwise passes, `internal/vacuity.Judge` returns `judged`,
+  `vacuous` (`PASS-FIXTURE-VACUOUS`), `blind` (`PASS-FIXTURE-BLIND`) or
+  `not-judged`. Vacuous is decided by the engine, not a re-implemented matcher:
+  the rule reaches none of the fixture's files AND a universal-scope twin run
+  by `engine.Run` finds nothing, which gets polarity right and leaves
+  "violation parked at an excluded path" alone. Blind is only for the two
+  name-anchored Go types and re-runs the rule with its exempting half
+  defeated; a total ban and a `funcs`-filter assertion are exempt. Escape rules
+  (any cost class other than fast) are `not-judged`: shown, never failed.
+  **Fail by default**, decided by the maintainer: a gate that only warns is not
+  read, and the downstream consumer (TakeoffQS) already gates both codes with no
+  baseline. A probe that cannot run is exit 2. Kept quirks: vacuous counts only
+  unsuppressed findings while blind's anchor probe counts suppressed ones too
+  (a marker-suppressed symbol still proves the anchor sees its subject), and a
+  `guard-precedes-call` rule with `funcs` runs a second probe with the filter
+  defeated. A fixture standing at an `except.paths` entry declared inert with
+  `# except-declaration: <reason>` is excused by `formwork test` and by the
+  vacuity census alike, both reading the marker through `internal/vacuity` (a
+  bare marker declares nothing; only `.formwork/rules/*.yaml` of the root is read).
 
 ## 8. Orchestration
 

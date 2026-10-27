@@ -1438,6 +1438,71 @@ formwork version                 # the stamped release version
 ```
 
 `test` and `lint` both take `--rule <id>`, which runs one rule's fixtures or one
-rule's checks and is fail-closed on an unknown id. `hooks install` refuses
+rule's checks and is fail-closed on an unknown id. `test` accepts several: repeat
+the flag (`--rule a --rule b`) or comma-separate (`--rule a,b`); repeats are run
+once, and a single unknown id among known ones is exit 2 with nothing run, one
+`no rule matches --rule "<id>"` line per unknown id. `lint --rule` takes one id.
+
+`test --rule` with only empty segments (`--rule ""`, `--rule ","`,
+`--rule " , "`) selects nothing, so every rule runs, the same as omitting the
+flag. An empty occurrence alongside real ids (`--rule a --rule ""`) does not
+widen the selection. A caller that builds the list from a variable should guard
+against an empty value if it means "test nothing".
+
+`test --format human|json` (default `human`; anything else is exit 2, and `github`
+is not a `test` format). `json` writes one object to stdout with a trailing
+newline and the same exit code as `human` (0 pass, 1 a rule failed, 2 error); on
+exit 2 nothing is written to stdout. Shape:
+
+```json
+{"version": 1,
+ "rules": [{"rule": "id", "status": "ok|fail|skip", "reason": "…",
+            "arms": [{"arm": "fire-1", "kind": "fire|pass",
+                      "path": ".formwork/fixtures/id/fire-1",
+                      "ok": true, "problems": ["fire-1: …"]},
+                     {"arm": "pass-1", "kind": "pass", "ok": true,
+                      "vacuity": "judged|vacuous|blind|not-judged",
+                      "vacuity_reason": "…"}]}],
+ "summary": {"rules": 2, "rules_passed": 1, "fixtures": 4}}
+```
+
+**Pass fixtures are judged for vacuity, and a vacuous one fails.** A pass
+fixture is green by definition, so green alone proves nothing. For every pass
+arm that otherwise passes, `test` asks whether it could ever have failed the
+rule, and two answers fail the arm (so the rule, so exit 1) with a problem line
+`pass-1: <CODE>: <reason>`:
+
+- `PASS-FIXTURE-VACUOUS` — the rule reaches no file of the fixture AND, with a
+  scope that subtracts nothing, would have judged nothing in it. A fixture
+  that parks a real violation at an excluded path is not vacuous: it holds the
+  exclusion in place. Fix by adding an in-scope file the rule judges and passes,
+  or by parking a real violation at the excluded path. A fixture standing at an
+  `except.paths` entry marked `# except-declaration: <reason>` on the line above
+  it is excused; a marker with no reason is not. The marker is read only from
+  the corpus's own `.formwork/rules/*.yaml` (top level); rules supplied by a
+  `library:` pack are not consulted, so a pack rule's declared-inert entry does
+  not excuse its fixture. That is the strict direction: the fixture fails
+  rather than passes.
+- `PASS-FIXTURE-BLIND` — `go/call-confined-to-func-name` and
+  `go/guard-precedes-call` only: the fixture is reached but holds no occurrence
+  of the `symbol` / `sink` the rule is anchored on, even with `allowed_func` /
+  `guard` defeated. A total ban (`allowed_func` admitting no real name) and a
+  `guard-precedes-call` fixture that asserts its `funcs` filter are not blind.
+
+A rule that is neither is `judged`. Rules outside the verdicts' reach — every
+cost class other than fast, i.e. `command`, `git-diff` and the like — are
+`not-judged`: never failed, never silent. An OK rule with such pass arms prints
+`[<rule>] OK — N fixture(s), K pass fixture(s) not vacuity-judged (<reason>)`.
+In JSON, `vacuity` (and `vacuity_reason` unless `judged`) appears on pass arms
+only, and is omitted on a pass arm that already failed for another reason. A
+probe that cannot run (an unreadable or empty anchor param) is exit 2.
+
+`version` bumps on any breaking change to this shape. `rules` is sorted by id and
+`arms` by arm name; `arms` is `[]`, never `null`. `status` is `skip` for a rule
+with no fixtures and `reason` says why; an orphan fixture dir (matching no rule
+id) is a `fail` with a `reason` and no arms. `problems` (omitted when the arm is
+fine) are the strings the human output prints, arm-name prefix included.
+`summary` mirrors the human summary line: `rules` and `rules_passed` exclude
+skipped rules, and `fixtures` is the number of arms run. `hooks install` refuses
 rather than taking over hook wiring that is already there; `hooks verify` judges
 the installed shims and writes nothing.

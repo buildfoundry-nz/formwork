@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.1
+
+### Changed
+
+- **Scope matching skips re-validating stored globs.** `Rule.Applies` runs for
+  every (file, rule) pair the engine considers, and almost every pair is a
+  miss. `doublestar.Match` re-validates the whole pattern on each miss, which
+  was about a third of `check`'s in-process CPU on a 4,300-rule corpus.
+  `scope.include` and `scope.exclude` are validated once by `config.New` and
+  cannot be reassigned outside the package, so they now match unvalidated;
+  `except.paths`, an exported field, keeps the validating matcher.
+  `BenchmarkRuleAppliesMostlyMisses`: about 2.15 µs to 1.43 µs. Verdicts are
+  unchanged.
+
 ## 0.12.0
 
 ### Changed (breaking)

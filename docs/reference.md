@@ -1443,6 +1443,12 @@ the flag (`--rule a --rule b`) or comma-separate (`--rule a,b`); repeats are run
 once, and a single unknown id among known ones is exit 2 with nothing run, one
 `no rule matches --rule "<id>"` line per unknown id. `lint --rule` takes one id.
 
+`test --rule` with only empty segments (`--rule ""`, `--rule ","`,
+`--rule " , "`) selects nothing, so every rule runs, the same as omitting the
+flag. An empty occurrence alongside real ids (`--rule a --rule ""`) does not
+widen the selection. A caller that builds the list from a variable should guard
+against an empty value if it means "test nothing".
+
 `test --format human|json` (default `human`; anything else is exit 2, and `github`
 is not a `test` format). `json` writes one object to stdout with a trailing
 newline and the same exit code as `human` (0 pass, 1 a rule failed, 2 error); on
@@ -1472,7 +1478,11 @@ rule, and two answers fail the arm (so the rule, so exit 1) with a problem line
   exclusion in place. Fix by adding an in-scope file the rule judges and passes,
   or by parking a real violation at the excluded path. A fixture standing at an
   `except.paths` entry marked `# except-declaration: <reason>` on the line above
-  it is excused; a marker with no reason is not.
+  it is excused; a marker with no reason is not. The marker is read only from
+  the corpus's own `.formwork/rules/*.yaml` (top level); rules supplied by a
+  `library:` pack are not consulted, so a pack rule's declared-inert entry does
+  not excuse its fixture. That is the strict direction: the fixture fails
+  rather than passes.
 - `PASS-FIXTURE-BLIND` — `go/call-confined-to-func-name` and
   `go/guard-precedes-call` only: the fixture is reached but holds no occurrence
   of the `symbol` / `sink` the rule is anchored on, even with `allowed_func` /

@@ -13,7 +13,9 @@
   fixture so it exercises the rule (#49). A pass fixture standing at an
   `except.paths` entry declared inert with `# except-declaration: <reason>` (a
   bare marker declares nothing) is excused, exactly as the vacuity census
-  excuses it; both read the marker through `internal/vacuity` (#49).
+  excuses it; both read the marker through `internal/vacuity` (#49). The
+  marker is read from the corpus's own `.formwork/rules/*.yaml` only, so a
+  `library:` pack rule's declared-inert entry does not excuse its fixture (#49).
 
 ### Added
 

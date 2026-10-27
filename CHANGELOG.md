@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.13.1
+
+### Changed
+
+- **forbidden-pattern skips files that cannot match.** A forbidden-pattern
+  rule with no declared `prefilter` now derives one from its RE2 pattern:
+  literals at least one of which every match contains, taken from the
+  pattern's guaranteed runs. A file whose content holds none of them is not
+  scanned line by line. The gate tests the same preprocessed variant the
+  lines come from, so no verdict changes. It declines whenever it cannot
+  prove that: regexp2, case-folded literals, an alternation branch with no
+  guaranteed run, literals under 3 bytes, more than 8 branches, or U+FFFD
+  (Go's regexp matches invalid UTF-8 as U+FFFD, and a byte search would miss
+  it). On a 4,300-rule corpus a whole-tree `check --skip-escapes` went from
+  273 s to 153 s wall and 1,365 to 996 CPU-seconds, with identical findings,
+  and its fixture suite passed unchanged (13,894 fixtures).
+
 ## 0.13.0
 
 ### Removed (breaking)

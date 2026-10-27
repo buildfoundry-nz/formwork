@@ -17,10 +17,8 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/buildfoundry-nz/formwork/internal/config"
-	"github.com/buildfoundry-nz/formwork/internal/engine"
-	"github.com/buildfoundry-nz/formwork/internal/finding"
-	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
+	"github.com/buildfoundry-nz/formwork/internal/vacuity"
 )
 
 // passVacuousVerdict answers, of a clean fixture that did NOT fire, whether it
@@ -59,23 +57,16 @@ import (
 // can discriminate, and the universal-scope probe would re-run an expensive
 // tool to learn what the run three lines above already reported.
 func passVacuousVerdict(r *config.Rule, fixture string, ffs *scan.FileSet, gm *globMeasure) ([]verdict, error) {
-	if rules.CostOf(r.Checker) == rules.CostHeavy {
-		return nil, nil
-	}
-	for _, ff := range ffs.Files {
-		if r.Applies(ff.Path()) {
-			return nil, nil // the rule reaches this fixture; it is doing its job
-		}
-	}
-	if declaredInertExcept(r, ffs, gm) {
-		return nil, nil // inert by written declaration, not by drift
-	}
-	judged, err := judgesAnything(r, ffs)
+	// The probe itself lives in internal/vacuity, shared with `formwork test`:
+	// one definition of "vacuous", so the census and the test runner cannot
+	// disagree. Only the except-declaration excuse stays here: it is read through
+	// globMeasure (declaredInertExcept below), which Judge has no access to.
+	vac, err := vacuity.Vacuous(r, ffs, func(fs *scan.FileSet) bool { return declaredInertExcept(r, fs, gm) })
 	if err != nil {
-		return nil, fmt.Errorf("rule %s fixture %s: universal-scope probe: %w", r.ID, fixture, err)
+		return nil, fmt.Errorf("fixture %s: %w", fixture, err)
 	}
-	if judged {
-		return nil, nil // out of scope but carrying a real violation: a scope test
+	if !vac {
+		return nil, nil
 	}
 	return []verdict{{
 		class: class3, code: "PASS-FIXTURE-VACUOUS", gating: true,
@@ -116,30 +107,4 @@ func declaredInertExcept(r *config.Rule, ffs *scan.FileSet, gm *globMeasure) boo
 		}
 	}
 	return false
-}
-
-// judgesAnything reports whether r finds anything to say about fs once its
-// scope subtracts nothing. The verdict comes from engine.Run, never from a
-// re-implementation of the matcher, and from a Fresh checker because a rule
-// carries per-run state (required-pattern exists mode accumulates across
-// files) — the same discipline as satisfies() in probe.go.
-//
-// Preprocess and Marker are carried across because they change what the checker
-// SEES.
-func judgesAnything(r *config.Rule, fs *scan.FileSet) (bool, error) {
-	fresh, err := r.Fresh()
-	if err != nil {
-		return false, err
-	}
-	probe, err := config.New(r.ID, r.Type, r.Severity, r.Cure, []string{"**"}, nil, nil, fresh.Checker)
-	if err != nil {
-		return false, err
-	}
-	probe.Preprocess = r.Preprocess
-	probe.Marker = r.Marker
-	fds, err := engine.Run([]*config.Rule{probe}, fs, 1)
-	if err != nil {
-		return false, err
-	}
-	return len(finding.Unsuppressed(fds)) > 0, nil
 }

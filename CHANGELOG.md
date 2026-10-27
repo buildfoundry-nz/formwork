@@ -2,7 +2,24 @@
 
 ## Unreleased
 
+### Changed
+
+- **`formwork test` now fails a pass fixture that could never have failed its
+  rule.** `PASS-FIXTURE-VACUOUS` (the rule reaches no file of the fixture and
+  would have judged nothing in it) and `PASS-FIXTURE-BLIND` (a
+  `go/call-confined-to-func-name` or `go/guard-precedes-call` fixture holding no
+  occurrence of the anchored symbol/sink) fail the arm and the rule, exit 1, by
+  default. A corpus with such fixtures that passed before fails now; fix the
+  fixture so it exercises the rule (#49).
+
 ### Added
+
+- `formwork test` reports each pass arm's `vacuity` (`judged`, `vacuous`,
+  `blind`, `not-judged`) in `--format json`, and an OK rule with `not-judged`
+  pass arms (`command`, `git-diff`, any non-fast rule) says so in the human
+  output instead of staying silent. The verdicts live in the new
+  `internal/vacuity`, which the vacuity census now calls for
+  `PASS-FIXTURE-VACUOUS` (#49).
 
 - `formwork test --rule` takes several rules in one call, repeated
   (`--rule a --rule b`) or comma-separated (`--rule a,b`), so one corpus load

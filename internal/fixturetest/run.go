@@ -16,6 +16,7 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/finding"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
+	"github.com/buildfoundry-nz/formwork/internal/vacuity"
 )
 
 // armEntry is one fire-* or pass-* directory under a rule's fixture tree.
@@ -41,6 +42,11 @@ type ArmResult struct {
 	Path     string   `json:"path"` // repo-relative fixture dir, slash-separated
 	OK       bool     `json:"ok"`
 	Problems []string `json:"problems,omitempty"` // the same strings the human output prints
+	// Vacuity is set for kind "pass" arms whose base run was OK, and only
+	// those: "judged" | "vacuous" | "blind" | "not-judged". vacuous and blind
+	// fail the arm; not-judged (a rule outside the verdicts' reach) never does.
+	Vacuity       string `json:"vacuity,omitempty"`
+	VacuityReason string `json:"vacuity_reason,omitempty"`
 }
 
 // RuleResult is one rule's fixture outcome. An orphan fixture dir (#9) is a
@@ -68,9 +74,16 @@ const (
 	exemptPrefix     = "declared fixture-exempt: "
 )
 
+// judgeVacuity is vacuity.Judge, a variable only so a test can make the probe
+// fail: no real rule can, from this package, and the wiring still has to turn
+// a probe error into an error rather than a pass.
+var judgeVacuity = vacuity.Judge
+
 // newArmResult records one arm's outcome. Problems carry the arm-name prefix
-// the human output prints.
-func newArmResult(ruleID string, a armEntry, ps []string) ArmResult {
+// the human output prints. v is the arm's vacuity verdict: the zero Verdict for
+// a fire arm or a pass arm that already failed, otherwise what Judge said. A
+// vacuous or blind verdict fails the arm with a problem naming its code.
+func newArmResult(ruleID string, a armEntry, ps []string, v vacuity.Verdict) ArmResult {
 	kind := KindPass
 	if a.isFire {
 		kind = KindFire
@@ -83,6 +96,17 @@ func newArmResult(ruleID string, a armEntry, ps []string) ArmResult {
 	}
 	for _, p := range ps {
 		ar.Problems = append(ar.Problems, a.name+": "+p)
+	}
+	// The !a.isFire half is not pinnable: runFixture never produces a verdict
+	// for a fire arm (and neither does the compile-once path), so v is already
+	// zero here. It is kept so the "fire arms carry no vacuity" contract holds
+	// at the one place ArmResult is built, whatever a caller passes.
+	if !a.isFire && v.Kind != "" {
+		ar.Vacuity, ar.VacuityReason = v.Kind, v.Reason
+		if v.Code != "" {
+			ar.OK = false
+			ar.Problems = append(ar.Problems, a.name+": "+v.Code+": "+v.Reason)
+		}
 	}
 	return ar
 }
@@ -106,7 +130,7 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 			fmt.Fprintf(w, "[%s] SKIP — %s\n", rr.Rule, rr.Reason)
 		case StatusOK:
 			ran += len(rr.Arms)
-			fmt.Fprintf(w, "[%s] OK — %d fixture(s)\n", rr.Rule, len(rr.Arms))
+			fmt.Fprintf(w, "[%s] OK — %d fixture(s)%s\n", rr.Rule, len(rr.Arms), notJudgedSuffix(rr))
 		default:
 			failed++
 			if rr.Reason != "" { // orphan: no arms, never ran
@@ -130,6 +154,25 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 	fmt.Fprintf(w, "formwork test: %d/%d rules passed, %d fixture(s) run, %d rule(s) skipped\n",
 		total-failed, total, ran, skipped)
 	return failed, nil
+}
+
+// notJudgedSuffix names the pass fixtures of an OK rule that no vacuity verdict
+// could judge, so an OK line never silently covers them. Empty when every pass
+// arm was judged.
+func notJudgedSuffix(rr RuleResult) string {
+	n, reason := 0, ""
+	for _, a := range rr.Arms {
+		if a.Vacuity == vacuity.KindNotJudged {
+			if n == 0 {
+				reason = a.VacuityReason
+			}
+			n++
+		}
+	}
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf(", %d pass fixture(s) not vacuity-judged (%s)", n, reason)
 }
 
 // Results evaluates every rule's fixtures and returns one RuleResult per rule
@@ -237,12 +280,12 @@ func Results(cfg *config.Config, allRuleIDs []string, root string, workers int) 
 		}
 		if len(armResults) == 0 {
 			for _, a := range arms {
-				ps, err := runFixture(r, a.path, a.src, a.isFire, root, workers)
+				ps, v, err := runFixture(r, a.path, a.src, a.isFire, root, workers)
 				if err != nil {
 					releaseArms()
 					return nil, err
 				}
-				armResults = append(armResults, newArmResult(r.ID, a, ps))
+				armResults = append(armResults, newArmResult(r.ID, a, ps, v))
 			}
 		}
 		releaseArms()
@@ -326,17 +369,29 @@ func EvalIn(r *config.Rule, dir, repo string, workers int) ([]finding.Finding, *
 }
 
 // runFixture evaluates one fixture tree with a fresh checker and returns
-// the fixture's problems (empty = fixture behaved as declared).
-func runFixture(r *config.Rule, dir, src string, isFire bool, repo string, workers int) ([]string, error) {
+// the fixture's problems (empty = fixture behaved as declared) and, for a pass
+// arm that behaved, its vacuity verdict over the tree EvalIn already walked.
+func runFixture(r *config.Rule, dir, src string, isFire bool, repo string, workers int) ([]string, vacuity.Verdict, error) {
 	fresh, err := r.Fresh()
 	if err != nil {
-		return nil, fmt.Errorf("fixture %s: %w", src, err)
+		return nil, vacuity.Verdict{}, fmt.Errorf("fixture %s: %w", src, err)
 	}
 	findings, fset, err := EvalIn(fresh, dir, repo, workers)
 	if err != nil {
-		return nil, err
+		return nil, vacuity.Verdict{}, err
 	}
-	return judgeFixture(r, dir, src, isFire, findings, fset)
+	ps, err := judgeFixture(r, dir, src, isFire, findings, fset)
+	if err != nil {
+		return nil, vacuity.Verdict{}, err
+	}
+	if isFire || len(ps) > 0 {
+		return ps, vacuity.Verdict{}, nil
+	}
+	v, err := judgeVacuity(r, fset)
+	if err != nil {
+		return nil, vacuity.Verdict{}, fmt.Errorf("fixture %s: vacuity probe: %w", src, err)
+	}
+	return ps, v, nil
 }
 
 // judgeFixture compares findings against the fixture's declared expectations.

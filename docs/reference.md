@@ -1453,9 +1453,37 @@ exit 2 nothing is written to stdout. Shape:
  "rules": [{"rule": "id", "status": "ok|fail|skip", "reason": "…",
             "arms": [{"arm": "fire-1", "kind": "fire|pass",
                       "path": ".formwork/fixtures/id/fire-1",
-                      "ok": true, "problems": ["fire-1: …"]}]}],
+                      "ok": true, "problems": ["fire-1: …"]},
+                     {"arm": "pass-1", "kind": "pass", "ok": true,
+                      "vacuity": "judged|vacuous|blind|not-judged",
+                      "vacuity_reason": "…"}]}],
  "summary": {"rules": 2, "rules_passed": 1, "fixtures": 4}}
 ```
+
+**Pass fixtures are judged for vacuity, and a vacuous one fails.** A pass
+fixture is green by definition, so green alone proves nothing. For every pass
+arm that otherwise passes, `test` asks whether it could ever have failed the
+rule, and two answers fail the arm (so the rule, so exit 1) with a problem line
+`pass-1: <CODE>: <reason>`:
+
+- `PASS-FIXTURE-VACUOUS` — the rule reaches no file of the fixture AND, with a
+  scope that subtracts nothing, would have judged nothing in it. A fixture
+  that parks a real violation at an excluded path is not vacuous: it holds the
+  exclusion in place. Fix by adding an in-scope file the rule judges and passes,
+  or by parking a real violation at the excluded path.
+- `PASS-FIXTURE-BLIND` — `go/call-confined-to-func-name` and
+  `go/guard-precedes-call` only: the fixture is reached but holds no occurrence
+  of the `symbol` / `sink` the rule is anchored on, even with `allowed_func` /
+  `guard` defeated. A total ban (`allowed_func` admitting no real name) and a
+  `guard-precedes-call` fixture that asserts its `funcs` filter are not blind.
+
+A rule that is neither is `judged`. Rules outside the verdicts' reach — every
+cost class other than fast, i.e. `command`, `git-diff` and the like — are
+`not-judged`: never failed, never silent. An OK rule with such pass arms prints
+`[<rule>] OK — N fixture(s), K pass fixture(s) not vacuity-judged (<reason>)`.
+In JSON, `vacuity` (and `vacuity_reason` unless `judged`) appears on pass arms
+only, and is omitted on a pass arm that already failed for another reason. A
+probe that cannot run (an unreadable or empty anchor param) is exit 2.
 
 `version` bumps on any breaking change to this shape. `rules` is sorted by id and
 `arms` by arm name; `arms` is `[]`, never `null`. `status` is `skip` for a rule

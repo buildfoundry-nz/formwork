@@ -13,6 +13,7 @@ import (
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/rules/command"
+	"github.com/buildfoundry-nz/formwork/internal/vacuity"
 )
 
 // goRunShape is a params.cmd that formwork test can compile once per rule.
@@ -407,11 +408,11 @@ func buildDetectorOnce(arm string, shape goRunShape, outBin string) error {
 func runArmsCold(r *config.Rule, arms []armEntry, repo string, workers int) ([]ArmResult, error) {
 	var results []ArmResult
 	for _, a := range arms {
-		ps, err := runFixture(r, a.path, a.src, a.isFire, repo, workers)
+		ps, v, err := runFixture(r, a.path, a.src, a.isFire, repo, workers)
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, newArmResult(r.ID, a, ps))
+		results = append(results, newArmResult(r.ID, a, ps, v))
 	}
 	return results, nil
 }
@@ -472,19 +473,19 @@ func runCommandFixturesCompileOnce(r *config.Rule, arms []armEntry, shape goRunS
 		if shape.chDir != "" {
 			workDir = filepath.Join(armPath, filepath.FromSlash(shape.chDir))
 		}
-		ps, err := runFixtureCompiled(r, armPath, a.src, a.isFire, repo, workers, bin, shape.progArgs, workDir)
+		ps, v, err := runFixtureCompiled(r, armPath, a.src, a.isFire, repo, workers, bin, shape.progArgs, workDir)
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, newArmResult(r.ID, a, ps))
+		results = append(results, newArmResult(r.ID, a, ps, v))
 	}
 	return results, nil
 }
 
-func runFixtureCompiled(r *config.Rule, dir, src string, isFire bool, repo string, workers int, binary string, progArgs []string, workDir string) ([]string, error) {
+func runFixtureCompiled(r *config.Rule, dir, src string, isFire bool, repo string, workers int, binary string, progArgs []string, workDir string) ([]string, vacuity.Verdict, error) {
 	fresh, err := r.Fresh()
 	if err != nil {
-		return nil, fmt.Errorf("fixture %s: %w", src, err)
+		return nil, vacuity.Verdict{}, fmt.Errorf("fixture %s: %w", src, err)
 	}
 	rewritten, ok := command.WithCompiledBinary(fresh.Checker, binary, progArgs, workDir)
 	if !ok {
@@ -493,7 +494,16 @@ func runFixtureCompiled(r *config.Rule, dir, src string, isFire bool, repo strin
 	fresh = fresh.CloneWithChecker(rewritten)
 	findings, fset, err := EvalIn(fresh, dir, repo, workers)
 	if err != nil {
-		return nil, err
+		return nil, vacuity.Verdict{}, err
 	}
-	return judgeFixture(r, dir, src, isFire, findings, fset)
+	ps, err := judgeFixture(r, dir, src, isFire, findings, fset)
+	if err != nil {
+		return nil, vacuity.Verdict{}, err
+	}
+	if isFire || len(ps) > 0 {
+		return ps, vacuity.Verdict{}, nil
+	}
+	// A rule on this path runs an external command: an escape rule, not-judged
+	// without a probe.
+	return ps, vacuity.NotJudgedEscape(r), nil
 }

@@ -116,3 +116,36 @@ func TestTestFormatUnknownExits2(t *testing.T) {
 		}
 	}
 }
+
+// #49 S3: `vacuity` appears on pass arms only, never on fire arms, and a vacuous
+// pass arm fails the run (exit 1) in JSON exactly as in human mode.
+func TestTestFormatJSONVacuityOnPassArmsOnly(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
+	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"),
+		"rules:\n  - id: v1\n    type: forbidden-pattern\n    scope: {include: ['src/**'], exclude: ['src/gen/**']}\n    params: {pattern: alpha}\n")
+	mustWrite(t, filepath.Join(root, ".formwork", "fixtures", "v1", "fire-1", "src", "f.txt"), "alpha want: v1\n")
+	mustWrite(t, filepath.Join(root, ".formwork", "fixtures", "v1", "pass-1", "src", "gen", "f.txt"), "clean\n")
+	code, out, _ := runCLI(t, "test", "-C", root, "--format", "json")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1 for a vacuous pass arm\n%s", code, out)
+	}
+	var raw struct {
+		Rules []struct {
+			Arms []map[string]any `json:"arms"`
+		} `json:"rules"`
+	}
+	if err := json.Unmarshal([]byte(out), &raw); err != nil {
+		t.Fatal(err)
+	}
+	arms := raw.Rules[0].Arms
+	if len(arms) != 2 {
+		t.Fatalf("arms = %v", arms)
+	}
+	if _, has := arms[0]["vacuity"]; has || arms[0]["arm"] != "fire-1" {
+		t.Errorf("fire arm carries vacuity: %v", arms[0])
+	}
+	if arms[1]["vacuity"] != "vacuous" || arms[1]["vacuity_reason"] == "" || arms[1]["ok"] != false {
+		t.Errorf("pass arm = %v, want vacuity=vacuous with a reason and ok=false", arms[1])
+	}
+}

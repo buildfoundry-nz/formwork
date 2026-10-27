@@ -66,7 +66,7 @@ func TestResultsStructuredPerArm(t *testing.T) {
 	}
 	wantArms := []fixturetest.ArmResult{
 		{Arm: "fire-1", Kind: "fire", Path: ".formwork/fixtures/a-fruit-free/fire-1", OK: true},
-		{Arm: "pass-1", Kind: "pass", Path: ".formwork/fixtures/a-fruit-free/pass-1", OK: true},
+		{Arm: "pass-1", Kind: "pass", Path: ".formwork/fixtures/a-fruit-free/pass-1", OK: true, Vacuity: "judged"},
 	}
 	if !reflect.DeepEqual(ok.Arms, wantArms) {
 		t.Errorf("passing rule arms (want sorted fire-1, pass-1) =\n%+v\nwant\n%+v", ok.Arms, wantArms)

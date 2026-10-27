@@ -695,6 +695,25 @@ The validating target's synth-test discipline, built into the engine:
   would silently suppress the fixture's declared finding); inline
   `formwork:allow` markers do still apply, since fixtures legitimately
   exercise marker suppression.
+- **Pass-fixture vacuity (#49).** A pass fixture is green by definition, so
+  `formwork test` also asks whether it could ever have failed: for each pass
+  arm that otherwise passes, `internal/vacuity.Judge` returns `judged`,
+  `vacuous` (`PASS-FIXTURE-VACUOUS`), `blind` (`PASS-FIXTURE-BLIND`) or
+  `not-judged`. Vacuous is decided by the engine, not a re-implemented matcher:
+  the rule reaches none of the fixture's files AND a universal-scope twin run
+  by `engine.Run` finds nothing, which gets polarity right and leaves
+  "violation parked at an excluded path" alone. Blind is only for the two
+  name-anchored Go types and re-runs the rule with its exempting half
+  defeated; a total ban and a `funcs`-filter assertion are exempt. Escape rules
+  (any cost class other than fast) are `not-judged`: shown, never failed.
+  **Fail by default**, decided by the maintainer: a gate that only warns is not
+  read, and the downstream consumer (TakeoffQS) already gates both codes with no
+  baseline. A probe that cannot run is exit 2. Kept quirks: vacuous counts only
+  unsuppressed findings while blind's anchor probe counts suppressed ones too
+  (a marker-suppressed symbol still proves the anchor sees its subject), and a
+  `guard-precedes-call` rule with `funcs` runs a second probe with the filter
+  defeated. `# except-declaration:` excuses a vacuous fixture only in the vacuity
+  census, which reads it; `formwork test` has no access to it.
 
 ## 8. Orchestration
 

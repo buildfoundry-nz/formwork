@@ -164,29 +164,6 @@ func TestRunSkipsRulesWithoutFixtures(t *testing.T) {
 	}
 }
 
-func TestRunPassFixtureWithMarkerSuppressedViolation(t *testing.T) {
-	root := writeRepo(t, map[string]string{
-		".formwork/formwork.yaml": "version: 1\n",
-		".formwork/rules/r.yaml": "rules:\n  - id: no-banana\n    type: forbidden-pattern\n" +
-			"    scope: {include: ['**']}\n    params: {pattern: banana}\n" +
-			"    except: {marker: true}\n",
-		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
-		".formwork/fixtures/no-banana/pass-1/f.txt": "banana // formwork:allow no-banana proves suppression\n",
-	})
-	cfg, err := config.Load(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var sb strings.Builder
-	failed, err := fixturetest.Run(cfg, fullIDs(cfg), root, 2, &sb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if failed != 0 || !strings.Contains(sb.String(), "[no-banana] OK — 2 fixture(s)") {
-		t.Fatalf("failed=%d\n%s", failed, sb.String())
-	}
-}
-
 func TestFixtureRunsAreScanIgnoreFree(t *testing.T) {
 	// scan.ignore globs are repo-root-relative; fixture trees have their own
 	// path namespace. A repo-level ignore must never blind a fixture: this fire

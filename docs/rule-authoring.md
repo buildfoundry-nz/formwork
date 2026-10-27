@@ -172,28 +172,25 @@ be right in cases a clever regex is wrong in, and you find those out later.
 
 ---
 
-## Exemption hygiene: every channel is a ratchet
+## No exemptions: cure the code, or say what the rule is about
 
-Two channels, and both are meant to shrink:
+A rule has no way to forgive a finding. There is no `formwork:allow` marker, no
+allowlist file and no `except.paths`; the engine refuses the `except:` block at
+load. A known backlog is cured, not listed.
 
-- **markers** (`formwork:allow <id> <reason>`) — for a specific, reasoned
-  exception at a specific line.
-- **`except.paths`** — a scope subtraction. Blunter than a marker: the rule
-  never looks, so there is no finding to audit.
+What is left is the rule's own scope, which says what the rule is ABOUT, not
+which of its subjects it lets off. Write it positively: a rule about production
+code includes production code, rather than including everything and excluding
+tests. When a scope subtraction remains (`scope.exclude`,
+`scope.not_declaring`), the census enumerates it on every run.
 
-There is no allowlist file. A known backlog is cured, not listed: the engine
-refuses `except.allowlist` at load.
-
-The failure mode is not adding an exemption. It is adding one and never
-revisiting it, until the count is large enough that nobody reads the list.
-
-> **Enforcers:** `exemption-hygiene` reports a reasonless marker and a dead
-> `scope.exclude` with no justification comment. `scan-ignore-tracked` fails any
-> git-tracked path a `scan.ignore` glob hides. The census reports how many
-> in-scope files each `except.paths` entry actually **removed**, so a dead entry
-> reads `0 file(s)` instead of printing like a live one. Whether an exemption
-> should still exist is judgement — the enforcers can only tell you it is dead,
-> not that it is unjustified.
+> **Enforcers:** `exemption-hygiene` reports a dead `scope.exclude` with no
+> justification comment and a `scope.not_declaring` marker no covered file
+> declares. `scan-ignore-tracked` fails any git-tracked path a `scan.ignore` glob
+> hides. The census reports how many in-scope files each `scope.not_declaring`
+> marker actually **removed** and how many of those the rule would have fired
+> on, so a marker protecting nothing reads `0 would fire` instead of printing
+> like a live one.
 
 ---
 

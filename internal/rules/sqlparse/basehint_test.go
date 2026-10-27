@@ -46,7 +46,7 @@ func TestLockingOrderExplainsTheDisclosedInfeasibleBaseWorld(t *testing.T) {
 	}
 	var hinted bool
 	for _, m := range ms {
-		if strings.Contains(m.Message, "#42") && strings.Contains(m.Message, "formwork:allow") {
+		if strings.Contains(m.Message, "#42") && strings.Contains(m.Message, "no comment exempts this finding") {
 			hinted = true
 		}
 	}

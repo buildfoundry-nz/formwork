@@ -165,7 +165,7 @@ actually holds, and the rule stops being a source of noise elsewhere.
 
 **`cure`** — this is what somebody reads when the hook blocks their commit at
 5pm. Write what to do *instead*; they can already see what they did. A rule
-without a good cure gets suppressed rather than fixed, and a suppressed rule
+without a good cure gets deleted rather than followed, and a deleted rule
 guards nothing. This is the highest-leverage field in the file.
 
 **`origin`** — where the rule came from: an incident, an ADR, a code review

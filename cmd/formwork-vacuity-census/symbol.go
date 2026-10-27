@@ -347,14 +347,8 @@ type anchorParamSet struct {
 // anchorHits recompiles r with override applied to its params and returns how
 // many findings the real engine produces over inScope.
 //
-// SUPPRESSED findings count. The question is whether the anchor can still see
-// its subject, and a marker-suppressed finding proves it can — a new unmarked
-// call would trip the rule tomorrow. Counting only unsuppressed findings would
-// call a fully-marked live symbol dead and retire a working gate. This is the
-// same reading exceptExcuses uses ("suppressed findings count as still trips").
-//
-// scope.exclude and except.paths are left as written. A symbol surviving only in
-// a path the rule excludes is invisible TO THE RULE.
+// scope.exclude is left as written. A symbol surviving only in a path the rule
+// excludes is invisible TO THE RULE.
 func anchorHits(r *config.Rule, root string, inScope []*scan.File, override map[string]string) (int, error) {
 	checker, err := recompileWith(r, override)
 	if err != nil {

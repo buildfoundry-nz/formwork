@@ -635,7 +635,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "formwork:", err)
 		return 2
 	}
-	for _, f := range finding.Unsuppressed(findings) {
+	for _, f := range findings {
 		if f.Severity == finding.SeverityError {
 			return 1
 		}

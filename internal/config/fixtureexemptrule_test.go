@@ -35,7 +35,6 @@ import (
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/engine"
-	"github.com/buildfoundry-nz/formwork/internal/finding"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/pattern"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 )
@@ -143,7 +142,7 @@ func askRule(t *testing.T, rule *config.Rule, decl string) bool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return len(finding.Unsuppressed(found)) > 0
+	return len(found) > 0
 }
 
 func TestTheBlankDeclarationRuleAgreesWithTheLoader(t *testing.T) {

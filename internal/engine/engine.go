@@ -11,7 +11,6 @@ import (
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/finding"
-	"github.com/buildfoundry-nz/formwork/internal/marker"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 )
@@ -106,18 +105,16 @@ func earlierVisit(aFile, aRule, bFile, bRule int) bool {
 }
 
 // Run evaluates every rule against every in-scope file, then finalizers.
-// workers <= 0 means GOMAXPROCS. Findings come back deterministically sorted
-// and include suppressed findings (spec §5 exemptions): callers that gate on
-// findings must filter with finding.Unsuppressed.
+// workers <= 0 means GOMAXPROCS. Findings come back deterministically sorted.
+// Every finding is a violation: there is no suppression channel.
 // Timing records per-rule total evaluation wall time: phase 1 sums the rule's
 // per-file evaluations, phase 2 adds its finalizer. It is observability, never
 // input to a verdict — no finding, sort order, or exit code reads it.
 type Timing map[string]time.Duration
 
 // Run evaluates every rule against every in-scope file, then finalizers.
-// workers <= 0 means GOMAXPROCS. Findings come back deterministically sorted
-// and include suppressed findings (spec §5 exemptions): callers that gate on
-// findings must filter with finding.Unsuppressed.
+// workers <= 0 means GOMAXPROCS. Findings come back deterministically sorted.
+// Every finding is a violation: there is no suppression channel.
 func Run(rls []*config.Rule, fset *scan.FileSet, workers int) ([]finding.Finding, error) {
 	findings, _, err := RunTimed(rls, fset, workers, nil)
 	return findings, err
@@ -493,9 +490,8 @@ func toFinding(r *config.Rule, fallbackPath string, m rules.Match) finding.Findi
 	}
 }
 
-// evalFile runs one rule over one file: picks the rule's preprocess variant,
-// checks it, and applies exemption suppression against the raw file (markers
-// live in comments, which preprocessors erase — phase-3a design §3).
+// evalFile runs one rule over one file: picks the rule's preprocess variant and
+// checks it.
 func evalFile(r *config.Rule, f *scan.File) ([]finding.Finding, error) {
 	work, err := f.Variant(r.Preprocess)
 	if err != nil {
@@ -507,32 +503,9 @@ func evalFile(r *config.Rule, f *scan.File) ([]finding.Finding, error) {
 	}
 	out := make([]finding.Finding, 0, len(matches))
 	for _, m := range matches {
-		fd := toFinding(r, f.Path(), m)
-		if err := suppress(r, f, &fd); err != nil {
-			return nil, err
-		}
-		out = append(out, fd)
+		out = append(out, toFinding(r, f.Path(), m))
 	}
 	return out, nil
-}
-
-// suppress marks fd Suppressed when the rule's inline marker (same raw line,
-// reason mandatory — internal/marker owns the grammar) exempts it.
-// Scope-level findings (no path) are never exemptable, and neither are
-// finalizer findings: there is no per-file raw content to marker-scan.
-func suppress(r *config.Rule, raw *scan.File, fd *finding.Finding) error {
-	if fd.Path == "" || !r.Marker || fd.Line <= 0 || fd.Path != raw.Path() {
-		return nil
-	}
-	lines, err := raw.Lines()
-	if err != nil {
-		return fmt.Errorf("rule %s: marker scan of %s: %w", r.ID, raw.Path(), err)
-	}
-	if fd.Line <= len(lines) && marker.Classify(lines[fd.Line-1], r.ID) == marker.Reasoned {
-		fd.Suppressed = true
-		fd.SuppressedBy = "marker"
-	}
-	return nil
 }
 
 func checkFile(r *config.Rule, f *scan.File) (matches []rules.Match, err error) {

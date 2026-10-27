@@ -153,8 +153,8 @@ func TestLockingNowaitStillFires(t *testing.T) {
 // that the two reads see one value; four review rounds established that a
 // parse-only pass cannot carry that proof, and that a wrongly proven pair
 // deletes a reachable world and passes a real deadlock hazard. Between a
-// visible false positive a `formwork:allow` marker clears and a silent false
-// negative, the gate takes the false positive.
+// visible false positive the author clears by recomposing the query and a
+// silent false negative, the gate takes the false positive.
 func TestLockingComplementaryGuardFoldBaseStillFires(t *testing.T) {
 	c := checker(t, "sql/locking-select-order", "unique_key_columns: [id]\n")
 	src := "package db\n\nfunc q(a bool) string {\n" +
@@ -305,8 +305,8 @@ func TestLockingSelectorGuardFoldBaseStillFires(t *testing.T) {
 // deleted world is the failure that goes unseen. Note what it does NOT do —
 // pairs are enumerated separately, never multiplied, so the mixed-flag world
 // `… LIMIT 1 FOR UPDATE` is still never invented
-// (TestFromGoReassembledSeveralPairsInventNoMixedWorld). A `formwork:allow`
-// marker clears this one, and formwork lint keeps the marker in view.
+// (TestFromGoReassembledSeveralPairsInventNoMixedWorld). Composing the query
+// so every branch carries its ORDER BY clears this one; no comment can.
 func TestLockingCorrelatedGuardPairsFireAsDisclosed(t *testing.T) {
 	c := checker(t, "sql/locking-select-order", "unique_key_columns: [id]\n")
 	src := "package db\n\nfunc q(a bool) string {\n" +

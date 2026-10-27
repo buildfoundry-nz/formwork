@@ -438,7 +438,7 @@ func TestMakeTestRefusesANarrowingKnobThatSelectsNothing(t *testing.T) {
 		args  []string
 		names string
 	}{
-		{"RUN matching no test", []string{"PKG=./internal/marker", "RUN=TestNoSuchTestNameAtAllZZZ"}, "matched no test in the selected packages"},
+		{"RUN matching no test", []string{"PKG=./internal/finding", "RUN=TestNoSuchTestNameAtAllZZZ"}, "matched no test in the selected packages"},
 		{"PKG matching no package", []string{"PKG=./no/such/package"}, "matched no packages in this module"},
 	} {
 		code, out := runMake(t, "", append([]string{"test"}, v.args...)...)
@@ -456,8 +456,8 @@ func TestMakeTestRefusesANarrowingKnobThatSelectsNothing(t *testing.T) {
 	// And a knob that DOES select is not refused — otherwise a `test` target
 	// that rejected every narrowing would pass the two arms above. The package
 	// is the smallest in the module, so the race build stays cheap.
-	if code, out := runMake(t, "", "test", "PKG=./internal/marker", "RUN=Test"); code != 0 {
-		t.Errorf("make test PKG=./internal/marker RUN=Test exited %d — the refusals above prove "+
+	if code, out := runMake(t, "", "test", "PKG=./internal/finding", "RUN=Test"); code != 0 {
+		t.Errorf("make test PKG=./internal/finding RUN=Test exited %d — the refusals above prove "+
 			"nothing unless a real selection still runs:\n%s", code, out)
 	}
 }

@@ -43,8 +43,9 @@ import (
 // that, because there is no write.
 //
 // So #42's false positive stays, disclosed (spec §9, locking.go): `base` may be
-// a world no path produces. It is a finding a `formwork:allow` marker clears,
-// which is the trade a lockdown gate takes over silence.
+// a world no path produces. It is a finding the query's author clears by
+// composing the ORDER BY so every branch carries it, which is the trade a
+// lockdown gate takes over silence.
 func foldWorlds(v *foldVar) []string {
 	worlds := []string{foldText(v, nil, true), foldText(v, nil, false)}
 	// EACH PAIR SEPARATELY, never multiplied. A world fixes exactly ONE truth

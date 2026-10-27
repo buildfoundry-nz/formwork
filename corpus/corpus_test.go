@@ -79,13 +79,12 @@ func TestWalkAndRunMeasureWithTheEnginesOwnScanner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	live := corpus.Unsuppressed(fds)
-	if len(live) != 1 {
-		t.Fatalf("got %d unsuppressed finding(s), want 1 — the rule must fire on "+
-			"exactly the planted subject", len(live))
+	if len(fds) != 1 {
+		t.Fatalf("got %d finding(s), want 1 — the rule must fire on "+
+			"exactly the planted subject", len(fds))
 	}
-	if !strings.Contains(live[0].Path, "subject.txt") {
-		t.Fatalf("finding on %q, want the planted subject", live[0].Path)
+	if !strings.Contains(fds[0].Path, "subject.txt") {
+		t.Fatalf("finding on %q, want the planted subject", fds[0].Path)
 	}
 }
 

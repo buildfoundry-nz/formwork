@@ -9,4 +9,3 @@
 # never runs is #10968's. Removing a row is a reviewed deletion, never a cleanup.
 fire-1
 pass-1
-pass-2

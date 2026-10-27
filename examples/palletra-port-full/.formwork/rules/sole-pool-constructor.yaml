@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-sole-pool-constructor.sh (#7159).
 # Every production pgxpool.Pool MUST be created through the shared
 # db.NewPool / db.NewLazyPool constructor (internal/db/pool.go), whose
@@ -16,9 +19,6 @@ rules:
         - "freightworks/**/*.go"
       exclude:
         - "**/*_test.go"
-    except:
-      paths:
-        - "**/internal/db/**"
     params:
       pattern: 'pgxpool\.New(WithConfig)?\('
     cure: "Create the pool via db.NewPool(...) (eager Ping) or db.NewLazyPool(...) (lazy) — never bare pgxpool.New, which skips the search_path AfterConnect (#7159)."

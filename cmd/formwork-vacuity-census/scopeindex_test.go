@@ -129,7 +129,7 @@ func TestBuildScopeIndexMatchesSerialTrickyGlobs(t *testing.T) {
 
 func mustRule(t *testing.T, id string, include, exclude []string) *config.Rule {
 	t.Helper()
-	r, err := config.New(id, "forbidden-pattern", finding.SeverityError, "cure", include, exclude, nil, nil)
+	r, err := config.New(id, "forbidden-pattern", finding.SeverityError, "cure", include, exclude, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

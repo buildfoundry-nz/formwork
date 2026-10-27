@@ -19,8 +19,7 @@ func (benchChecker) CheckFile(*scan.File) ([]rules.Match, error) { return nil, n
 func BenchmarkRuleAppliesMostlyMisses(b *testing.B) {
 	r, err := config.New("bench", "fake", finding.SeverityError, "",
 		[]string{"api-factory/services/core-api/internal/**/*.go", "packages/*/lib/**/providers/**/*.dart", "scripts/dev/*census*/**/*.go"},
-		[]string{"**/*_test.go", "**/*.g.dart", "shared/generated/**"},
-		nil, benchChecker{})
+		[]string{"**/*_test.go", "**/*.g.dart", "shared/generated/**"}, benchChecker{})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -50,7 +49,7 @@ func TestNewRefusesAnInvalidStoredGlob(t *testing.T) {
 		"include": {{"["}, nil},
 		"exclude": {{"**"}, {"["}},
 	} {
-		if _, err := config.New("r", "fake", finding.SeverityError, "", globs[0], globs[1], nil, benchChecker{}); err == nil {
+		if _, err := config.New("r", "fake", finding.SeverityError, "", globs[0], globs[1], benchChecker{}); err == nil {
 			t.Errorf("New accepted an invalid %s glob; Applies matches stored globs unvalidated", name)
 		}
 	}

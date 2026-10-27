@@ -228,22 +228,21 @@ type excludeOut struct {
 
 // explainOut is the full JSON rendering of one rule.
 type explainOut struct {
-	ID          string       `json:"id"`
-	Type        string       `json:"type"`
-	Severity    string       `json:"severity"`
-	Cost        string       `json:"cost"`
-	Preprocess  string       `json:"preprocess,omitempty"`
-	Include     []string     `json:"include"`
-	Exclude     []excludeOut `json:"exclude,omitempty"`
-	MinFiles    int          `json:"min_files,omitempty"`
-	ExceptPaths []string     `json:"except_paths,omitempty"`
-	Marker      bool         `json:"marker"`
-	Params      any          `json:"params,omitempty"`
-	Cure        string       `json:"cure,omitempty"`
-	Origin      string       `json:"origin,omitempty"`
-	Tags        []string     `json:"tags,omitempty"`
-	Lanes       []string     `json:"lanes"`
-	Fixtures    []string     `json:"fixtures"`
+	ID           string       `json:"id"`
+	Type         string       `json:"type"`
+	Severity     string       `json:"severity"`
+	Cost         string       `json:"cost"`
+	Preprocess   string       `json:"preprocess,omitempty"`
+	Include      []string     `json:"include"`
+	Exclude      []excludeOut `json:"exclude,omitempty"`
+	NotDeclaring []string     `json:"not_declaring,omitempty"`
+	MinFiles     int          `json:"min_files,omitempty"`
+	Params       any          `json:"params,omitempty"`
+	Cure         string       `json:"cure,omitempty"`
+	Origin       string       `json:"origin,omitempty"`
+	Tags         []string     `json:"tags,omitempty"`
+	Lanes        []string     `json:"lanes"`
+	Fixtures     []string     `json:"fixtures"`
 }
 
 func runExplain(args []string, stdout, stderr io.Writer) int {
@@ -286,8 +285,8 @@ func runExplain(args []string, stdout, stderr io.Writer) int {
 	out := explainOut{
 		ID: rule.ID, Type: rule.Type, Severity: string(rule.Severity),
 		Cost: string(rule.Cost()), Preprocess: rule.Preprocess,
-		Include: rule.Include(), MinFiles: rule.MinFiles(), ExceptPaths: rule.ExceptPaths,
-		Marker: rule.Marker, Cure: rule.Cure, Origin: rule.Origin,
+		Include: rule.Include(), NotDeclaring: rule.NotDeclaring(), MinFiles: rule.MinFiles(),
+		Cure: rule.Cure, Origin: rule.Origin,
 		Tags: rule.Tags, Lanes: lanesOf(cfg, rule), Fixtures: fixtures,
 	}
 	for _, e := range rule.ExcludeEntries() {
@@ -343,21 +342,17 @@ func renderExplain(w io.Writer, paramsYAML string, out explainOut) int {
 			}
 		}
 	}
+	if len(out.NotDeclaring) > 0 {
+		fmt.Fprintln(w, "  not_declaring:")
+		for _, m := range out.NotDeclaring {
+			fmt.Fprintf(w, "    - %q\n", m)
+		}
+	}
 	// Omitted when unset, like every other optional field this renderer prints
 	// (the JSON field is omitempty for the same reason): `min_files: 0` is the
 	// absence of a floor, and a line saying so would read as a configured one.
 	if out.MinFiles > 0 {
 		fmt.Fprintf(w, "  min_files: %d\n", out.MinFiles)
-	}
-	if len(out.ExceptPaths) > 0 || out.Marker {
-		fmt.Fprintln(w, "except:")
-		if len(out.ExceptPaths) > 0 {
-			fmt.Fprintln(w, "  paths:")
-			for _, p := range out.ExceptPaths {
-				fmt.Fprintf(w, "    - %s\n", p)
-			}
-		}
-		fmt.Fprintf(w, "  marker: %v\n", out.Marker)
 	}
 	if paramsYAML != "" {
 		fmt.Fprintln(w, "params:")

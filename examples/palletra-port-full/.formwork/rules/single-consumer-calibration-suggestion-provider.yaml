@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-calibration-suggestion-single-source.sh
 # (#5921). ONE fact must be rendered/decided in exactly one place. Two
 # forbidden-pattern rules capture the gate's two invariants (Rule A + Rule B).
@@ -23,9 +26,6 @@ rules:
       exclude:
         - "**/*.g.dart"
         - "**/test/**"
-    except:
-      paths:
-        - "packages/plt_canvas_kit/lib/measure/providers/plot_calibration_suggestion_providers.dart"
     preprocess: decomment-go
     params:
       pattern: 'suggestedCalibrationProvider'

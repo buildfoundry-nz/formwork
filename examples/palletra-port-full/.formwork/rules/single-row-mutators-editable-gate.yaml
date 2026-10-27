@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-single-row-mutators-editable-gate.sh (#2862,
 # K13 write-path edit-lock). No file under internal/markupwrite/ may call the
 # RAW mutbase.LockAndFetchContext — only mutbase/mutbase.go (which composes it into
@@ -19,9 +22,6 @@ rules:
         - "freightworks/services/core-api/internal/markupwrite/**/*.go"
       exclude:
         - "**/*_test.go"
-    except:
-      paths:
-        - "freightworks/services/core-api/internal/markupwrite/mutbase/mutbase.go"
     params:
       pattern: 'LockAndFetchContext\('
     cure: "Use mutbase.LockWritableContext — it locks AND rejects a fully-approved row before any write (the K13 assert). Only mutbase/mutbase.go may reach the raw lock (#2862)."

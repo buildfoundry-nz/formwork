@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.13.0
+
+### Removed (breaking)
+
+- **No finding can be exempted.** The `except:` block is gone from the rule
+  schema, so a rule declaring `except.paths` or `except.marker` is refused at
+  load (exit 2, `field except not found`) instead of running with the excusal
+  ignored. A `formwork:allow` comment is now ordinary text: the finding on its
+  line fails the run like any other. Gone with them: `internal/marker`,
+  `finding.Suppressed`/`SuppressedBy`, `finding.Unsuppressed` and
+  `corpus.Unsuppressed`; the `suppressed` array and `summary.suppressed` in
+  `-format json`, the `::notice` suppressed lines in `-format github` and the
+  `N suppressed` summary tail; `exemption-hygiene`'s reasonless-marker arm; the
+  census's `marker enabled`, `suppressed` and `except.paths` lines; `explain`'s
+  `except_paths` and `marker` fields; and the vacuity census's DEAD-EXCEPT-GLOB
+  and INERT-EXCEPT arms with their `# except-declaration:` vocabulary.
+  `config.New` and `corpus.New` drop their except-paths argument.
+  Migration: cure each excused file, or narrow `scope.include` to what the rule
+  is about.
+- **`sql/locking-select-order` names a recomposition, not a marker, as its cure** for
+  the disclosed #42 and #337 worlds: compose the ORDER BY where this pass can
+  read it on every path.
+
+### Fixed
+
+- **The escape-hatch census reports `scope.not_declaring`.** It printed nothing
+  for the one scope subtraction keyed on file content, although its own
+  documentation said it was reported with live match counts. Each marker now
+  prints how many in-scope files it removed and how many of those the rule
+  would have fired on. `explain` shows the markers too.
+- **A dead `scope.not_declaring` marker beside a live sibling is reported.**
+  `exemption-hygiene` asked whether any of a rule's markers matched a file,
+  so one declared marker made every sibling read as live.
+
 ## 0.12.2
 
 ### Fixed

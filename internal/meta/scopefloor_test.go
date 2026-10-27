@@ -48,7 +48,7 @@ func floorRule(t *testing.T, id, typeName, include string, floor int) *config.Ru
 	if typeName == "command" {
 		c = heavyPlainChecker{}
 	}
-	r, err := config.New(id, typeName, finding.SeverityError, "", []string{include}, nil, nil, c)
+	r, err := config.New(id, typeName, finding.SeverityError, "", []string{include}, nil, c)
 	if err != nil {
 		t.Fatal(err)
 	}

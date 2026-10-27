@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-no-bare-mergeFromProto3Json.sh (P1.3 / B11).
 # The open-coded proto3-JSON decode mergeFromProto3Json(jsonDecode(...)) must ride
 # the canonical WireDio decoder; a ninth open-coded copy would revive the
@@ -21,12 +24,5 @@ rules:
         - "**/*.pb*.dart"
     params:
       pattern: 'mergeFromProto3Json\s*\(\s*jsonDecode'
-    except:
-      paths:
-        - "**/plt_core/lib/network/wire_dio.dart"
-        - "**/plt_core/lib/network/wire_dio_media.dart"
-        - "**/plt_core/lib/sse/project_activity_stream.dart"
-        - "**/plt_core/lib/sse/tasks_queue_events_stream.dart"
-        - "**/plt_core/lib/sse/dock_intake_events_stream.dart"
     cure: "Route the decode through packages/plt_core/lib/network/wire_dio.dart (WireDio.get/post/patch/delete/...); it owns the empty-body + DioException branches."
     origin: scripts/check-no-bare-mergeFromProto3Json.sh

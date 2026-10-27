@@ -223,7 +223,7 @@ func gitStdin(root, input string, args ...string) (string, int, error) {
 // os/exec's own meaning, "inherit the parent's unchanged", which is what
 // gitEnvFor returns under the FORMWORK_GIT_ENV hatch.
 func gitStdinEnv(env []string, root, input string, args ...string) (string, int, error) {
-	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	cmd := exec.Command("git", gitArgv(root, args)...)
 	cmd.Stdin = strings.NewReader(input)
 	cmd.Env = env
 	out, err := cmd.Output()

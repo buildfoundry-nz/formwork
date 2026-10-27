@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.2
+
+### Fixed
+
+- **The engine's git calls no longer wait on core.fsmonitor.** git consults
+  fsmonitor on every index read and waits for its answer, so a wedged
+  fsmonitor daemon stalled `formwork check --staged` indefinitely. On one
+  adopter machine that check held a machine-wide pre-commit lock for ten
+  minutes and stopped every commit behind it. Both of internal/vcs's exec sites
+  now run git with `-c core.fsmonitor=false`. fsmonitor only changes how git
+  finds changed paths, not what it answers, so every answer is unchanged.
+  The ignored-path listing was also faster without it: 8 s against 11 to 16 s
+  on a 66,000-file worktree under load.
+
 ## 0.12.1
 
 ### Changed

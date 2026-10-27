@@ -88,8 +88,8 @@ func New(id, typeName string, sev finding.Severity, cure string, include, exclud
 
 // Applies reports whether relPath (slash-separated) is in this rule's scope.
 func (r *Rule) Applies(relPath string) bool {
-	return matchAny(r.include, relPath) &&
-		!matchAny(r.exclude, relPath) &&
+	return matchStored(r.include, relPath) &&
+		!matchStored(r.exclude, relPath) &&
 		!matchAny(r.ExceptPaths, relPath)
 }
 
@@ -107,7 +107,7 @@ func (r *Rule) Applies(relPath string) bool {
 // for a matched path, so the rule never evaluates the file and there is no
 // finding for a census to count. Reading the file set is the only way to see it.
 func (r *Rule) CarvedOutBy(relPath string) (string, bool) {
-	if !matchAny(r.include, relPath) || matchAny(r.exclude, relPath) {
+	if !matchStored(r.include, relPath) || matchStored(r.exclude, relPath) {
 		return "", false
 	}
 	for _, g := range r.ExceptPaths {
@@ -240,6 +240,21 @@ func (r *Rule) CloneWithChecker(c rules.Checker) *Rule {
 	clone := *r
 	clone.Checker = c
 	return &clone
+}
+
+// matchStored is matchAny for include and exclude, which New validated and
+// nothing outside this package can reassign. Applies runs for every (file,
+// rule) pair the engine considers, and almost every pair is a miss; Match
+// re-validates the whole pattern on every miss, which a stored glob never
+// needs. ExceptPaths is exported and can be reassigned after New, so it stays
+// on matchAny.
+func matchStored(patterns []string, path string) bool {
+	for _, p := range patterns {
+		if doublestar.MatchUnvalidated(p, path) {
+			return true
+		}
+	}
+	return false
 }
 
 func matchAny(patterns []string, path string) bool {

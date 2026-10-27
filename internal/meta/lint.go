@@ -13,7 +13,6 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/engine"
 	"github.com/buildfoundry-nz/formwork/internal/finding"
-	"github.com/buildfoundry-nz/formwork/internal/marker"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"github.com/buildfoundry-nz/formwork/internal/vcs"
@@ -53,9 +52,9 @@ func Lint(cfg *config.Config, root string, w io.Writer, devOptOutActive bool, sc
 	//
 	// Which ones actually survive a rule-less config, checked rather than
 	// assumed (an earlier version of this comment claimed the escape-hatch
-	// census "does not iterate rules at all", which is false — census.go:113
-	// loops cfg.Rules for external-tool rules, scope.exclude, except.paths
-	// and markers):
+	// census "does not iterate rules at all", which is false — census.go
+	// loops cfg.Rules for external-tool rules, scope.exclude and
+	// scope.not_declaring):
 	//   - lane-nonempty and lane-reachability run off cfg.Lanes and name each
 	//     dead lane. This is the one that mattered: a config declaring lanes
 	//     with no rules had real, itemised findings that the refusal discarded.
@@ -232,7 +231,7 @@ func lintTree(cfg *config.Config, root string, w io.Writer, fset *scan.FileSet, 
 	if len(cfg.Ignore) > 0 && !pol.skipping(w, "scan-ignore-tracked") {
 		tracked, err := vcs.TrackedUnder(root)
 		if err != nil {
-			enumerateEscapeHatches(cfg, root, nil, fset, gi, devOptOutActive, w)
+			enumerateEscapeHatches(cfg, root, fset, gi, devOptOutActive, w)
 			return err
 		}
 		// GetConfigBool errors when the key is unset; unset means git did not
@@ -284,7 +283,7 @@ func lintTree(cfg *config.Config, root string, w io.Writer, fset *scan.FileSet, 
 	// few lines up, which likewise enumerates the escape hatches before returning
 	// a git error.
 	if gi.State == GitIgnoreUnknown {
-		enumerateEscapeHatches(cfg, root, nil, fset, gi, devOptOutActive, w)
+		enumerateEscapeHatches(cfg, root, fset, gi, devOptOutActive, w)
 		return fmt.Errorf("scan.gitignore is declared but git could not answer it (%v), so empty-scope cannot be judged: nothing was pruned, and the files that would have been are exactly the ones that could make an empty scope look populated", gi.Err)
 	}
 
@@ -338,15 +337,15 @@ func lintTree(cfg *config.Config, root string, w io.Writer, fset *scan.FileSet, 
 	}
 
 	// The engine evaluation is only run when something actually consumes its
-	// results: the escape-hatch enumeration's suppressed-finding listing (G1)
-	// needs them, and the prefilter-load-bearing check below reuses them for
-	// its base pass. A repo with no marker opt-in anywhere has nothing for
+	// results: the prefilter-load-bearing check below reuses them for its base
+	// pass. A repo with no prefilter anywhere has nothing for
 	// the engine to tell lint that its own static checks don't already know
 	// (D2, efficiency). A run error is HELD, not surfaced here: the
 	// prefilter-load-bearing check must still emit its verdict first, so a
-	// load-bearing-prefilter diagnostic is never hidden behind an unrelated
-	// engine error (e.g. a command rule whose external tool is missing) —
-	// visibility must not regress on a degraded repo (D1).
+	// load-bearing-prefilter diagnostic is never hidden behind an engine error
+	// the differential does not share (the main run also evaluates library
+	// rules, which the differential skips) — visibility must not regress on a
+	// degraded repo (D1).
 	engineRules := rulesFeedingLint(cfg.Rules)
 	mainRan := len(engineRules) > 0
 	var findings []finding.Finding
@@ -367,7 +366,7 @@ func lintTree(cfg *config.Config, root string, w io.Writer, fset *scan.FileSet, 
 			// Fail-closed: surface the engine error as exit 2, but print the
 			// escape-hatch enumeration first so "nothing is silently excluded"
 			// holds on a degraded repo.
-			enumerateEscapeHatches(cfg, root, findings, fset, gi, devOptOutActive, w)
+			enumerateEscapeHatches(cfg, root, fset, gi, devOptOutActive, w)
 			return err
 		}
 		*failed += emit(w, "prefilter-load-bearing", plb)
@@ -378,7 +377,7 @@ func lintTree(cfg *config.Config, root string, w io.Writer, fset *scan.FileSet, 
 	// escape-hatch enumeration first so "nothing is silently excluded" holds on
 	// a degraded repo (D1).
 	if mainErr != nil {
-		enumerateEscapeHatches(cfg, root, findings, fset, gi, devOptOutActive, w)
+		enumerateEscapeHatches(cfg, root, fset, gi, devOptOutActive, w)
 		return mainErr
 	}
 
@@ -408,21 +407,16 @@ func lintTree(cfg *config.Config, root string, w io.Writer, fset *scan.FileSet, 
 	// .formwork/lint.yaml: it is not a check with a verdict, it is the
 	// precondition for having one.
 	if err := refuseUnreadableInScope(cfg.Rules, fset.Files); err != nil {
-		enumerateEscapeHatches(cfg, root, findings, fset, gi, devOptOutActive, w)
+		enumerateEscapeHatches(cfg, root, fset, gi, devOptOutActive, w)
 		return err
 	}
 
 	if !pol.skipping(w, "exemption-hygiene") {
-		hygiene, err := exemptionHygiene(cfg, fset)
-		if err != nil {
-			enumerateEscapeHatches(cfg, root, findings, fset, gi, devOptOutActive, w)
-			return err
-		}
-		*failed += emit(w, "exemption-hygiene", hygiene)
+		*failed += emit(w, "exemption-hygiene", exemptionHygiene(cfg, fset))
 		*total++
 	}
 
-	enumerateEscapeHatches(cfg, root, findings, fset, gi, devOptOutActive, w)
+	enumerateEscapeHatches(cfg, root, fset, gi, devOptOutActive, w)
 	return nil
 }
 
@@ -449,20 +443,18 @@ func laneSelectsAny(l config.Lane, rls []*config.Rule) bool {
 // rulesFeedingLint returns exactly the rules whose engine findings lint reads,
 // which is a strict subset of the config and is what the engine is run over.
 //
-// Two consumers, and nothing else looks at the finding set:
-//   - the escape-hatch enumeration's suppressed-finding listing — only ever has
-//     anything to show for marker-exempt rules;
-//   - prefilterLoadBearing — reuses these findings as the as-written base for
-//     every prefilter-carrying rule, so those must be included or that check
-//     compares a stripped run against a base that never contained the rule.
-//     An empty base is indistinguishable from "the prefilter changed nothing",
-//     which would turn the one check that proves prefilters are pure
-//     optimizations into a false green. Its `reuseMain` argument is the seam
-//     that would otherwise have to carry a partial-findings signal; including
-//     the rules keeps that contract intact instead.
+// One consumer, and nothing else looks at the finding set:
+// prefilterLoadBearing reuses these findings as the as-written base for every
+// prefilter-carrying rule, so those must be included or that check compares a
+// stripped run against a base that never contained the rule. An empty base is
+// indistinguishable from "the prefilter changed nothing", which would turn the
+// one check that proves prefilters are pure optimizations into a false green.
+// Its `reuseMain` argument is the seam that would otherwise have to carry a
+// partial-findings signal; including the rules keeps that contract intact
+// instead.
 //
 // Running the whole config here — the previous behaviour, an ANY-predicate
-// gating engine.Run(cfg.Rules) — meant ONE opted-in rule anywhere dispatched
+// gating engine.Run(cfg.Rules) — meant ONE prefiltered rule anywhere dispatched
 // EVERY command/git-diff escape. Those are enforcement, and enforcement is
 // `formwork check`'s job; lint reads nothing they produce. In the validating
 // target that cost a second whole-tree resolved-Dart-AST pass (~1,570 files,
@@ -475,10 +467,6 @@ func laneSelectsAny(l config.Lane, rls []*config.Rule) bool {
 func rulesFeedingLint(rls []*config.Rule) []*config.Rule {
 	var out []*config.Rule
 	for _, r := range rls {
-		if r.Marker {
-			out = append(out, r)
-			continue
-		}
 		if _, ok := rules.PrefilterOf(r.Checker); ok {
 			out = append(out, r)
 		}
@@ -498,9 +486,8 @@ func emit(w io.Writer, check string, problems []string) int {
 	return 1
 }
 
-// exemptionHygiene reports reasonless markers, dead scope.not_declaring
-// entries, and dead scope.exclude entries that lack a YAML justification
-// comment.
+// exemptionHygiene reports dead scope.not_declaring entries and dead
+// scope.exclude entries that lack a YAML justification comment.
 //
 // Dead-exclude hygiene: an exclude that matches zero files in the
 // scanned tree is an exemption nobody can currently exercise. Fail it only
@@ -508,16 +495,7 @@ func emit(w io.Writer, check string, problems []string) int {
 // deliberate preventative shape (vendor/build/generated trees that may be
 // absent on disk). Enumeration of every exclude lives in
 // enumerateEscapeHatches; this arm is the vacuity half only.
-func exemptionHygiene(cfg *config.Config, fset *scan.FileSet) ([]string, error) {
-	// D3: one pass over every in-scope file's lines (prefiltered by a plain
-	// substring check) rather than a separate rule × file × line scan per
-	// marker-enabled rule; reasonlessByRule groups the results back by rule
-	// id so the loop below can emit them in the same rule-ID order as before.
-	reasonlessByRule, err := reasonlessMarkersByRule(cfg.Rules, fset)
-	if err != nil {
-		return nil, err
-	}
-
+func exemptionHygiene(cfg *config.Config, fset *scan.FileSet) []string {
 	var problems []string
 	for _, r := range cfg.Rules {
 		if r.Library != "" {
@@ -537,17 +515,8 @@ func exemptionHygiene(cfg *config.Config, fset *scan.FileSet) ([]string, error) 
 		}
 		// scope.not_declaring's dead-entry hygiene; notdeclaring.go says why.
 		problems = append(problems, notDeclaringProblems(r, fset)...)
-		// A rule that hasn't opted into markers (`except: {marker: true}`)
-		// never honors formwork:allow for it either way, so "missing a
-		// reason" would be misleading — adding one still wouldn't exempt
-		// anything. Those markers fall into the deferred stale-marker bucket
-		// instead (phase-3a carryover notes).
-		if !r.Marker {
-			continue
-		}
-		problems = append(problems, reasonlessByRule[r.ID]...)
 	}
-	return problems, nil
+	return problems
 }
 
 // ignoredByFold reports which scan.ignore glob (if any) hides path: a
@@ -618,51 +587,4 @@ func excludeMatchesAny(glob string, fset *scan.FileSet) bool {
 		}
 	}
 	return false
-}
-
-// reasonlessMarkersByRule scans every in-scope file once: a
-// strings.Contains prefilter skips lines that couldn't possibly carry a
-// formwork:allow marker at all, and a qualifying line is classified once per
-// marker-enabled rule whose scope applies to that file (internal/marker
-// owns the grammar both this and the engine use). Results are grouped by
-// rule id, in the order the file/line scan encountered them, so callers can
-// reproduce the previous per-rule, in-file-order, in-line-order output.
-func reasonlessMarkersByRule(rls []*config.Rule, fset *scan.FileSet) (map[string][]string, error) {
-	var markerRules []*config.Rule
-	for _, r := range rls {
-		if r.Marker {
-			markerRules = append(markerRules, r)
-		}
-	}
-	if len(markerRules) == 0 {
-		return nil, nil
-	}
-
-	problems := map[string][]string{}
-	for _, f := range fset.Files {
-		var applicable []*config.Rule
-		for _, r := range markerRules {
-			if r.Applies(f.Path()) {
-				applicable = append(applicable, r)
-			}
-		}
-		if len(applicable) == 0 {
-			continue
-		}
-		lines, err := f.Lines()
-		if err != nil {
-			return nil, err
-		}
-		for i, line := range lines {
-			if !strings.Contains(line, "formwork:allow") {
-				continue
-			}
-			for _, r := range applicable {
-				if marker.Classify(line, r.ID) == marker.Reasonless {
-					problems[r.ID] = append(problems[r.ID], fmt.Sprintf("%s: %s:%d: formwork:allow marker missing a reason", r.ID, f.Path(), i+1))
-				}
-			}
-		}
-	}
-	return problems, nil
 }

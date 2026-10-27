@@ -25,7 +25,7 @@ func (c invariantChecker) ScopeBound() bool                          { return c.
 
 func gateRule(t *testing.T, id string, bound bool) *config.Rule {
 	t.Helper()
-	r, err := config.New(id, "fake", finding.SeverityError, "", []string{"src/**/*.go"}, nil, nil, invariantChecker{bound: bound})
+	r, err := config.New(id, "fake", finding.SeverityError, "", []string{"src/**/*.go"}, nil, invariantChecker{bound: bound})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestGateRunsAnInvariantThatIsNotScopeBound(t *testing.T) {
 // the reached one still runs.
 func TestGateSkipsOnlyTheUnreachedInvariant(t *testing.T) {
 	reached := gateRule(t, "reached", true)
-	unreached, err := config.New("unreached", "fake", finding.SeverityError, "", []string{"other/**/*.go"}, nil, nil, invariantChecker{bound: true})
+	unreached, err := config.New("unreached", "fake", finding.SeverityError, "", []string{"other/**/*.go"}, nil, invariantChecker{bound: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestGateSkipsOnlyTheUnreachedInvariant(t *testing.T) {
 // the changed files and judges those; removing it would hide nothing it could
 // see, but the gate has no business deciding that for it.
 func TestGateLeavesAnOrdinaryPerFileRuleAlone(t *testing.T) {
-	r, err := config.New("plain", "fake", finding.SeverityError, "", []string{"src/**/*.go"}, nil, nil, perFileChecker{})
+	r, err := config.New("plain", "fake", finding.SeverityError, "", []string{"src/**/*.go"}, nil, perFileChecker{})
 	if err != nil {
 		t.Fatal(err)
 	}

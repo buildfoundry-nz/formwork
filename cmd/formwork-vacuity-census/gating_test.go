@@ -94,29 +94,6 @@ func TestDeadExcludeGlobGates(t *testing.T) {
 	}
 }
 
-// A dead except.paths glob is the same claim one key over.
-func TestDeadExceptGlobGates(t *testing.T) {
-	root := writeCorpus(t, `rules:
-  - id: dead-except
-    type: forbidden-pattern
-    severity: error
-    scope:
-      include: ['src/**/*.go']
-    except:
-      paths: ['src/nowhere/gone.go']
-    params: { pattern: 'BANNED' }
-    tags: [always]
-`, map[string]string{"src/a.go": "package a\n"})
-
-	_, out := census(t, root)
-	if !strings.Contains(out, "DEAD-EXCEPT-GLOB") {
-		t.Fatalf("no DEAD-EXCEPT-GLOB verdict in output:\n%s", out)
-	}
-	if strings.Contains(out, "measured (not gated)") {
-		t.Fatalf("dead except.paths still reported as measured-not-gated:\n%s", out)
-	}
-}
-
 // An exclude glob naming a tree the ENGINE prunes before rules run (.formwork,
 // .git) names something real: formwork-engine-skip-declared requires exactly
 // that declaration on every content rule whose include reaches a .formwork

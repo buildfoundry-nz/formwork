@@ -17,7 +17,7 @@ func (nopChecker) CheckFile(*scan.File) ([]rules.Match, error) { return nil, nil
 
 func mustRule(t *testing.T, id string, sev finding.Severity, cure string) *config.Rule {
 	t.Helper()
-	r, err := config.New(id, "fake", sev, cure, []string{"**"}, nil, nil, nopChecker{})
+	r, err := config.New(id, "fake", sev, cure, []string{"**"}, nil, nopChecker{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,43 +53,9 @@ formwork: 2/3 rules passed, 3 finding(s)
 	}
 }
 
-func TestHumanAppendsSuppressedCountToSummary(t *testing.T) {
-	// G1b: a suppressed finding never renders per-rule and never counts
-	// toward the finding tally, but its existence must not be wholly
-	// invisible from `check` output — the summary line's trailing
-	// `, N suppressed` is Human's job now that it receives the full
-	// findings slice (cli.go no longer pre-filters with
-	// finding.Unsuppressed before calling Human).
-	//
-	// #57 added the enumeration above that line; this test keeps pinning the
-	// SUMMARY, and suppressed_test.go owns the section's own contract.
-	rls := []*config.Rule{
-		mustRule(t, "a-clean", finding.SeverityError, ""),
-		mustRule(t, "b-suppressed", finding.SeverityError, ""),
-	}
-	findings := []finding.Finding{
-		{RuleID: "b-suppressed", Severity: finding.SeverityError, Path: "x.go", Line: 1, Message: "bad",
-			Suppressed: true, SuppressedBy: "marker"},
-	}
-	var sb strings.Builder
-	report.Human(&sb, rls, findings, report.ScanSummary{})
-	got := sb.String()
-	want := `[a-clean] OK
-[b-suppressed] OK
-scan: 0 file(s) scanned
-suppressed (exempted, not failures):
-  [b-suppressed] x.go:1: bad (marker)
-formwork: 2/2 rules passed, 0 finding(s), 1 suppressed
-`
-	if got != want {
-		t.Fatalf("output mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
-	}
-}
-
-func TestHumanSummaryOmitsSuppressedTailWhenZero(t *testing.T) {
-	// Existing summary text without suppressions must stay byte-identical
-	// (goldens/tests pin it) — this pins the no-suppression case explicitly
-	// alongside TestHumanRendersOKFailWarnAndSummary.
+func TestHumanSummaryLineOnACleanRun(t *testing.T) {
+	// The summary line is what downstream tooling reads last; a clean run
+	// must render it byte-identical to what goldens pin.
 	rls := []*config.Rule{mustRule(t, "a-clean", finding.SeverityError, "")}
 	var sb strings.Builder
 	report.Human(&sb, rls, nil, report.ScanSummary{})

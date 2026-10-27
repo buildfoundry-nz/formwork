@@ -17,7 +17,7 @@
 # which is still the right thing to run by hand:
 #
 #   $ formwork list -C examples/palletra-port-full rules | wc -l
-#   $ git ls-files examples/palletra-port-full | wc -l -> 2695
+#   $ git ls-files examples/palletra-port-full | wc -l -> 2684
 #   $ git ls-files examples/palletra-port-full | grep -vc '/\.formwork/' -> 0
 #   $ formwork lint -C examples/palletra-port-full | tail -1
 #   $ mkdir -p /tmp/c && cp -R examples/palletra-port-full/.formwork /tmp/c/
@@ -139,11 +139,8 @@ skip:
       in the corpus; the only excludes the check does not report are the ones
       carrying the justification comment it deliberately accepts. The cost is
       smaller than this entry used to state. It said the corpus "also stops
-      checking reasonless formwork:allow markers"; there are none to check —
-      the one rule declaring `except.marker: true`,
-      integration-tests-forbid-mocked-wire-providers, has an empty scope like
-      every other rule whose verdict comes from files, so that arm is already
-      inert on this corpus whether or not this skip exists.
+      checking reasonless formwork:allow markers"; formwork 0.13 removed
+      markers, so there is no such arm.
       Re-derived on every run of `make corpus-disclosure-proof`; this entry
       read 995 from 2026-08-24 and 993 from 2026-08-26, both typed by hand and
       both stale.

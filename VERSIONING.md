@@ -37,7 +37,7 @@ repo is clean" and "the engine never ran."
 
 `formwork.yaml` and everything under `.formwork/` is API: the rule envelope
 (`id`, `type`, `severity`, `scope`, `preprocess`, `cure`, `origin`, `tags`),
-each rule type's `params`, lane declarations, and the exemption grammar.
+each rule type's `params`, lane declarations, and the scope grammar.
 
 **Config decoding is strict: an unknown field is exit 2, not a warning.** That
 is deliberate — a typo'd key that silently disabled a guardrail would be the

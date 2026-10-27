@@ -10,7 +10,7 @@
 //
 // It breaks in both directions. With the helper adding the ORDER BY the fold
 // reports an unordered locking SELECT no path holds (a false positive on
-// provably safe code, in a gate that forbids `formwork:allow` escapes). With
+// provably safe code, in a gate no comment can exempt). With
 // the helper adding the LOCK a real deadlock hazard goes unreported.
 //
 // The fix classifies every `&name` in a scope: a RESOLVABLE LOCAL ALIAS

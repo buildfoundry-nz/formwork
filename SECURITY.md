@@ -128,8 +128,8 @@ Highest priority, and the class this project actively hunts:
   is organized around, and a report of one is welcome even if you cannot show
   malicious exploitation: in a guardrail engine, a check that quietly stops
   checking *is* the security failure.
-- **Exemption or suppression bypass** — making a finding disappear without an
-  enumerated, auditable escape hatch.
+- **Suppression** — making a finding disappear at all. The engine has no
+  suppression channel, so any way to do it is a bypass.
 - Sandbox or path escapes: a rule reading or writing outside the repository
   root, or path traversal through config-supplied globs.
 - Crashes reachable from untrusted repository *content* (as opposed to

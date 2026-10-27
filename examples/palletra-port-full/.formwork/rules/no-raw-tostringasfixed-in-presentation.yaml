@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-no-raw-tostringasfixed-in-presentation.sh (#8108).
 # A bare toStringAsFixed under a Dart .../presentation/... library path is a
 # violation unless the file is on the 5-entry presentation allowlist; new
@@ -20,12 +23,5 @@ rules:
         - "**/*.pb*.dart"
     params:
       pattern: 'toStringAsFixed'
-    except:
-      paths:
-        - "packages/feature_costing/lib/presentation/margin/margin_input_slider.dart"
-        - "packages/feature_costing/lib/presentation/margin/margin_overview_card.dart"
-        - "packages/feature_costing/lib/presentation/margin/margin_drivers_section.dart"
-        - "packages/feature_stockroom/lib/presentation/ingest_wizard/ingest_upload_form.dart"
-        - "packages/plt_pricing/lib/presentation/lookups/formula_summary_chip.dart"
     cure: "Use formatCompact / formatDimension from packages/plt_core/lib/format/ instead of a bare toStringAsFixed in presentation code (#8108)."
     origin: scripts/check-no-raw-tostringasfixed-in-presentation.sh

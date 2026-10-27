@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-dart-measure-step-must-use-resolved-provider.sh (forbidden-pattern).
 # The Measure rail must read the RESOLVED activeStageCodeProvider, never the raw
 # targetStepCode (empty on landing). Bans code-level reads of the raw intent —
@@ -15,16 +18,6 @@ rules:
       exclude:
         - "**/*.g.dart"
         - "**/*.freezed.dart"
-    except:
-      paths:
-        - "packages/plt_canvas_kit/lib/measure/domain/plot_nav_state.dart"
-        - "packages/plt_canvas_kit/lib/measure/providers/plot_nav_controller.dart"
-        - "packages/plt_canvas_kit/lib/measure/providers/plot_nav_controller_actions.dart"
-        - "packages/plt_canvas_kit/lib/measure/providers/plot_nav_reads.dart"
-        - "packages/plt_canvas_kit/lib/measure/providers/plot_active_step_providers.dart"
-        - "packages/plt_canvas_kit/lib/measure/providers/plot_type_filter_providers.dart"
-        - "packages/feature_dimension/lib/providers/plot_section_layout_providers.dart"
-        - "packages/feature_dimension/lib/presentation/plot_body.dart"
     params:
       pattern: '\.targetStepCode\b|\stargetStepCode:|\btargetStepCodeProvider\b'
     cure: "Operational consumers must read activeStageCodeProvider(projectId) (the resolved displayed step), not the raw targetStepCode."

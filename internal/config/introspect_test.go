@@ -87,7 +87,7 @@ func TestRuleParamsDecodeAndYAML(t *testing.T) {
 // state a YAML rule without params: reaches).
 func TestRuleParamsAbsent(t *testing.T) {
 	cfg := loadIntrospect(t)
-	r, err := config.New("bare", "probe", cfg.Rules[0].Severity, "", []string{"assets/**"}, nil, nil, cfg.Rules[0].Checker)
+	r, err := config.New("bare", "probe", cfg.Rules[0].Severity, "", []string{"assets/**"}, nil, cfg.Rules[0].Checker)
 	if err != nil {
 		t.Fatal(err)
 	}

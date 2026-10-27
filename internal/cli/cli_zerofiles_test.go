@@ -116,23 +116,6 @@ func TestCheckScopeExcludeSwallowingIncludeIsNamed(t *testing.T) {
 	}
 }
 
-// Row 7: except.paths swallows the include set. A different field, the same
-// vacuity, and neither reaches the scan package at all — both are decided in
-// config.Rule.Applies, which is why the summary is computed from that predicate
-// rather than from the prune census.
-func TestCheckExceptPathsSwallowingIncludeIsNamed(t *testing.T) {
-	root := t.TempDir()
-	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
-	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"),
-		"rules:\n  - id: no-widget\n    type: forbidden-pattern\n    scope: {include: ['src/**/*.go']}\n"+
-			"    except: {paths: ['src/**']}\n    params: {pattern: WIDGET}\n")
-	mustWrite(t, filepath.Join(root, "src", "bad.go"), "const x = \"WIDGET\"\n")
-	_, out, _ := runCLI(t, "check", "-C", root)
-	if !strings.Contains(out, "no-widget: scope matched no files") {
-		t.Errorf("except.paths swallowing the include set must be named:\n%s", out)
-	}
-}
-
 // Row 13: one vacuous rule sitting beside a live one that really ran. Both
 // print `[id] OK` today and the two OKs mean different things.
 func TestCheckVacuousRuleBesideLiveOneIsNamed(t *testing.T) {

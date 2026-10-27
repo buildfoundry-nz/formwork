@@ -51,9 +51,11 @@ func TestRunUnknownPreprocessorIsEngineError(t *testing.T) {
 	}
 }
 
-func TestRunMarkerSuppressesSameLineWithReason(t *testing.T) {
+// No comment exempts a finding. A reasoned `formwork:allow` on the violating
+// line was a suppression channel; it is now prose the engine never reads, so
+// the finding stands.
+func TestRunFormworkAllowCommentExemptsNothing(t *testing.T) {
 	r := mustRule(t, "no-hit", finding.SeverityError, []string{"**"}, matchLineOne())
-	r.Marker = true
 	fset := memFileSet(map[string]string{
 		"a.go": "bad // formwork:allow no-hit grandfathered until v2\n",
 	})
@@ -61,142 +63,7 @@ func TestRunMarkerSuppressesSameLineWithReason(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || !got[0].Suppressed || got[0].SuppressedBy != "marker" {
-		t.Fatalf("findings = %+v", got)
-	}
-}
-
-func TestRunMarkerRequiresReasonAndOptIn(t *testing.T) {
-	// Reasonless marker: rule opted in, but no reason after the id.
-	r := mustRule(t, "no-hit", finding.SeverityError, []string{"**"}, matchLineOne())
-	r.Marker = true
-	got, err := engine.Run([]*config.Rule{r},
-		memFileSet(map[string]string{"a.go": "bad // formwork:allow no-hit\n"}), 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].Suppressed {
-		t.Fatalf("reasonless marker suppressed: %+v", got)
-	}
-
-	// Valid marker text, but the rule did not opt in (Marker false).
-	r2 := mustRule(t, "no-hit", finding.SeverityError, []string{"**"}, matchLineOne())
-	got, err = engine.Run([]*config.Rule{r2},
-		memFileSet(map[string]string{"a.go": "bad // formwork:allow no-hit a reason\n"}), 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].Suppressed {
-		t.Fatalf("marker honored without opt-in: %+v", got)
-	}
-
-	// Marker names a different rule id.
-	r3 := mustRule(t, "no-hit", finding.SeverityError, []string{"**"}, matchLineOne())
-	r3.Marker = true
-	got, err = engine.Run([]*config.Rule{r3},
-		memFileSet(map[string]string{"a.go": "bad // formwork:allow other-rule a reason\n"}), 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].Suppressed {
-		t.Fatalf("marker for other rule suppressed: %+v", got)
-	}
-}
-
-func TestRunMarkerScansRawFileEvenWithPreprocess(t *testing.T) {
-	// The marker lives in a comment; decomment-go erases it from the variant.
-	// Suppression must still work because marker scanning reads the raw file.
-	r := mustRule(t, "no-hit", finding.SeverityError, []string{"**"}, matchLineOne())
-	r.Marker = true
-	r.Preprocess = "decomment-go"
-	fset := memFileSet(map[string]string{
-		"a.go": "bad() // formwork:allow no-hit legacy call site\n",
-	})
-	got, err := engine.Run([]*config.Rule{r}, fset, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || !got[0].Suppressed {
-		t.Fatalf("marker not honored through preprocess: %+v", got)
-	}
-}
-
-func TestRunMarkerCommentCloserIsNotAReason(t *testing.T) {
-	// A trailing block-comment or HTML-comment closer is not a real reason;
-	// suppression must not fire (marker package finding B1).
-	r := mustRule(t, "no-hit", finding.SeverityError, []string{"**"}, matchLineOne())
-	r.Marker = true
-	fset := memFileSet(map[string]string{
-		"a.go": "bad /* formwork:allow no-hit */\n",
-	})
-	got, err := engine.Run([]*config.Rule{r}, fset, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].Suppressed {
-		t.Fatalf("comment-closer-only marker wrongly suppressed: %+v", got)
-	}
-}
-
-func TestRunMarkerPrefixCollisionRuleIDIsPrefixOfMarkerID(t *testing.T) {
-	// Rule "no" must not be suppressed by a marker naming "no-hit".
-	r := mustRule(t, "no", finding.SeverityError, []string{"**"}, matchLineOne())
-	r.Marker = true
-	fset := memFileSet(map[string]string{
-		"a.go": "bad // formwork:allow no-hit a real reason\n",
-	})
-	got, err := engine.Run([]*config.Rule{r}, fset, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].Suppressed {
-		t.Fatalf("prefix-collision (rule id prefix of marker id) wrongly suppressed: %+v", got)
-	}
-}
-
-func TestRunMarkerPrefixCollisionMarkerIDIsPrefixOfRuleID(t *testing.T) {
-	// Rule "no-hit" must not be suppressed by a marker naming just "no".
-	r := mustRule(t, "no-hit", finding.SeverityError, []string{"**"}, matchLineOne())
-	r.Marker = true
-	fset := memFileSet(map[string]string{
-		"a.go": "bad // formwork:allow no a real reason\n",
-	})
-	got, err := engine.Run([]*config.Rule{r}, fset, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].Suppressed {
-		t.Fatalf("prefix-collision (marker id prefix of rule id) wrongly suppressed: %+v", got)
-	}
-}
-
-func TestRunScopeLevelFindingsAreNotExemptable(t *testing.T) {
-	fin := &fakeFinalizer{}
-	fin.final = []rules.Match{{Message: "scope-level"}}
-	r := mustRule(t, "no-hit", finding.SeverityError, []string{"**"}, fin)
-	r.Marker = true
-	got, err := engine.Run([]*config.Rule{r}, memFileSet(map[string]string{"a.go": "x\n"}), 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].Suppressed {
-		t.Fatalf("scope-level finding suppressed: %+v", got)
-	}
-}
-
-// A finalizer finding names a file but was produced from no per-file raw
-// content, so no channel can exempt it: a reasoned marker on the very line it
-// names still leaves it a failure.
-func TestRunFinalizerFileFindingIsNotExemptable(t *testing.T) {
-	fin := &fakeFinalizer{}
-	fin.final = []rules.Match{{Path: "old.go", Line: 1, Message: "file-level"}}
-	r := mustRule(t, "no-hit", finding.SeverityError, []string{"**"}, fin)
-	r.Marker = true
-	got, err := engine.Run([]*config.Rule{r}, memFileSet(map[string]string{"old.go": "x // formwork:allow no-hit a reason\n"}), 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].Suppressed {
-		t.Fatalf("finalizer file-level finding suppressed: %+v", got)
+	if len(got) != 1 || got[0].Path != "a.go" || got[0].Line != 1 {
+		t.Fatalf("findings = %+v, want the one finding on a.go:1", got)
 	}
 }

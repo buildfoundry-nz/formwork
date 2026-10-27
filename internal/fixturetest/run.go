@@ -212,12 +212,10 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 }
 
 // EvalIn evaluates one rule over the fixture tree rooted at dir, returning its
-// findings PRE-suppression together with the walked FileSet. The caller passes
+// findings together with the walked FileSet. The caller passes
 // a rule whose checker is already the one it wants exercised (see runFixture's
 // Fresh below); EvalIn owns only what a fixture run must not inherit from the
 // repo, so that policy lives in exactly one place rather than once per caller.
-//
-// Markers stay active — fixtures legitimately exercise marker suppression.
 //
 // scan.ignore is repo-scoped: its globs are repo-root-relative, but this
 // walk's root is the fixture dir, an unrelated path namespace. Applying them
@@ -270,7 +268,6 @@ func runFixture(r *config.Rule, dir, src string, isFire bool, repo string, worke
 
 // judgeFixture compares findings against the fixture's declared expectations.
 func judgeFixture(r *config.Rule, dir, src string, isFire bool, findings []finding.Finding, fset *scan.FileSet) ([]string, error) {
-	findings = finding.Unsuppressed(findings)
 	expected, err := collectExpectations(fset, dir, src, r.ID)
 	if err != nil {
 		return nil, err

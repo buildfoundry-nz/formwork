@@ -7,7 +7,6 @@ import (
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/engine"
-	"github.com/buildfoundry-nz/formwork/internal/finding"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 )
 
@@ -33,34 +32,7 @@ func satisfies(r *config.Rule, root string, f *scan.File) bool {
 	if err != nil {
 		return false
 	}
-	return len(finding.Unsuppressed(fds)) == 0
-}
-
-// exceptExcuses reports whether r would actually fire on f — that is, whether
-// the except.paths entry naming f suppresses anything real (#10777).
-//
-// Clearing ExceptPaths is the whole point, not a detail. except.paths is a
-// scope SUBTRACTION: config.Rule.Applies returns false for a matched path, so
-// engine.Run drops f before any checker sees it. Probe with the rule as written
-// and every entry in the corpus reports "the rule does not fire here", the arm
-// gates the whole corpus, and its own test passes while measuring nothing.
-//
-// SUPPRESSED findings count as firing. The question is whether the rule reaches
-// f at all, and a marker-suppressed finding proves it does ("suppressed
-// findings count as still trips"). An error is returned
-// rather than folded into a verdict: a probe that could not run must never read
-// as "the exception excuses nothing".
-func exceptExcuses(r *config.Rule, root string, f *scan.File) (bool, error) {
-	fresh, err := r.Fresh()
-	if err != nil {
-		return false, err
-	}
-	fresh.ExceptPaths = nil
-	fds, err := engine.Run([]*config.Rule{fresh}, &scan.FileSet{Root: root, Files: []*scan.File{f}}, 1)
-	if err != nil {
-		return false, err
-	}
-	return len(fds) > 0, nil
+	return len(fds) == 0
 }
 
 // satisfiesSet reports whether r passes over a WHOLE file set. The relation
@@ -77,7 +49,7 @@ func satisfiesSet(r *config.Rule, root string, fs []*scan.File) bool {
 	if err != nil {
 		return false
 	}
-	return len(finding.Unsuppressed(fds)) == 0
+	return len(fds) == 0
 }
 
 // witnesses returns the in-scope files that satisfy r on their own — for an

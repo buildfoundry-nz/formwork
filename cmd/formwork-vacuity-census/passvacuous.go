@@ -15,10 +15,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/bmatcuk/doublestar/v4"
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/engine"
-	"github.com/buildfoundry-nz/formwork/internal/finding"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 )
@@ -58,7 +56,7 @@ import (
 // its verdict, so "no in-scope file" implies nothing about whether that fixture
 // can discriminate, and the universal-scope probe would re-run an expensive
 // tool to learn what the run three lines above already reported.
-func passVacuousVerdict(r *config.Rule, fixture string, ffs *scan.FileSet, gm *globMeasure) ([]verdict, error) {
+func passVacuousVerdict(r *config.Rule, fixture string, ffs *scan.FileSet) ([]verdict, error) {
 	if rules.CostOf(r.Checker) == rules.CostHeavy {
 		return nil, nil
 	}
@@ -66,9 +64,6 @@ func passVacuousVerdict(r *config.Rule, fixture string, ffs *scan.FileSet, gm *g
 		if r.Applies(ff.Path()) {
 			return nil, nil // the rule reaches this fixture; it is doing its job
 		}
-	}
-	if declaredInertExcept(r, ffs, gm) {
-		return nil, nil // inert by written declaration, not by drift
 	}
 	judged, err := judgesAnything(r, ffs)
 	if err != nil {
@@ -85,61 +80,26 @@ func passVacuousVerdict(r *config.Rule, fixture string, ffs *scan.FileSet, gm *g
 	}}, nil
 }
 
-// declaredInertExcept reports whether this fixture stands at an except.paths
-// entry its author has DECLARED inert in place with `# except-declaration:
-// <reason>` (#10777).
-//
-// That vocabulary already means "this entry names a file the pattern could
-// never match anyway, listed so the roster stays complete and auditable" —
-// labour-method-choice-single-writer says exactly that about catalog_labour.go,
-// which is generic over every line_kind and carries both line_kind and
-// subcategory_id as bind parameters, so no literal the pattern matches can
-// appear in it. Firing there would demand the author delete an auditable roster
-// entry or fabricate a violation to keep it, and an arm that does that is
-// switched off within a week.
-//
-// The declaration must carry a non-empty reason: globMeasure sets declOK only
-// for a marker with text after the colon, so a bare `# except-declaration:`
-// buys nothing here, exactly as it buys nothing for the sibling vocabularies.
-func declaredInertExcept(r *config.Rule, ffs *scan.FileSet, gm *globMeasure) bool {
-	if gm == nil {
-		return false
-	}
-	for _, gc := range gm.except[r.ID] {
-		if !gc.declOK {
-			continue
-		}
-		for _, ff := range ffs.Files {
-			if ok, _ := doublestar.Match(gc.glob, ff.Path()); ok {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // judgesAnything reports whether r finds anything to say about fs once its
 // scope subtracts nothing. The verdict comes from engine.Run, never from a
 // re-implementation of the matcher, and from a Fresh checker because a rule
 // carries per-run state (required-pattern exists mode accumulates across
 // files) — the same discipline as satisfies() in probe.go.
 //
-// Preprocess and Marker are carried across because they change what the checker
-// SEES.
+// Preprocess is carried across because it changes what the checker SEES.
 func judgesAnything(r *config.Rule, fs *scan.FileSet) (bool, error) {
 	fresh, err := r.Fresh()
 	if err != nil {
 		return false, err
 	}
-	probe, err := config.New(r.ID, r.Type, r.Severity, r.Cure, []string{"**"}, nil, nil, fresh.Checker)
+	probe, err := config.New(r.ID, r.Type, r.Severity, r.Cure, []string{"**"}, nil, fresh.Checker)
 	if err != nil {
 		return false, err
 	}
 	probe.Preprocess = r.Preprocess
-	probe.Marker = r.Marker
 	fds, err := engine.Run([]*config.Rule{probe}, fs, 1)
 	if err != nil {
 		return false, err
 	}
-	return len(finding.Unsuppressed(fds)) > 0, nil
+	return len(fds) > 0, nil
 }

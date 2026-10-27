@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-no-reaching-into-canvas-measure-internals.sh (#8593).
 # plt_canvas_kit/lib/measure/** is measure application state; reaching into it
 # directly makes it a de-facto shared surface. The sanctioned seam is
@@ -16,10 +19,5 @@ rules:
         - "frontend/lib/**/*.dart"
     params:
       pattern: 'package:plt_canvas_kit/measure/'
-    except:
-      paths:
-        - "packages/plt_canvas_kit/**"
-        - "packages/plt_measure_model/**"
-        - "packages/feature_dimension/**"
     cure: "Depend on package:plt_measure_model/... (the sanctioned narrow seam) instead of reaching into plt_canvas_kit/measure/** (#8593)."
     origin: scripts/check-no-reaching-into-canvas-measure-internals.sh

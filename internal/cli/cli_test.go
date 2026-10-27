@@ -67,30 +67,6 @@ func TestCheckCleanRepoExitsZero(t *testing.T) {
 	}
 }
 
-func TestCheckSummaryAppendsSuppressedCount(t *testing.T) {
-	// G1b: a suppressed finding never affects the exit code or the per-rule
-	// verdict, but the summary line must still show it happened.
-	root := t.TempDir()
-	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
-	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"),
-		"rules:\n  - id: no-banana\n    type: forbidden-pattern\n"+
-			"    scope: {include: ['**/*.txt']}\n    params: {pattern: banana}\n"+
-			"    except: {marker: true}\n")
-	mustWrite(t, filepath.Join(root, "hit.txt"), "banana // formwork:allow no-banana legacy data\n")
-	code, out, _ := runCLI(t, "check", "-C", root)
-	if code != 0 {
-		t.Fatalf("exit = %d, want 0\noutput:\n%s", code, out)
-	}
-	for _, want := range []string{
-		"[no-banana] OK",
-		"formwork: 1/1 rules passed, 0 finding(s), 1 suppressed",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("output missing %q\noutput:\n%s", want, out)
-		}
-	}
-}
-
 func TestCheckMissingConfigExits2(t *testing.T) {
 	code, _, errOut := runCLI(t, "check", "-C", t.TempDir())
 	if code != 2 {
@@ -205,43 +181,25 @@ func TestLintFlagsProblemsExitsOne(t *testing.T) {
 	}
 }
 
-func TestCheckMarkerSuppressionExitsZero(t *testing.T) {
+// A reasoned `formwork:allow` comment on the violating line exempts nothing:
+// the run fails on it like on any other violation.
+func TestCheckFormworkAllowCommentStillFails(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
 	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"),
 		"rules:\n  - id: no-banana\n    type: forbidden-pattern\n"+
-			"    scope: {include: ['**']}\n    params: {pattern: banana}\n"+
-			"    except: {marker: true}\n")
+			"    scope: {include: ['**']}\n    params: {pattern: banana}\n")
 	mustWrite(t, filepath.Join(root, "f.txt"), "banana // formwork:allow no-banana legacy data\n")
 	code, out, _ := runCLI(t, "check", "-C", root)
-	if code != 0 {
-		t.Fatalf("exit = %d, want 0\noutput:\n%s", code, out)
-	}
-	for _, want := range []string{"[no-banana] OK", "0 finding(s)"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("output missing %q\noutput:\n%s", want, out)
-		}
+	if code != 1 || !strings.Contains(out, "[no-banana] FAIL — 1 finding(s)") {
+		t.Fatalf("exit = %d, want 1 with the finding\noutput:\n%s", code, out)
 	}
 }
 
-func TestCheckReasonlessMarkerStillFails(t *testing.T) {
-	root := t.TempDir()
-	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
-	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"),
-		"rules:\n  - id: no-banana\n    type: forbidden-pattern\n"+
-			"    scope: {include: ['**']}\n    params: {pattern: banana}\n"+
-			"    except: {marker: true}\n")
-	mustWrite(t, filepath.Join(root, "f.txt"), "banana // formwork:allow no-banana\n")
-	code, out, _ := runCLI(t, "check", "-C", root)
-	if code != 1 || !strings.Contains(out, "[no-banana] FAIL") {
-		t.Fatalf("exit = %d\noutput:\n%s", code, out)
-	}
-}
-
-// A corpus still declaring except.allowlist is a config error, never a run
-// with the list quietly ignored: the finding the list used to forgive would
+// A corpus still declaring an except: block is a config error, never a run
+// with the excusal quietly ignored: the finding it used to forgive would
 // otherwise surface as a surprise FAIL instead of naming the removed key.
-func TestCheckExceptAllowlistExits2(t *testing.T) {
+func TestCheckExceptBlockExits2(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
 	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"),
@@ -251,8 +209,8 @@ func TestCheckExceptAllowlistExits2(t *testing.T) {
 	mustWrite(t, filepath.Join(root, ".formwork", "allowlists", "legacy.txt"), "f.txt\n")
 	mustWrite(t, filepath.Join(root, "f.txt"), "banana\n")
 	code, _, errOut := runCLI(t, "check", "-C", root)
-	if code != 2 || !strings.Contains(errOut, "allowlist") {
-		t.Fatalf("exit = %d, want 2 naming allowlist\nstderr:\n%s", code, errOut)
+	if code != 2 || !strings.Contains(errOut, "field except not found") {
+		t.Fatalf("exit = %d, want 2 naming the except key\nstderr:\n%s", code, errOut)
 	}
 }
 

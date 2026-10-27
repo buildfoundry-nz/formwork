@@ -66,8 +66,8 @@ type (
 func Load(repoRoot string) (*Config, error) { return config.Load(repoRoot) }
 
 // New builds a rule in memory, for analysers that synthesise one to probe with.
-func New(id, typeName string, sev Severity, cure string, include, exclude, exceptPaths []string, c Checker) (*Rule, error) {
-	return config.New(id, typeName, sev, cure, include, exclude, exceptPaths, c)
+func New(id, typeName string, sev Severity, cure string, include, exclude []string, c Checker) (*Rule, error) {
+	return config.New(id, typeName, sev, cure, include, exclude, c)
 }
 
 // The tree: the same scan the gate runs, so scope is measured identically.
@@ -104,11 +104,6 @@ const SeverityError = finding.SeverityError
 func Run(rls []*Rule, fset *FileSet, workers int) ([]Finding, error) {
 	return engine.Run(rls, fset, workers)
 }
-
-// Unsuppressed drops findings a marker has silenced. An analyser asking
-// whether a rule CAN fail wants the unsuppressed set: a rule whose every
-// finding is marker-suppressed is not a rule that fires.
-func Unsuppressed(fs []Finding) []Finding { return finding.Unsuppressed(fs) }
 
 // Rule types: what a rule is made of, for analysers that classify by cost or
 // resolve a type name.

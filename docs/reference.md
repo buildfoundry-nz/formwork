@@ -160,9 +160,6 @@ rules:
       min_files: 5              # optional floor; see below
     params:                     # type-specific; strictly decoded
       pattern: "TODO"
-    except:                     # optional; see Exemptions
-      paths: ["legacy/**"]
-      marker: true
     cure: "Delete the TODO or file an issue and link it."
     origin: "#412"              # what wound this rule closed
     tags: [fast, go]
@@ -185,8 +182,7 @@ reaches the engine as `converted call sites consume the accessor (audit-1`. The
 ### `scope`
 
 `include` and `exclude` are doublestar globs, matched against repo-relative
-paths. A file is in scope when it matches an `include`, no `exclude`, and no
-`except.paths`.
+paths. A file is in scope when it matches an `include` and no `exclude`.
 
 `scope.min_files: N` (default 0 = off) turns a shrunken scope from a disclosure
 into a verdict: fewer than N in-scope files is an error-severity, path-less
@@ -1008,9 +1004,9 @@ programs above, because to this rule they are one program. Read the callee it
 names:
 
 - If it **CALLS** the closure, every real path orders this query and the
-  finding reports a hazard the code does not have. Clear it with a
-  `formwork:allow` marker, which `formwork lint` keeps enumerated so the
-  suppression stays visible; do not reshape the query to please the analyzer.
+  finding reports a hazard the code does not have. No comment exempts it:
+  append the ORDER BY where the query is composed instead of through a closure
+  this pass cannot follow.
 - If it only **STORES** the closure, nothing runs those appends, the unordered
   locking `SELECT` is the real value, and the finding is the deadlock hazard.
 
@@ -1188,39 +1184,18 @@ code-only projection. `decomment-go` implements Go quoting, not Dart quoting.
 
 ## Exemptions
 
-Two channels. Both are enumerated by `formwork lint`'s escape-hatch census, and
-neither is silent. There is no allowlist: a list of paths whose findings are
-forgiven is a violation carried, not cured, and `except.allowlist` is refused at
-load (exit 2).
+There is no exemption channel inside a rule's evaluation. No comment, marker,
+allowlist or path carve-out forgives a finding: a file the rule covers is
+judged, and every error-severity finding fails the run. The `except:` block is
+refused at load (exit 2), whichever of its former keys (`paths`, `marker`,
+`allowlist`) it carries.
 
-### Inline markers
-
-Enabled per rule with `except: {marker: true}`.
-
-```
-formwork:allow <rule-id> <reason>
-```
-
-The id is a single whitespace-delimited token; everything after it is the
-reason. `formwork lint`'s `exemption-hygiene` check reports a marker with no
-reason.
-
-Suppressed findings are **enumerated, not counted** — every renderer names
-which findings were suppressed and by which channel, so the exemption surface
-can be audited:
-
-```
-suppressed (exempted, not failures):
-  [no-todo] a.go:2: forbidden pattern matched: TODO (marker)
-```
-
-### `except.paths`
-
-Globs carved out of the rule's scope. Distinct from markers: it is a
-scope **subtraction**, so the rule never evaluates the file and there is no
-finding to suppress. The census reports how many in-scope files each entry
-actually **removed**, so a dead entry reads `0 file(s)` rather than printing
-like a live one.
+What remains is scope itself — `scope.include`, `scope.exclude` and
+`scope.not_declaring` — and every subtraction is enumerated by `formwork lint`'s
+escape-hatch census, so none is silent. `scope.not_declaring` reports, per
+marker, how many in-scope files it removed and how many of those the rule would
+have fired on, so a marker protecting nothing reads `0 would fire` rather than
+printing like a live one.
 
 ---
 

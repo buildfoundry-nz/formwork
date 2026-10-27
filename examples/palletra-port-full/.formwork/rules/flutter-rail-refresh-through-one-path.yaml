@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-flutter-rail-refresh-through-one-path.sh
 # (#7669 FE coherence). The four rail-surface providers must only be refreshed
 # through the single path WorkflowRailSync.request(); no measure-surface file
@@ -40,9 +43,6 @@ rules:
         - "**/*.pb.dart"
         - "**/*.pbenum.dart"
         - "**/*.pbjson.dart"
-    except:
-      paths:
-        - "packages/feature_dimension/lib/providers/plot_detection_refresh.dart"
     preprocess: decomment-go
     params:
       pattern: '(invalidate|refresh)[(][[:space:]]*(plotPrimaryActionProvider|workflowPanelsProvider|workflowContextProvider|workflowStagesProvider|workflowSlotStagesProvider)'

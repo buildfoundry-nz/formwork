@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-one-ratecard-match-contract.sh (#1373 PH-5 PR1).
 # Pins internal/ratecardmatch as the single ratecard-match contract. The .sh is
 # a bundle of six rules; ported here as separate formwork rules, each keeping the
@@ -119,9 +122,6 @@ rules:
     preprocess: decomment-go
     params:
       pattern: 'func[[:space:]]+(\([^)]*\)[[:space:]]+)?[A-Za-z0-9_]*([Cc]anon[A-Za-z0-9_]*[Cc]ode|[Cc]ode[A-Za-z0-9_]*[Cc]anon)[A-Za-z0-9_]*[[:space:]]*\('
-    except:
-      paths:
-        - "**/internal/ratecardmatch/**"
     cure: "Use ratecardmatch.CanonCode / DualMatch — one match contract, no code-normalizer forks (#1373 M5)."
     origin: scripts/check-one-ratecard-match-contract.sh
 

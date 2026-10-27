@@ -6,8 +6,6 @@ rules:
       include: ["**/*.txt"]
     params:
       pattern: 'TODO'
-    except:
-      paths: ["src/clean.txt"]
     cure: "Resolve the item or move it to the issue tracker."
   - id: readme-mentions-formwork
     type: required-pattern

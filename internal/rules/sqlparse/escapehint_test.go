@@ -30,9 +30,9 @@
 // probably fine" — said on `register(add)` that is a lie about a real deadlock
 // hazard, which is the trade this epic refuses, moved out of the rule and into
 // the message. It names the closure and the callee, states what follows if the
-// callee CALLS it and what follows if the callee only STORES it, and points at
-// the `formwork:allow` marker for the first — a suppression `formwork lint`
-// keeps enumerated, not a query rewritten to please the analyzer. It therefore
+// callee CALLS it and what follows if the callee only STORES it, and names the
+// cure for the first: append the ORDER BY where the query is composed, since no
+// comment exempts a finding. It therefore
 // attaches to `register(add)` too, and TestTheEscapeNoteSaysTheSameThingAboutTheTruePositive
 // says so.
 //
@@ -86,7 +86,7 @@ func TestLockingOrderExplainsTheDisclosedClosureNameEscape(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			msg := noteMessage(t, tc.call)
-			for _, want := range []string{"#337", tc.spelling, "formwork:allow"} {
+			for _, want := range []string{"#337", tc.spelling, "no comment exempts this finding"} {
 				if !strings.Contains(msg, want) {
 					t.Fatalf("an operator holding this finding has to be able to tell it "+
 						"from a real hazard: the note must name the shape, the escape "+

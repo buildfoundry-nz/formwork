@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-classifier-weights-bias-indexing-confined-to-model.sh
 # (sweep-10 #5). The per-class dot-product (bias + Σ w·x) is single-sourced in
 # local.Model.RawScores. Within the classifier packages, only local/model.go
@@ -15,10 +18,6 @@ rules:
         - "freightworks/services/core-api/internal/parsecompose/classifier/**/*.go"
       exclude:
         - "**/*_test.go"
-    except:
-      paths:
-        - "freightworks/services/core-api/internal/parsecompose/classifier/local/model.go"
-        - "freightworks/services/core-api/internal/parsecompose/classifier/local/serialize.go"
     preprocess: decomment-go
     params:
       pattern: '\.(Weights|Bias)\['

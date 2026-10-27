@@ -53,10 +53,10 @@ cannot drift. Any list written in prose can and does.
 
 **Orchestration and escapes.** Lanes; `formwork check --lane <name> [--staged |
 --range A..B]`; `formwork scope [<path>...] [--staged | --range A..B]`;
-`formwork hooks install|verify`. Exemption
-suppression (`formwork:allow` markers; there are no allowlist files) with `formwork lint`'s
-hygiene checks and an escape-hatch census that enumerates **every** channel by
-which a file can escape a rule — including the ones nobody declared.
+`formwork hooks install|verify`. No finding can be exempted (there are no
+markers, allowlists or `except.paths`); `formwork lint`'s hygiene checks and an
+escape-hatch census enumerate **every** channel by which a file can escape a
+rule's scope — including the ones nobody declared.
 
 **Self-testing.** `formwork test` (fire/pass fixtures, `want:` markers, `.want`
 manifests) and `formwork lint` (rules-present, fixture coverage, empty scope,

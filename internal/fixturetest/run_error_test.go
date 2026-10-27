@@ -86,7 +86,7 @@ func TestRunErrorsWhenRuleCannotBeRefreshed(t *testing.T) {
 	})
 
 	r, err := config.New("hand-built", "fake", finding.SeverityError, "",
-		[]string{"**"}, nil, nil, nopChecker{})
+		[]string{"**"}, nil, nopChecker{})
 	if err != nil {
 		t.Fatal(err)
 	}

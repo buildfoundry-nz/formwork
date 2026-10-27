@@ -345,13 +345,12 @@ func newLockingOrder(node *yaml.Node) (rules.Checker, error) {
 // helper moved into this one.
 //
 // So emission only ever grows here on what this pass DOES emit, and all five
-// false positives stand: if a finding has no reachable path, the answer is a
-// `formwork:allow` marker — enumerated by formwork lint, so the suppression
-// stays visible — not a query rewritten to please the analyzer. The silent
-// directions of 3 AND 4 have no such answer; they are misses like any other in
-// this file, not findings to suppress. Those two are what a reader auditing a
-// clean run on a closure-composed query should hold onto — 5 has no silent
-// direction of its own, so the marker settles it.
+// false positives stand: no comment exempts a finding, so if one has no
+// reachable path, the answer is to compose the query in a shape this pass can
+// read on every path. The silent directions of 3 AND 4 have no such answer;
+// they are misses like any other in this file. Those two are what a reader
+// auditing a clean run on a closure-composed query should hold onto — 5 has no
+// silent direction of its own, so recomposing the query settles it.
 func (c *lockingOrder) CheckFile(f *scan.File) ([]rules.Match, error) {
 	// lockingStatements (not statements()): unlike sql/parses, this rule needs
 	// visibility into concatenated/Sprintf-composed .go queries (#12), so it
@@ -545,8 +544,9 @@ func init() {
 // positives too.
 const infeasibleBaseNote = " — NOTE: this may be the disclosed #42 world, where an ORDER BY " +
 	"appended under complementary guards (`if a` / `if !a`) is absent " +
-	"from both. If every real path orders this query, clear it with a " +
-	"formwork:allow marker; if any path can observe the query between " +
+	"from both. If every real path orders this query, compose it so every " +
+	"branch carries the ORDER BY (or append it once, unguarded) — no comment " +
+	"exempts this finding; if any path can observe the query between " +
 	"those branches, the finding is real"
 
 // closureNameEscapeNote explains a finding that MAY be the disclosed #337 world
@@ -566,9 +566,9 @@ const infeasibleBaseNote = " — NOTE: this may be the disclosed #42 world, wher
 // direction, and hands the reader the one fact that settles it: what the callee
 // does with f.
 //
-// The cure named for the false direction is the marker, not a rewrite. A
-// formwork:allow marker stays enumerated by `formwork lint`, so a suppression
-// remains visible; reshaping the query to please the analyzer does not.
+// The cure named for the false direction is a recomposition: no comment exempts
+// a finding, so a query this pass cannot read on every path is written so that
+// it can.
 //
 // escape is rendered by sqlextract (invoked.go) and is the spelling as written —
 // `h.run(add)`, or `…(add)` where no name this pass resolves says which function
@@ -580,8 +580,9 @@ func closureNameEscapeNote(escape string) string {
 		"` appends to this query, and this pass cannot follow a name into a callee, so " +
 		"those appends are absent from the value reported here. Read that callee. If it " +
 		"CALLS the closure, every real path orders this query and this finding reports a " +
-		"hazard the code does not have — clear it with a formwork:allow marker, which " +
-		"formwork lint keeps enumerated. If it only STORES the closure, nothing runs " +
+		"hazard the code does not have — append the ORDER BY where the query is composed " +
+		"instead of through a closure this pass cannot follow; no comment exempts this " +
+		"finding. If it only STORES the closure, nothing runs " +
 		"those appends, the unordered locking SELECT is the real value and this finding " +
 		"is the deadlock hazard"
 }

@@ -36,7 +36,7 @@ func finsWithCosts(t *testing.T, spec ...struct {
 	t.Helper()
 	out := make([]*config.Rule, 0, len(spec))
 	for _, s := range spec {
-		r, err := config.New(s.id, "fake", finding.SeverityError, "fix it", []string{"**"}, nil, nil, &costChecker{cost: s.cost})
+		r, err := config.New(s.id, "fake", finding.SeverityError, "fix it", []string{"**"}, nil, &costChecker{cost: s.cost})
 		if err != nil {
 			t.Fatal(err)
 		}

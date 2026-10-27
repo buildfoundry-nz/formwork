@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-classify-anchor-text-single-source.sh
 # (wizard-classify Slice 5, hardened sweep-7 #6). The stockroom import wizard's
 # subcategory classifier runs across three surfaces (internal/stockroom +
@@ -25,9 +28,6 @@ rules:
         - "freightworks/services/core-api/routes/stockroom/**/*.go"
       exclude:
         - "**/*_test.go"
-    except:
-      paths:
-        - "**/classify_reprocess.go"
     preprocess: decomment-go
     params:
       pattern: '" — "'
@@ -44,9 +44,6 @@ rules:
         - "freightworks/services/core-api/routes/stockroom/**/*.go"
       exclude:
         - "**/*_test.go"
-    except:
-      paths:
-        - "**/stockroom_classify_subcategories.go"
     preprocess: decomment-go
     params:
       pattern: "'embedding'"

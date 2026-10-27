@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
-	"github.com/buildfoundry-nz/formwork/internal/finding"
 	"github.com/buildfoundry-nz/formwork/internal/report"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/rules/sqlparse"
@@ -20,21 +19,10 @@ import (
 )
 
 // enumerateEscapeHatches lists every exemption channel per rule — spec §9's
-// visibility requirement — plus, per rule and after its other lines, every
-// currently suppressed finding the engine evaluation discovered (G1: an
-// exemption quietly doing its job must be as visible as one that is merely
-// configured). findings is nil when the engine wasn't run (D2) or errored
-// before producing results (D1); either way the suppressed-finding lines
-// are simply omitted, since there's nothing to report. Informational: never
-// a failed check. command-type rules join this block in phase 5.
-func enumerateEscapeHatches(cfg *config.Config, root string, findings []finding.Finding, fset *scan.FileSet, gi GitIgnoreResult, devOptOutActive bool, w io.Writer) {
+// visibility requirement. Informational: never a failed check. command-type
+// rules join this block in phase 5.
+func enumerateEscapeHatches(cfg *config.Config, root string, fset *scan.FileSet, gi GitIgnoreResult, devOptOutActive bool, w io.Writer) {
 	ignored := fset.Ignored
-	suppressedByRule := map[string][]finding.Finding{}
-	for _, f := range findings {
-		if f.Suppressed {
-			suppressedByRule[f.RuleID] = append(suppressedByRule[f.RuleID], f)
-		}
-	}
 
 	var lines []string
 	// The engine-version backstop (spec §4) is itself an escape hatch when it
@@ -221,47 +209,23 @@ func enumerateEscapeHatches(cfg *config.Config, root string, findings []finding.
 		for _, g := range r.Exclude() {
 			lines = append(lines, fmt.Sprintf("  %s: scope.exclude: %s", r.ID, g))
 		}
-		// except.paths reports what each entry REMOVED, not what the rule
-		// declares (#138). The two neighbouring channels already report effect —
-		// scan.ignore prints live match counts so a typo'd glob reads "0
-		// matches" forever, and suppressed findings are enumerated per rule —
-		// and this was the one that printed a fossil with the same weight as a
-		// live carve-out.
-		//
-		// It is also the channel where the gap cannot be closed by reading
-		// findings: except.paths is a scope SUBTRACTION, so the rule never
-		// evaluates the file and no finding exists to count. The file set is the
-		// only witness, which is why this function takes it.
-		if paths := r.ExceptPaths; len(paths) > 0 {
-			removed := make(map[string]int, len(paths))
-			for _, f := range fset.Files {
-				if g, ok := r.CarvedOutBy(f.Path()); ok {
-					removed[g]++
-				}
-			}
-			// The SECOND number, which is the one that ranks the entries
-			// (#138). "N files removed" alone cannot tell a load-bearing
-			// carve-out from a fossil: an entry that removes three files the
-			// rule would never fire on renders exactly like one removing the
-			// single file it would. `0 would fire` is this channel's version of
-			// the `0 matches` a typo'd scan.ignore glob already gets.
-			//
-			// IT CANNOT COME FROM THE FINDINGS, which is what makes except.paths
-			// different from every other exemption here. It is a scope
-			// SUBTRACTION, not a suppression: Rule.Applies returns false, the
-			// rule never evaluates the file, and no finding exists to count. The
-			// number has to be produced by evaluating the rule against the
-			// carved-out files on purpose, which is what wouldFire does.
-			would, wErr := wouldFireUnder(r, fset)
-			for _, g := range paths {
-				line := fmt.Sprintf("  %s: except.paths: %s: %d file(s) removed from this rule's evaluation", r.ID, g, removed[g])
+		// scope.not_declaring reports what each marker REMOVED, not what the
+		// rule declares (#138's measure). A file that declares a marker leaves
+		// the rule's evaluation whole, so the rule never runs on it and no
+		// finding exists to count: the file set is the only witness, which is
+		// why this function takes it. A marker removing files the rule would
+		// fire on is an exemption doing work; `0 would fire` is a fossil.
+		if markers := r.NotDeclaring(); len(markers) > 0 {
+			removed, would, wErr := declinedEffect(r, fset)
+			for _, m := range markers {
+				line := fmt.Sprintf("  %s: scope.not_declaring: %q: %d file(s) removed from this rule's evaluation", r.ID, m, removed[m])
 				switch {
 				case wErr != nil:
 					line += fmt.Sprintf(", would fire: unknown (%v)", wErr)
 				case would == nil:
 					line += ", would fire: unknown (whole-run rule — its verdict depends on the set it was given, so a per-file answer would be invented)"
 				default:
-					line += fmt.Sprintf(", %d would fire", would[g])
+					line += fmt.Sprintf(", %d would fire", would[m])
 				}
 				lines = append(lines, line)
 			}
@@ -334,30 +298,6 @@ func enumerateEscapeHatches(cfg *config.Config, root string, findings []finding.
 		if strings.TrimSpace(r.FixtureExempt) != "" && isExternalTool(r) {
 			lines = append(lines, fmt.Sprintf("  %s: fixture-exempt (declared): %s", r.ID, r.FixtureExempt))
 		}
-		if r.Marker {
-			if _, ok := r.Checker.(rules.Finalizer); ok {
-				// Marker suppression only ever applies to per-file checker
-				// findings (spec §5); a checker that implements Finalizer
-				// can emit findings markers can never reach. Dual-role
-				// checkers (e.g. required-pattern in every-file mode) also
-				// satisfy this type assertion even though markers work for
-				// their per-file findings — this annotation is a visibility
-				// hint, not a correctness claim (phase-3a carryover, B2).
-				lines = append(lines, fmt.Sprintf("  %s: marker enabled (finalizer findings: unexemptable)", r.ID))
-			} else {
-				lines = append(lines, fmt.Sprintf("  %s: marker enabled", r.ID))
-			}
-		}
-		// findings is already sorted by (rule id, path, line) — see
-		// engine.Run — so this subsequence is already deterministically
-		// ordered by path then line without needing to sort again.
-		for _, f := range suppressedByRule[r.ID] {
-			if f.Line == 0 {
-				lines = append(lines, fmt.Sprintf("  %s: suppressed %s (%s)", r.ID, f.Path, f.SuppressedBy))
-			} else {
-				lines = append(lines, fmt.Sprintf("  %s: suppressed %s:%d (%s)", r.ID, f.Path, f.Line, f.SuppressedBy))
-			}
-		}
 	}
 	// Printed ABOVE the block rather than inside it. The engine skip set is a
 	// precondition present in every repository, so listing it as an escape-hatch
@@ -417,26 +357,45 @@ func insideRepository(root string) bool {
 	}
 }
 
-// wouldFireUnder counts, per except.paths glob, how many of the files that glob
-// carved out the rule would actually have fired on.
+// declinedEffect counts, per scope.not_declaring marker, the in-scope files
+// that marker removed from the rule's evaluation, and how many of those the
+// rule would actually have fired on. A file declaring two markers is charged to
+// the one Rule.DeclinedBy answers with, which is the one the engine acted on.
 //
-// A nil map with a nil error means the question does not apply: the rule's
-// verdict is not a per-file one, so evaluating a single carved-out file in
-// isolation would invent a number. A whole-tree invariant judges the set it was
-// given, and a Finalizer may emit findings no per-file call can produce — for
-// either, `0 would fire` would read as "this entry protects nothing" when the
-// truth is that nobody asked. Saying so is the same move sql/parses makes for
-// unparseable SQL and prefilter-load-bearing makes with `unproven`.
+// A nil would-fire map with a nil error means that question does not apply:
+// the rule's verdict is not a per-file one, so evaluating a single removed file
+// in isolation would invent a number. A whole-tree invariant judges the set it
+// was given, and a Finalizer may emit findings no per-file call can produce —
+// for either, `0 would fire` would read as "this marker protects nothing" when
+// the truth is that nobody asked. Saying so is the same move sql/parses makes
+// for unparseable SQL and prefilter-load-bearing makes with `unproven`.
 //
-// An error is returned rather than swallowed: an unreadable carved-out file
-// makes the count wrong in the direction of "this entry is a fossil", which is
-// the direction that gets an exemption deleted.
-func wouldFireUnder(r *config.Rule, fset *scan.FileSet) (map[string]int, error) {
+// An error is returned rather than swallowed: an unreadable file makes the
+// counts wrong in the direction of "this marker is a fossil", which is the
+// direction that hides an exemption doing work.
+func declinedEffect(r *config.Rule, fset *scan.FileSet) (removed, would map[string]int, err error) {
+	removed = map[string]int{}
+	var removedFiles []*scan.File
+	var removedBy []string
+	for _, f := range fset.Files {
+		if !r.Applies(f.Path()) {
+			continue
+		}
+		content, cerr := f.Content()
+		if cerr != nil {
+			return removed, nil, fmt.Errorf("%s: %w", f.Path(), cerr)
+		}
+		if m, ok := r.DeclinedBy(content); ok {
+			removed[m]++
+			removedFiles = append(removedFiles, f)
+			removedBy = append(removedBy, m)
+		}
+	}
 	if _, isFinalizer := r.Checker.(rules.Finalizer); isFinalizer {
-		return nil, nil
+		return removed, nil, nil
 	}
 	if _, isErrFinalizer := r.Checker.(rules.ErrFinalizer); isErrFinalizer {
-		return nil, nil
+		return removed, nil, nil
 	}
 	// CURRENTLY SHADOWED BY THE TWO ABOVE, and kept deliberately. Measured at
 	// this SHA, every rule type declaring WholeTreeInvariant also implements
@@ -449,24 +408,26 @@ func wouldFireUnder(r *config.Rule, fset *scan.FileSet) (map[string]int, error) 
 	// It stays because the shadowing is a property of today's rule set, not of
 	// the interface: a whole-tree invariant that answers per file — every file
 	// must satisfy P, reported per file — would be neither kind of finalizer,
-	// and evaluating one carved-out file in isolation would then invent exactly
+	// and evaluating one removed file in isolation would then invent exactly
 	// the number this function exists not to invent.
 	if rules.IsWholeTreeInvariant(r.Checker) {
-		return nil, nil
+		return removed, nil, nil
 	}
-	out := map[string]int{}
-	for _, f := range fset.Files {
-		g, ok := r.CarvedOutBy(f.Path())
-		if !ok {
-			continue
+	would = map[string]int{}
+	for i, f := range removedFiles {
+		// The variant the engine would have evaluated, so a preprocessed rule
+		// is asked about the bytes it actually reads.
+		work, verr := f.Variant(r.Preprocess)
+		if verr != nil {
+			return removed, nil, fmt.Errorf("%s: %w", f.Path(), verr)
 		}
-		ms, err := r.Checker.CheckFile(f)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", f.Path(), err)
+		ms, cerr := r.Checker.CheckFile(work)
+		if cerr != nil {
+			return removed, nil, fmt.Errorf("%s: %w", f.Path(), cerr)
 		}
 		if len(ms) > 0 {
-			out[g]++
+			would[removedBy[i]]++
 		}
 	}
-	return out, nil
+	return removed, would, nil
 }

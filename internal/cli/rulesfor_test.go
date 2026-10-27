@@ -114,21 +114,6 @@ func equalStringSets(a, b []string) bool {
 	return true
 }
 
-func TestRulesForRespectsExceptPaths(t *testing.T) {
-	// src/clean.txt is carved out via except.paths — the display must agree
-	// with the verdict Applies() would give, or guidance lies.
-	code, out, _ := runCLI(t, "rules-for", "-C", filepath.Join("testdata", "toyrepo"), "src/clean.txt")
-	if code != 0 {
-		t.Fatalf("exit %d:\n%s", code, out)
-	}
-	if strings.Contains(out, "no-todo-markers") {
-		t.Fatalf("except.paths carve-out ignored:\n%s", out)
-	}
-	if !strings.Contains(out, "none") {
-		t.Fatalf("zero governing rules must be explicit, not silent:\n%s", out)
-	}
-}
-
 func TestRulesForNonexistentPathIsNotAnError(t *testing.T) {
 	// Scope is a glob question, not a filesystem question: guidance is asked
 	// about files the agent is ABOUT to create.

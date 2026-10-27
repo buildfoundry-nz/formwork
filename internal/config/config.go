@@ -34,9 +34,7 @@ type Rule struct {
 	// (#53). Empty means undeclared, which lint reports rather than skips.
 	FixtureExempt string
 
-	Preprocess  string   // preprocess variant name; "" means raw
-	Marker      bool     // honor inline formwork:allow markers
-	ExceptPaths []string // except.paths carve-out globs (read-only after construction)
+	Preprocess string // preprocess variant name; "" means raw
 
 	// Library is the pack name this rule was loaded from (e.g. "generic").
 	// Empty means the rule was declared in the adopting repo. Lint's
@@ -69,11 +67,11 @@ type ExcludeEntry struct {
 
 // New builds a compiled rule directly. Load uses it; engine and report tests
 // use it to construct rules without YAML.
-func New(id, typeName string, sev finding.Severity, cure string, include, exclude, exceptPaths []string, c rules.Checker) (*Rule, error) {
+func New(id, typeName string, sev finding.Severity, cure string, include, exclude []string, c rules.Checker) (*Rule, error) {
 	if len(include) == 0 {
 		return nil, fmt.Errorf("rule %s: scope.include must not be empty", id)
 	}
-	for _, globs := range [][]string{include, exclude, exceptPaths} {
+	for _, globs := range [][]string{include, exclude} {
 		for _, g := range globs {
 			if !doublestar.ValidatePattern(g) {
 				return nil, fmt.Errorf("rule %s: invalid glob %q", id, g)
@@ -82,40 +80,13 @@ func New(id, typeName string, sev finding.Severity, cure string, include, exclud
 	}
 	return &Rule{
 		ID: id, Type: typeName, Severity: sev, Cure: cure,
-		include: include, exclude: exclude, ExceptPaths: exceptPaths, Checker: c,
+		include: include, exclude: exclude, Checker: c,
 	}, nil
 }
 
 // Applies reports whether relPath (slash-separated) is in this rule's scope.
 func (r *Rule) Applies(relPath string) bool {
-	return matchStored(r.include, relPath) &&
-		!matchStored(r.exclude, relPath) &&
-		!matchAny(r.ExceptPaths, relPath)
-}
-
-// CarvedOutBy reports which except.paths glob removed relPath from this rule's
-// evaluation, and whether any did.
-//
-// The include/exclude test comes FIRST and is the whole point: a path the rule
-// never covered was not carved out by anything, so a count built on this
-// measures a carve-out's EFFECT rather than its declaration (#138). That is the
-// same distinction scan.ignore already reports with live match counts, and the
-// one except.paths was missing — an entry whose subject moved away printed with
-// the same weight as one doing real work.
-//
-// except.paths is a scope SUBTRACTION, not a suppression: Applies returns false
-// for a matched path, so the rule never evaluates the file and there is no
-// finding for a census to count. Reading the file set is the only way to see it.
-func (r *Rule) CarvedOutBy(relPath string) (string, bool) {
-	if !matchStored(r.include, relPath) || matchStored(r.exclude, relPath) {
-		return "", false
-	}
-	for _, g := range r.ExceptPaths {
-		if ok, err := doublestar.Match(g, relPath); err == nil && ok {
-			return g, true
-		}
-	}
-	return "", false
+	return matchStored(r.include, relPath) && !matchStored(r.exclude, relPath)
 }
 
 // Exclude returns this rule's scope.exclude globs (read-only; do not mutate).
@@ -242,12 +213,10 @@ func (r *Rule) CloneWithChecker(c rules.Checker) *Rule {
 	return &clone
 }
 
-// matchStored is matchAny for include and exclude, which New validated and
-// nothing outside this package can reassign. Applies runs for every (file,
-// rule) pair the engine considers, and almost every pair is a miss; Match
-// re-validates the whole pattern on every miss, which a stored glob never
-// needs. ExceptPaths is exported and can be reassigned after New, so it stays
-// on matchAny.
+// matchStored matches include and exclude, which New validated and nothing
+// outside this package can reassign. Applies runs for every (file, rule) pair
+// the engine considers, and almost every pair is a miss; Match re-validates the
+// whole pattern on every miss, which a stored glob never needs.
 func matchStored(patterns []string, path string) bool {
 	for _, p := range patterns {
 		if doublestar.MatchUnvalidated(p, path) {
@@ -430,16 +399,15 @@ type fileSpec struct {
 }
 
 type ruleSpec struct {
-	ID         string     `yaml:"id"`
-	Type       string     `yaml:"type"`
-	Severity   string     `yaml:"severity"`
-	Scope      scopeSpec  `yaml:"scope"`
-	Preprocess string     `yaml:"preprocess"`
-	Params     yaml.Node  `yaml:"params"`
-	Except     exceptSpec `yaml:"except"`
-	Cure       string     `yaml:"cure"`
-	Origin     string     `yaml:"origin"`
-	Tags       []string   `yaml:"tags"`
+	ID         string    `yaml:"id"`
+	Type       string    `yaml:"type"`
+	Severity   string    `yaml:"severity"`
+	Scope      scopeSpec `yaml:"scope"`
+	Preprocess string    `yaml:"preprocess"`
+	Params     yaml.Node `yaml:"params"`
+	Cure       string    `yaml:"cure"`
+	Origin     string    `yaml:"origin"`
+	Tags       []string  `yaml:"tags"`
 	// FixtureExempt is a heavy rule's DECLARED reason for carrying no
 	// fixtures (#53). Heavy rules used to be exempt by cost, which made
 	// "cannot be fixtured by construction" and "nobody bothered" the same
@@ -465,11 +433,6 @@ type scopeSpec struct {
 	// human and decodes to a scalar), and so an empty marker — which matches
 	// every file — is an error rather than a rule scoped to nothing.
 	NotDeclaring yaml.Node `yaml:"not_declaring"`
-}
-
-type exceptSpec struct {
-	Paths  []string `yaml:"paths"`
-	Marker bool     `yaml:"marker"`
 }
 
 var idRE = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -654,7 +617,7 @@ func compile(spec ruleSpec) (*Rule, error) {
 	if err != nil {
 		return nil, fmt.Errorf("rule %s: scope.not_declaring: %w", spec.ID, err)
 	}
-	rule, err := New(spec.ID, spec.Type, sev, spec.Cure, spec.Scope.Include, excludeGlobs, spec.Except.Paths, checker)
+	rule, err := New(spec.ID, spec.Type, sev, spec.Cure, spec.Scope.Include, excludeGlobs, checker)
 	if err != nil {
 		return nil, err
 	}
@@ -671,6 +634,5 @@ func compile(spec ruleSpec) (*Rule, error) {
 	rule.factory = factory
 	rule.params = params
 	rule.Preprocess = spec.Preprocess
-	rule.Marker = spec.Except.Marker
 	return rule, nil
 }

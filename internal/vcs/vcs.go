@@ -720,7 +720,7 @@ func gitExit(root string, args ...string) (string, int, error) {
 // A nil env is os/exec's own meaning, "inherit the parent's unchanged" — which
 // is what gitEnv returns for the FORMWORK_GIT_ENV hatch.
 func gitExitEnv(env []string, root string, args ...string) (string, int, error) {
-	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	cmd := exec.Command("git", gitArgv(root, args)...)
 	cmd.Env = env
 	out, err := cmd.Output()
 	if err != nil {
@@ -731,4 +731,14 @@ func gitExitEnv(env []string, root string, args ...string) (string, int, error) 
 		return "", -1, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	return string(out), 0, nil
+}
+
+// gitArgv is the argv both exec sites in this package run: git at root, with
+// core.fsmonitor off. git consults fsmonitor on every index read and waits for
+// it, so a wedged fsmonitor daemon stalls the call indefinitely; one held a
+// pre-commit's check, and with it a machine-wide hook lock, for ten minutes.
+// fsmonitor only changes how git finds changed paths, never what it answers,
+// so no answer here depends on it.
+func gitArgv(root string, args []string) []string {
+	return append([]string{"-c", "core.fsmonitor=false", "-C", root}, args...)
 }

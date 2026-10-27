@@ -667,7 +667,11 @@ The validating target's synth-test discipline, built into the engine:
 - `formwork test [--rule <id>[,<id>…]]` narrows a run to the named rules'
   fixtures for the inner loop while porting; the flag repeats and
   comma-splits so one corpus load serves the whole selection (#49), and an
-  unknown id among known ones is still exit 2 with nothing run; with no `--rule` every rule runs, so CI is
+  unknown id among known ones is still exit 2 with nothing run;
+  `formwork test --format human|json` adds a machine-readable per-rule, per-arm
+  result (versioned; exit codes identical to human, nothing on stdout at exit 2)
+  rendered from the same structured results the human text is, so the two cannot
+  disagree (#49); with no `--rule` every rule runs, so CI is
   unaffected. Selection is **fail-closed**: a `--rule` naming no configured rule
   is exit 2, never an empty run reported as "0/0 passed" — a selector that
   silently matches nothing is the same misconfigured-rule-passes hazard the

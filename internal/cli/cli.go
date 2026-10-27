@@ -703,6 +703,7 @@ func runTest(args []string, stdout, stderr io.Writer) int {
 	workers := fs.Int("workers", 0, "worker count (0 or absent = GOMAXPROCS; a negative count is refused)")
 	var rules ruleSelection
 	fs.Var(&rules, "rule", "run only the named rules' fixtures; repeat the flag or comma-separate ids (default: all rules; any unknown id is exit 2)")
+	format := fs.String("format", "human", "output format: human | json")
 	cfg, ok := parseAndLoad(fs, args, root, stderr)
 	if !ok {
 		return 2
@@ -712,6 +713,14 @@ func runTest(args []string, stdout, stderr io.Writer) int {
 	// refusal further down would otherwise answer `--workers -1` with advice
 	// about rule files.
 	if !workersValueUsable(*workers, stderr) {
+		return 2
+	}
+	// report.ValidFormat also admits "github", which has no meaning for fixture
+	// verdicts, so this command validates its own pair.
+	switch *format {
+	case "", "human", "json":
+	default:
+		fmt.Fprintf(stderr, "formwork: unknown format %q (want human or json)\n", *format)
 		return 2
 	}
 	// Collect the full id set BEFORE --rule scoping: the orphan check inside
@@ -763,6 +772,25 @@ func runTest(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		cfg = scoped
+	}
+	if *format == "json" {
+		// Results first, render second: an error returns before a byte reaches
+		// stdout, so exit 2 never carries a document.
+		results, err := fixturetest.Results(cfg, allIDs, *root, *workers)
+		if err != nil {
+			fmt.Fprintln(stderr, "formwork:", err)
+			return 2
+		}
+		if err := report.TestJSON(stdout, results); err != nil {
+			fmt.Fprintln(stderr, "formwork:", err)
+			return 2
+		}
+		for _, rr := range results {
+			if rr.Status == fixturetest.StatusFail {
+				return 1
+			}
+		}
+		return 0
 	}
 	failed, err := fixturetest.Run(cfg, allIDs, *root, *workers, stdout)
 	if err != nil {

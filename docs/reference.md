@@ -1441,6 +1441,28 @@ formwork version                 # the stamped release version
 rule's checks and is fail-closed on an unknown id. `test` accepts several: repeat
 the flag (`--rule a --rule b`) or comma-separate (`--rule a,b`); repeats are run
 once, and a single unknown id among known ones is exit 2 with nothing run, one
-`no rule matches --rule "<id>"` line per unknown id. `lint --rule` takes one id. `hooks install` refuses
+`no rule matches --rule "<id>"` line per unknown id. `lint --rule` takes one id.
+
+`test --format human|json` (default `human`; anything else is exit 2, and `github`
+is not a `test` format). `json` writes one object to stdout with a trailing
+newline and the same exit code as `human` (0 pass, 1 a rule failed, 2 error); on
+exit 2 nothing is written to stdout. Shape:
+
+```json
+{"version": 1,
+ "rules": [{"rule": "id", "status": "ok|fail|skip", "reason": "…",
+            "arms": [{"arm": "fire-1", "kind": "fire|pass",
+                      "path": ".formwork/fixtures/id/fire-1",
+                      "ok": true, "problems": ["fire-1: …"]}]}],
+ "summary": {"rules": 2, "rules_passed": 1, "fixtures": 4}}
+```
+
+`version` bumps on any breaking change to this shape. `rules` is sorted by id and
+`arms` by arm name; `arms` is `[]`, never `null`. `status` is `skip` for a rule
+with no fixtures and `reason` says why; an orphan fixture dir (matching no rule
+id) is a `fail` with a `reason` and no arms. `problems` (omitted when the arm is
+fine) are the strings the human output prints, arm-name prefix included.
+`summary` mirrors the human summary line: `rules` and `rules_passed` exclude
+skipped rules, and `fixtures` is the number of arms run. `hooks install` refuses
 rather than taking over hook wiring that is already there; `hooks verify` judges
 the installed shims and writes nothing.

@@ -34,21 +34,115 @@ type armEntry struct {
 	src string
 }
 
+// ArmResult is one fixture arm's outcome.
+type ArmResult struct {
+	Arm      string   `json:"arm"`  // fixture dir name, e.g. "pass-clean"
+	Kind     string   `json:"kind"` // "fire" | "pass"
+	Path     string   `json:"path"` // repo-relative fixture dir, slash-separated
+	OK       bool     `json:"ok"`
+	Problems []string `json:"problems,omitempty"` // the same strings the human output prints
+}
+
+// RuleResult is one rule's fixture outcome. An orphan fixture dir (#9) is a
+// RuleResult with Status "fail", a Reason and no arms.
+type RuleResult struct {
+	Rule   string      `json:"rule"`
+	Status string      `json:"status"`           // "ok" | "fail" | "skip"
+	Reason string      `json:"reason,omitempty"` // why skip / orphan
+	Arms   []ArmResult `json:"arms"`             // sorted by Arm name; [] never null
+}
+
+// Result statuses and arm kinds.
+const (
+	StatusOK   = "ok"
+	StatusFail = "fail"
+	StatusSkip = "skip"
+
+	KindFire = "fire"
+	KindPass = "pass"
+)
+
+const (
+	orphanReason     = "dir matches no rule id and can never run"
+	noFixturesReason = "no fixtures (formwork lint reports coverage)"
+	exemptPrefix     = "declared fixture-exempt: "
+)
+
+// newArmResult records one arm's outcome. Problems carry the arm-name prefix
+// the human output prints.
+func newArmResult(ruleID string, a armEntry, ps []string) ArmResult {
+	kind := KindPass
+	if a.isFire {
+		kind = KindFire
+	}
+	ar := ArmResult{
+		Arm:  a.name,
+		Kind: kind,
+		Path: filepath.ToSlash(filepath.Join(".formwork", "fixtures", ruleID, a.name)),
+		OK:   len(ps) == 0,
+	}
+	for _, p := range ps {
+		ar.Problems = append(ar.Problems, a.name+": "+p)
+	}
+	return ar
+}
+
 // Run evaluates every rule's fixtures under root/.formwork/fixtures and
 // writes verdicts to w. It returns the number of failing verdicts (rules
 // whose fixtures misbehaved, plus fixture dirs matching no rule id).
 // Infrastructure problems (unreadable dirs, bad manifests, un-refreshable
 // rules, symlinked fixture trees) return an error instead — never a silent
-// pass.
+// pass. The text is rendered from Results, so the two cannot disagree.
+func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io.Writer) (int, error) {
+	results, err := Results(cfg, allRuleIDs, root, workers)
+	if err != nil {
+		return 0, err
+	}
+	failed, ran, skipped := 0, 0, 0
+	for _, rr := range results {
+		switch rr.Status {
+		case StatusSkip:
+			skipped++
+			fmt.Fprintf(w, "[%s] SKIP — %s\n", rr.Rule, rr.Reason)
+		case StatusOK:
+			ran += len(rr.Arms)
+			fmt.Fprintf(w, "[%s] OK — %d fixture(s)\n", rr.Rule, len(rr.Arms))
+		default:
+			failed++
+			if rr.Reason != "" { // orphan: no arms, never ran
+				fmt.Fprintf(w, "[%s] FAIL — %s\n", rr.Rule, rr.Reason)
+				continue
+			}
+			ran += len(rr.Arms)
+			n := 0
+			for _, a := range rr.Arms {
+				n += len(a.Problems)
+			}
+			fmt.Fprintf(w, "[%s] FAIL — %d problem(s)\n", rr.Rule, n)
+			for _, a := range rr.Arms {
+				for _, p := range a.Problems {
+					fmt.Fprintf(w, "  %s\n", p)
+				}
+			}
+		}
+	}
+	total := len(results) - skipped
+	fmt.Fprintf(w, "formwork test: %d/%d rules passed, %d fixture(s) run, %d rule(s) skipped\n",
+		total-failed, total, ran, skipped)
+	return failed, nil
+}
+
+// Results evaluates every rule's fixtures and returns one RuleResult per rule
+// in cfg order (rule-id sorted), then one per orphan fixture dir, sorted.
 //
 // allRuleIDs is the FULL corpus id set, collected before any --rule scoping
 // narrows cfg: the orphan check must know every legitimate fixture-dir name,
 // or a scoped run would read sibling rules' fixtures as orphans (#58). A dir
-// matching no id in that full set is still a FAIL finding; it does not abort
+// matching no id in that full set is still a FAIL result; it does not abort
 // the run (#9).
-func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io.Writer) (int, error) {
+func Results(cfg *config.Config, allRuleIDs []string, root string, workers int) ([]RuleResult, error) {
 	fixturesRoot := filepath.Join(root, ".formwork", "fixtures")
-	failed, ran, skipped := 0, 0, 0
+	results := []RuleResult{}
 
 	// A fixture tree whose directory matches no rule id is unreachable by the
 	// per-rule loop below: no run ever opens it, so the proof it holds is dead
@@ -64,7 +158,7 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 	}
 	rootEntries, err := os.ReadDir(fixturesRoot)
 	if err != nil && !os.IsNotExist(err) {
-		return 0, fmt.Errorf("fixtures: reading %s: %w", fixturesRoot, err)
+		return nil, fmt.Errorf("fixtures: reading %s: %w", fixturesRoot, err)
 	}
 	var orphans []string
 	for _, e := range rootEntries {
@@ -76,7 +170,7 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 		// object loud or invisible depending on its name. Refusing makes the
 		// policy a decision instead of an lstat accident.
 		if e.Type()&fs.ModeSymlink != 0 {
-			return 0, fmt.Errorf("fixtures: %s is a symlink — refused: the discovery walk does not follow links, so a symlinked fixture tree is either silently skipped or followed by accident; use a real directory",
+			return nil, fmt.Errorf("fixtures: %s is a symlink — refused: the discovery walk does not follow links, so a symlinked fixture tree is either silently skipped or followed by accident; use a real directory",
 				filepath.Join(fixturesRoot, e.Name()))
 		}
 		if !e.IsDir() { // non-dir, non-symlink entries stay ignored (README etc.)
@@ -92,7 +186,7 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 		ruleDir := filepath.Join(fixturesRoot, r.ID)
 		entries, err := os.ReadDir(ruleDir)
 		if err != nil && !os.IsNotExist(err) {
-			return 0, fmt.Errorf("fixtures: reading %s: %w", ruleDir, err)
+			return nil, fmt.Errorf("fixtures: reading %s: %w", ruleDir, err)
 		}
 
 		var arms []armEntry
@@ -109,7 +203,7 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 			// because an unknown-named symlink is the worse case: it would
 			// evade the unrecognized-dir error below as well.
 			if e.Type()&fs.ModeSymlink != 0 {
-				return 0, fmt.Errorf("fixtures: %s is a symlink — refused: the fixture walk does not follow links, so a symlinked fixture tree never executes and its rule still reports OK; use a real directory",
+				return nil, fmt.Errorf("fixtures: %s is a symlink — refused: the fixture walk does not follow links, so a symlinked fixture tree never executes and its rule still reports OK; use a real directory",
 					filepath.Join(ruleDir, e.Name()))
 			}
 			if !e.IsDir() {
@@ -118,7 +212,7 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 			name := e.Name()
 			isFire := strings.HasPrefix(name, "fire-")
 			if !isFire && !strings.HasPrefix(name, "pass-") {
-				return 0, fmt.Errorf("fixtures: %s: unrecognized fixture dir %q, expected fire-* or pass-*",
+				return nil, fmt.Errorf("fixtures: %s: unrecognized fixture dir %q, expected fire-* or pass-*",
 					ruleDir, name)
 			}
 			arms = append(arms, armEntry{name: name, isFire: isFire})
@@ -126,89 +220,66 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 
 		armTrees, releaseArms, err := isolateArms(r, ruleDir, arms)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		arms = armTrees
 
-		var problems []string
-		count := 0
+		var armResults []ArmResult
 		if cmd, ok := ruleCommandCmd(r); ok {
 			if shape, ok := parseGoRunShape(cmd); ok && len(arms) > 0 {
-				ps, n, err := runCommandFixturesCompileOnce(r, arms, shape, root, workers)
+				rs, err := runCommandFixturesCompileOnce(r, arms, shape, root, workers)
 				if err != nil {
 					releaseArms()
-					return 0, err
+					return nil, err
 				}
-				problems, count = ps, n
+				armResults = rs
 			}
 		}
-		if count == 0 {
+		if len(armResults) == 0 {
 			for _, a := range arms {
-				count++
 				ps, err := runFixture(r, a.path, a.src, a.isFire, root, workers)
 				if err != nil {
 					releaseArms()
-					return 0, err
+					return nil, err
 				}
-				for _, p := range ps {
-					problems = append(problems, a.name+": "+p)
-				}
+				armResults = append(armResults, newArmResult(r.ID, a, ps))
 			}
 		}
 		releaseArms()
+		sort.SliceStable(armResults, func(i, j int) bool { return armResults[i].Arm < armResults[j].Arm })
 
-		if count == 0 {
-			skipped++
+		if len(armResults) == 0 {
 			// The two skips are not the same thing and used to print
 			// identically (#53): a declared exemption is a decision, an
 			// undeclared one is a rule with no firing proof that nobody
-			// decided about. `N rule(s) skipped` blended them, so the ones
-			// worth looking at were invisible in the noise.
+			// decided about.
 			//
 			// The predicate is the one internal/meta uses for the same field
 			// — TrimSpace-non-empty AND heavy — because a rule gets one
-			// verdict, not one per command (#336). Read as `!= ""` alone it
-			// disagreed with `formwork lint` twice over:
-			//
-			//   - `fixture_exempt: "   "` printed `declared fixture-exempt:`
-			//     with nothing after the colon. Deciding is what the field is
-			//     for, and three spaces record no decision, so this rule is
-			//     undeclared and belongs in the branch below.
-			//
-			//   - fixture_exempt governs HEAVY rules only (docs/reference.md).
-			//     fixture-coverage judges a fast rule on its fire/pass
-			//     fixtures whatever it declares, so a fast rule with a real
-			//     reason and no fixtures was skipped here at exit 0 and failed
-			//     there — the same rule, the same repository, one command
-			//     apart.
+			// verdict, not one per command (#336): `fixture_exempt: "   "`
+			// records no decision, and fixture_exempt governs HEAVY rules only
+			// (docs/reference.md), so a fast rule with a real reason and no
+			// fixtures is still the undeclared kind.
+			reason := noFixturesReason
 			if strings.TrimSpace(r.FixtureExempt) != "" && r.Cost() == rules.CostHeavy {
-				fmt.Fprintf(w, "[%s] SKIP — declared fixture-exempt: %s\n", r.ID, r.FixtureExempt)
-			} else {
-				fmt.Fprintf(w, "[%s] SKIP — no fixtures (formwork lint reports coverage)\n", r.ID)
+				reason = exemptPrefix + r.FixtureExempt
 			}
+			results = append(results, RuleResult{Rule: r.ID, Status: StatusSkip, Reason: reason, Arms: []ArmResult{}})
 			continue
 		}
-		ran += count
-		if len(problems) == 0 {
-			fmt.Fprintf(w, "[%s] OK — %d fixture(s)\n", r.ID, count)
-			continue
+		status := StatusOK
+		for _, a := range armResults {
+			if !a.OK {
+				status = StatusFail
+			}
 		}
-		failed++
-		fmt.Fprintf(w, "[%s] FAIL — %d problem(s)\n", r.ID, len(problems))
-		for _, p := range problems {
-			fmt.Fprintf(w, "  %s\n", p)
-		}
+		results = append(results, RuleResult{Rule: r.ID, Status: status, Arms: armResults})
 	}
 
 	for _, id := range orphans {
-		failed++
-		fmt.Fprintf(w, "[%s] FAIL — dir matches no rule id and can never run\n", id)
+		results = append(results, RuleResult{Rule: id, Status: StatusFail, Reason: orphanReason, Arms: []ArmResult{}})
 	}
-
-	total := len(cfg.Rules) - skipped + len(orphans)
-	fmt.Fprintf(w, "formwork test: %d/%d rules passed, %d fixture(s) run, %d rule(s) skipped\n",
-		total-failed, total, ran, skipped)
-	return failed, nil
+	return results, nil
 }
 
 // EvalIn evaluates one rule over the fixture tree rooted at dir, returning its

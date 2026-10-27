@@ -7,6 +7,9 @@
 - `formwork test --rule` takes several rules in one call, repeated
   (`--rule a --rule b`) or comma-separated (`--rule a,b`), so one corpus load
   serves the whole selection. Any unknown id is exit 2 with nothing run (#49).
+- `formwork test --format json` writes a versioned (`version: 1`) per-rule,
+  per-arm result document; the human output is rendered from the same
+  structured results and is unchanged (#49).
 
 ## 0.12.0
 

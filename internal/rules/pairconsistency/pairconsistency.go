@@ -512,6 +512,9 @@ func (c *pairConsistency) Finalize() []rules.Match {
 // same-file is a per-file assertion and stays range-scopeable.
 func (c *pairConsistency) WholeTreeInvariant() bool { return c.where == whereSameDir }
 
+// ScopeBound is true: both sides of a pair are in-scope files seen in CheckFile.
+func (c *pairConsistency) ScopeBound() bool { return true }
+
 func init() {
 	rules.Register("pair-consistency", newPairConsistency)
 }

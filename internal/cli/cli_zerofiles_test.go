@@ -476,8 +476,11 @@ func TestCheckStagedNamesTheWholeTreeInvariantArm(t *testing.T) {
 	gitInit(t, root)
 	gitRun(t, root, "add", "-A")
 	gitRun(t, root, "commit", "-qm", "init")
-	mustWrite(t, filepath.Join(root, "notes.txt"), "unrelated\n")
-	gitRun(t, root, "add", "notes.txt")
+	// In scope, so the changeset gate runs the invariant: a change that
+	// reaches none of its scope does not run it at all, and is named on the
+	// changeset channel instead (cli_changesetgate_test.go).
+	mustWrite(t, filepath.Join(root, "src", "b.go"), "package src\n")
+	gitRun(t, root, "add", "src/b.go")
 
 	code, out, errOut := runCLI(t, "check", "-C", root, "--staged")
 	if code != 0 {

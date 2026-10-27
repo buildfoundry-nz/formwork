@@ -295,6 +295,9 @@ func (c counted) Finalize() []rules.Match {
 // cannot judge.
 func (c counted) WholeTreeInvariant() bool { return true }
 
+// ScopeBound is true: the holders are counted from in-scope files in CheckFile.
+func (c counted) ScopeBound() bool { return true }
+
 // HasCredentials lets the config loader refuse a credential on a library rule:
 // its holder count is a fact about the consuming repo.
 func (c counted) HasCredentials() bool { return true }

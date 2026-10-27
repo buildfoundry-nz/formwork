@@ -127,6 +127,9 @@ func (c *methodDelegates) Finalize() []rules.Match {
 // over the whole tree (spec §8).
 func (c *methodDelegates) WholeTreeInvariant() bool { return true }
 
+// ScopeBound is true: declarations are collected from in-scope files in CheckFile.
+func (c *methodDelegates) ScopeBound() bool { return true }
+
 func init() {
 	rules.Register("dart/method-delegates", newMethodDelegates)
 }

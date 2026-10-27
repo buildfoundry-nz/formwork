@@ -664,8 +664,10 @@ The validating target's synth-test discipline, built into the engine:
 - `formwork test` runs as a plain CI step — no build-tag isolation, so the
   historical "synths compiled out, job passed vacuously" failure mode cannot
   recur.
-- `formwork test [--rule <id>]` narrows a run to one rule's fixtures for the
-  inner loop while porting; with no `--rule` every rule runs, so CI is
+- `formwork test [--rule <id>[,<id>…]]` narrows a run to the named rules'
+  fixtures for the inner loop while porting; the flag repeats and
+  comma-splits so one corpus load serves the whole selection (#49), and an
+  unknown id among known ones is still exit 2 with nothing run; with no `--rule` every rule runs, so CI is
   unaffected. Selection is **fail-closed**: a `--rule` naming no configured rule
   is exit 2, never an empty run reported as "0/0 passed" — a selector that
   silently matches nothing is the same misconfigured-rule-passes hazard the

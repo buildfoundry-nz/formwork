@@ -1438,6 +1438,9 @@ formwork version                 # the stamped release version
 ```
 
 `test` and `lint` both take `--rule <id>`, which runs one rule's fixtures or one
-rule's checks and is fail-closed on an unknown id. `hooks install` refuses
+rule's checks and is fail-closed on an unknown id. `test` accepts several: repeat
+the flag (`--rule a --rule b`) or comma-separate (`--rule a,b`); repeats are run
+once, and a single unknown id among known ones is exit 2 with nothing run, one
+`no rule matches --rule "<id>"` line per unknown id. `lint --rule` takes one id. `hooks install` refuses
 rather than taking over hook wiring that is already there; `hooks verify` judges
 the installed shims and writes nothing.

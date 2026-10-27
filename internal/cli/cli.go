@@ -7,6 +7,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
@@ -133,6 +135,9 @@ func parseAndLoad(fs *flag.FlagSet, args []string, root *string, stderr io.Write
 // loadGated is parseAndLoad's envelope-gate-load half: one envelope read,
 // the engine gate on those same bytes, then rule loading.
 func loadGated(root string, stderr io.Writer) (cfg *config.Config, ok bool) {
+	if loadHook != nil {
+		loadHook()
+	}
 	env, err := config.ReadEnvelope(root)
 	if err != nil {
 		fmt.Fprintln(stderr, "formwork:", err)
@@ -147,6 +152,56 @@ func loadGated(root string, stderr io.Writer) (cfg *config.Config, ok bool) {
 		return nil, false
 	}
 	return cfg, true
+}
+
+// loadHook is a test seam, called once per corpus load, so a test can pin that
+// a multi-rule selection shares one load. Nil outside tests.
+var loadHook func()
+
+// ruleSelection is the repeatable, comma-splitting value of `test --rule`: each
+// occurrence is split on commas, segments are trimmed, empties dropped, and
+// repeats removed keeping first-seen order.
+type ruleSelection []string
+
+func (l *ruleSelection) String() string { return strings.Join(*l, ",") }
+
+func (l *ruleSelection) Set(v string) error {
+	for _, seg := range strings.Split(v, ",") {
+		seg = strings.TrimSpace(seg)
+		if seg == "" || slices.Contains(*l, seg) {
+			continue
+		}
+		*l = append(*l, seg)
+	}
+	return nil
+}
+
+// scopeToRules is scopeToRule for several ids: it returns the shallow copy
+// narrowed to the named rules plus every id that matched no rule, in the order
+// given. The caller must treat any unknown id as exit 2 — a partial run must
+// not read as a full pass.
+func scopeToRules(cfg *config.Config, ids []string) (scoped *config.Config, unknown []string) {
+	want := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		want[id] = true
+	}
+	var kept []*config.Rule
+	found := make(map[string]bool, len(ids))
+	for _, r := range cfg.Rules {
+		if want[r.ID] {
+			kept = append(kept, r)
+			found[r.ID] = true
+		}
+	}
+	for _, id := range ids {
+		if !found[id] {
+			unknown = append(unknown, id)
+		}
+	}
+	c := *cfg
+	c.Rules = kept
+	c.Lanes = nil
+	return &c, unknown
 }
 
 // scopeToRule returns a shallow copy of cfg narrowed to the single rule named
@@ -646,7 +701,8 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 func runTest(args []string, stdout, stderr io.Writer) int {
 	fs, root := newFlagSet("test", "repository root", stderr)
 	workers := fs.Int("workers", 0, "worker count (0 or absent = GOMAXPROCS; a negative count is refused)")
-	rule := fs.String("rule", "", "run only the named rule's fixtures (default: all rules)")
+	var rules ruleSelection
+	fs.Var(&rules, "rule", "run only the named rules' fixtures; repeat the flag or comma-separate ids (default: all rules; any unknown id is exit 2)")
 	cfg, ok := parseAndLoad(fs, args, root, stderr)
 	if !ok {
 		return 2
@@ -698,10 +754,12 @@ func runTest(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "formwork:", noRulesReason(cfg, "there are no fixtures to run and nothing this command could report on"))
 		return 2
 	}
-	if *rule != "" {
-		scoped, matched := scopeToRule(cfg, *rule)
-		if !matched {
-			fmt.Fprintf(stderr, "formwork: no rule matches --rule %q\n", *rule)
+	if len(rules) > 0 {
+		scoped, unknown := scopeToRules(cfg, rules)
+		for _, id := range unknown {
+			fmt.Fprintf(stderr, "formwork: no rule matches --rule %q\n", id)
+		}
+		if len(unknown) > 0 {
 			return 2
 		}
 		cfg = scoped

@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.12.0
+
+### Changed (breaking)
+
+- **A changeset run skips the whole-tree rules its change cannot reach.**
+  Under `--staged`/`--range`, every whole-tree invariant evaluated over the
+  tracked tree and every forbidden-pattern `census` ran its whole-root
+  detector, whatever the change touched: a one-file commit on a 4,300-rule
+  corpus ran 1,413 invariants and nine whole-root detectors. A rule whose
+  checker declares that its inputs are its scope (`rules.ScopeBound` for an
+  invariant, `rules.SubjectScoped` for a census) now runs only when the
+  any-status changeset reaches a path its scope admits or a path under
+  `.formwork/`. Otherwise it is named in `rules_not_run` on the new
+  `changeset` channel, and is neither rendered as `OK` nor counted as passed.
+  `invariant_rules` counts only the invariants that ran. `baseline` does not
+  declare it and always runs. The whole-tree `check` is unchanged.
+
+  Breaking for a hook that relied on a changeset run to report a whole-tree
+  violation the change did not touch: that run now passes, and only the
+  whole-tree run reports it. A census whose scope does not name every file its
+  detector reads is now judged only when a changeset reaches that scope; widen
+  the scope to the detector's subject.
+
 ## 0.11.0
 
 ### Removed (breaking)
@@ -23,27 +46,6 @@
 - **`generic`'s `concurrent-tests-use-sync-primitives` has no opt-out
   comment.** `// audit-16-#5-concurrent-allowlist: <reason>` no longer
   satisfies the rule. A `*Concurrent*` test must coordinate real concurrency.
-
-### Changed (breaking)
-
-- **A changeset run skips the whole-tree rules its change cannot reach.**
-  Under `--staged`/`--range`, every whole-tree invariant evaluated over the
-  tracked tree and every forbidden-pattern `census` ran its whole-root
-  detector, whatever the change touched: a one-file commit on a 4,300-rule
-  corpus ran 1,413 invariants and nine whole-root detectors. A rule whose
-  checker declares that its inputs are its scope (`rules.ScopeBound` for an
-  invariant, `rules.SubjectScoped` for a census) now runs only when the
-  any-status changeset reaches a path its scope admits or a path under
-  `.formwork/`. Otherwise it is named in `rules_not_run` on the new
-  `changeset` channel, and is neither rendered as `OK` nor counted as passed.
-  `invariant_rules` counts only the invariants that ran. `baseline` does not
-  declare it and always runs. The whole-tree `check` is unchanged.
-
-  Breaking for a hook that relied on a changeset run to report a whole-tree
-  violation the change did not touch: that run now passes, and only the
-  whole-tree run reports it. A census whose scope does not name every file its
-  detector reads is now judged only when a changeset reaches that scope; widen
-  the scope to the detector's subject.
 
 ## 0.10.2
 

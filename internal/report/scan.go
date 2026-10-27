@@ -57,6 +57,10 @@ type ScanSummary struct {
 	// over the tracked tree even in a file-set run (#4). Reporting the
 	// changeset's size beside "N/N rules passed" without saying so is a
 	// manufactured coverage claim — those rules did not read those files.
+	//
+	// Only the invariants that RAN are counted. One the changeset could not
+	// reach was not evaluated at all, and is named in RulesNotRun on
+	// SkipChannelChangeset instead.
 	InvariantRules int
 	// RulesMatchingNoFiles names the rules whose scope selected nothing out of
 	// what was scanned, in the order the rules were given. External-tool rules
@@ -68,11 +72,13 @@ type ScanSummary struct {
 	// bury the real signal on the path that runs most — the pre-commit shim.
 	RulesMatchingNoFiles []string
 	// RulesNotRun names the rules that reached no verdict at all, with the reason,
-	// in the order they were given. Two channels feed it and the reason says
+	// in the order they were given. Three channels feed it and the reason says
 	// which: a CHECKER that declined to run itself (`command`'s
-	// when.paths_changed, whose tool never ran), and a rule the CLI filtered out
-	// before the engine (--skip-escapes). Both rendered `[id] OK` or nothing at
-	// all — indistinguishable from a rule whose tool ran and passed (#159).
+	// when.paths_changed, whose tool never ran), a rule the CLI filtered out
+	// before the engine (--skip-escapes, --cost-max), and a scope-bound invariant
+	// the changeset could not reach. The first two rendered `[id] OK` or nothing
+	// at all — indistinguishable from a rule whose tool ran and passed (#159) —
+	// and the third is listed here so that it never can.
 	//
 	// One list rather than one per channel, because the operator's question is
 	// "which rules did not run, and why", and answering it from two places is how
@@ -153,6 +159,12 @@ const (
 	// (check --cost-max, #22): the same kind of drop as --skip-escapes,
 	// carried on its own channel so a consumer can tell the two apart.
 	SkipChannelCostMax = "cost-max"
+	// SkipChannelChangeset is a scope-bound whole-tree invariant that a
+	// --staged/--range run did not evaluate because the changeset reached none
+	// of its inputs. Neither an operator narrowing nor a checker's own gate: the
+	// change itself could not move the verdict, and the whole-tree run still
+	// judges the rule.
+	SkipChannelChangeset = "changeset"
 )
 
 // SkippedRule is one rule that did not run, and why. Reason is the explanation

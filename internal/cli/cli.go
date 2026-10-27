@@ -452,6 +452,9 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	// File-set modes restrict the scan to a git changeset. Fail-closed: a git
 	// error is exit 2, never a silent fall back to the whole tree.
 	var findings []finding.Finding
+	// The scope-bound invariants a changeset could not reach. Named in
+	// RulesNotRun below, never silently dropped.
+	var changesetSkips []report.SkippedRule
 	if *staged || *rangeSpec != "" {
 		// scannableOnly, not anyStatus: everything below opens these paths, so a
 		// deleted one has nothing to read. scope asks the same seam the other
@@ -500,8 +503,19 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		// evaluate over the tracked tree even here — matching CI's whole-tree
 		// run. Everything else is per-file/monotonic and range-scopes to the
 		// changeset for speed (removing files can only remove its findings).
+		//
+		// A rule judging more than the changed files that the changeset never
+		// reached is named, not run (gateOnChangeset). It is asked of the
+		// ANY-STATUS changeset: `changed` above drops deletions and renames.
+		touched, err := changesetFor(*root, *staged, *rangeSpec, anyStatus)
+		if err != nil {
+			fmt.Fprintln(stderr, "formwork:", err)
+			return 2
+		}
+		gated, skips := gateOnChangeset(rls, touched)
+		changesetSkips = skips
 		var invariant, perFile []*config.Rule
-		for _, r := range rls {
+		for _, r := range gated {
 			if r.WholeTreeInvariant() {
 				invariant = append(invariant, r)
 			} else {
@@ -608,12 +622,16 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	// The --skip-escapes drops come first and from the unfiltered pass above:
 	// those rules are gone from rls by now, so nothing downstream could recover
 	// them.
-	summary.RulesNotRun = append(droppedEscapes, meta.SelfSkippedRules(rls)...)
+	summary.RulesNotRun = append(append(droppedEscapes, changesetSkips...), meta.SelfSkippedRules(rls)...)
 	// rls must be the complete loaded rule set: the json/github renderers
 	// join each finding's cure: from it by rule id (#107), so passing a
 	// filtered slice would silently render cure-less annotations. Both
 	// engine.Run branches above draw findings from this same rls.
-	if err := report.Render(*format, stdout, rls, findings, summary, timing); err != nil {
+	// The one subtraction is a rule the changeset gate did not run: it has no
+	// finding, and rendering it would print `[id] OK` for a verdict never
+	// reached (#159), so it is left out the way --skip-escapes leaves out what
+	// it drops.
+	if err := report.Render(*format, stdout, withoutSkipped(rls, changesetSkips), findings, summary, timing); err != nil {
 		fmt.Fprintln(stderr, "formwork:", err)
 		return 2
 	}

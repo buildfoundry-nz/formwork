@@ -357,7 +357,10 @@ that detector's params (`cmd`, `when`, `expect`, `output` — the same keys
 `command` decodes, except `cost`). The rule does not declare a cost, so it is
 fast and `check --skip-escapes` runs it. A `cost` key inside `census` is
 refused at load: declaring a slower class would drop the detector at
-pre-commit, which is the hole this mode closes.
+pre-commit, which is the hole this mode closes. In a changeset mode a census
+runs only when the changeset reaches its scope, like every other
+forbidden-pattern rule, so its scope must name the files its detector judges
+(see File-set modes).
 
 `{{root}}`, `{{repo}}`, the parent-segment lint, the `when.paths_changed`
 lint, and fixture isolation apply, because the checker is that runner. A
@@ -1254,6 +1257,17 @@ that the scan did not produce is **refused** rather than skipped. Whole-tree
 invariant rules (`where: same-dir`, `set-relation`, `baseline`) still evaluate
 over the tracked tree in changeset modes, because a verdict about the
 repository cannot be reached from a diff.
+
+**A rule whose inputs the changeset never reached is not run.** Two kinds of
+rule judge more than the changed files: a whole-tree invariant, and a
+forbidden-pattern `census`, whose detector reads the whole root. In a changeset
+mode each runs only when the changeset adds, edits, deletes or renames a path
+its scope admits, or a path under `.formwork/`, where every rule definition
+lives. Otherwise its verdict cannot have moved,
+so the rule is named in the scan block's `rules_not_run` on the `changeset`
+channel, and it is neither rendered as `OK` nor counted as passed. `baseline`
+always runs, because its baseline file is an input no scope names. The
+whole-tree `check` never gates on a changeset and judges every rule.
 
 `--range` is **one string, tokenized shell-style** — not a list of arguments.
 It carries the revisions and, optionally, a `-- <pathspec>` tail, and formwork

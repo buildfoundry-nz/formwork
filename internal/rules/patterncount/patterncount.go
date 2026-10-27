@@ -110,6 +110,9 @@ func (c *patternCount) Finalize() []rules.Match {
 // the wrong count (#4).
 func (c *patternCount) WholeTreeInvariant() bool { return true }
 
+// ScopeBound is true: the total is tallied from in-scope files in CheckFile.
+func (c *patternCount) ScopeBound() bool { return true }
+
 func init() {
 	rules.Register("pattern-count", newPatternCount)
 }

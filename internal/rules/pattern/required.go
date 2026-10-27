@@ -153,6 +153,9 @@ func (c *required) WholeTreeInvariant() bool {
 	return c.mode == modeExists
 }
 
+// ScopeBound is true: a match is looked for only in in-scope files in CheckFile.
+func (c *required) ScopeBound() bool { return true }
+
 func init() {
 	rules.Register("required-pattern", newRequired)
 }

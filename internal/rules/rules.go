@@ -274,6 +274,53 @@ func IsWholeTreeInvariant(c Checker) bool {
 	return ok && w.WholeTreeInvariant()
 }
 
+// ScopeBound is optionally implemented by a WholeTreeInvariant checker whose
+// verdict reads nothing but the files its rule's scope admits: every input
+// reaches it through CheckFile, and its Finalize consults no path of its own.
+// Under --staged/--range the CLI runs such a rule only when the changeset adds,
+// edits, deletes or renames a path its scope admits, because a change that
+// touches none of its inputs cannot move its verdict.
+//
+// It is an opt-in, and the default is the fail-closed one: a checker that does
+// not declare it runs on every changeset, as every invariant did before. A
+// checker that reads a file of its own — baseline's tracked baseline — must not
+// declare it, since a change to that file alone moves the verdict and no scope
+// glob names it.
+type ScopeBound interface {
+	ScopeBound() bool
+}
+
+// IsScopeBound reports whether c declared that its verdict reads only in-scope
+// files. False for every checker that does not implement ScopeBound.
+func IsScopeBound(c Checker) bool {
+	s, ok := c.(ScopeBound)
+	return ok && s.ScopeBound()
+}
+
+// SubjectScoped is optionally implemented by a per-file checker whose finalizer
+// judges the tree itself, a census detector run over the whole root, rather
+// than only the files the engine handed it. Its rule's scope declares the
+// detector's subject. Under --staged/--range the CLI runs such a rule only when
+// the changeset adds, edits, deletes or renames a path that scope admits. That
+// is how every other forbidden-pattern rule already behaves on a changeset: it
+// judges the changed files in its scope and nothing else.
+//
+// The guarantee is weaker than ScopeBound's, and the difference is stated
+// rather than hidden: the engine cannot see which files a detector opens. A
+// census whose detector reads a file its scope does not admit is mis-scoped, and
+// a changeset touching only that file defers the finding to the whole-tree run,
+// which never gates on a changeset. A whole-tree run is unaffected.
+type SubjectScoped interface {
+	SubjectScoped() bool
+}
+
+// IsSubjectScoped reports whether c declared that its rule's scope is its
+// detector's subject. False for every checker that does not implement it.
+func IsSubjectScoped(c Checker) bool {
+	s, ok := c.(SubjectScoped)
+	return ok && s.SubjectScoped()
+}
+
 // Factory builds a Checker from a rule's params node (may be nil).
 type Factory func(params *yaml.Node) (Checker, error)
 

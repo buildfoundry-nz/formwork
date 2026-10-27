@@ -69,6 +69,10 @@ func (c *censusPattern) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, e
 	return ef.FinalizeErr(ctx)
 }
 
+// SubjectScoped is true: a census rule's scope names the files its detector
+// judges, so a changeset that reaches none of them has nothing for it to judge.
+func (c *censusPattern) SubjectScoped() bool { return true }
+
 func (c *censusPattern) SkipReason() (string, bool) {
 	return rules.SkipReasonOf(c.inner)
 }

@@ -493,7 +493,8 @@ formwork check [--lane <name>] [--staged | --range A..B] [--rules id,…]
    are exempt from the changeset restriction and evaluate over the tracked tree,
    because range-scoping a non-monotonic rule false-fails it (issue #4; see the
    lane/scope/orchestration design §5 "Whole-tree invariants under a changed
-   set").
+   set"). One whose inputs the changeset never reached is not run at all, and
+   is named instead (same section).
 3. **Phase 1 — shared scan**: one filesystem walk; each in-scope file read
    once; preprocessor variants computed lazily and cached per file; all
    applicable per-file rule matchers run in a worker pool (default

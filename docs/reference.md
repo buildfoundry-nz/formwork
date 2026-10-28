@@ -184,6 +184,17 @@ reaches the engine as `converted call sites consume the accessor (audit-1`. The
 `include` and `exclude` are doublestar globs, matched against repo-relative
 paths. A file is in scope when it matches an `include` and no `exclude`.
 
+`scope.not_declaring` lists `{marker, holders}` entries. Each place a marker
+(a literal) occurs opens a HOME: the declaration that begins on that line, with
+the same extents a credential uses. The engine masks each home before the rule
+reads the file and judges every other line. `holders` is the exact number of
+places in scope that declare the marker; a different count is a finding,
+judged on the live tree only, and a rule declaring the key runs over the whole
+tree under `--staged`/`--range`. A bare-string entry is refused at load.
+
+`scope.generated: true` makes the rule judge files a declared generator wrote
+(see Generated output); every other rule never reads them.
+
 `scope.min_files: N` (default 0 = off) turns a shrunken scope from a disclosure
 into a verdict: fewer than N in-scope files is an error-severity, path-less
 finding naming both numbers. It is a claim about the repository, never about a
@@ -242,7 +253,7 @@ Reports files matching a pattern.
 | `none_of` | with `all_of`: excusals, same shape and rules as `require_absent` |
 | `require_present` | file-level guard on `pattern`: report only if the file contains ALL of these |
 | `require_absent` | excusals: each entry is a credential or evidence (see below) |
-| `credential` | in a `require_absent`/`none_of` entry: a line pattern anchored with `^` naming the owner a file may be |
+| `credential` | in a `require_absent`/`none_of` entry: a line pattern anchored with `^` naming the owner declaration |
 | `holders` | with `credential`: the exact number of lines in scope that hold it |
 | `evidence` | in a `require_absent`/`none_of` entry: a pattern that discharges a trigger it sits near |
 | `within` | with `evidence`: how many lines from the trigger it may sit, 0–100 |
@@ -263,7 +274,7 @@ things it is.
 params:
   pattern: '"auto_policy"'
   require_absent:
-    # CREDENTIAL: the one file that declares the constant may spell it.
+    # CREDENTIAL: the one declaration of the constant may spell it.
     - {credential: '^const SourceAutoPolicy = "auto_policy"', holders: 1}
 ```
 
@@ -271,8 +282,19 @@ A **credential** names an owner. It must be anchored at the start of a line
 (`^...`, optionally after a flag group such as `(?i)^`), and `holders` is the
 exact number of lines in the rule's scope that match it. The count is taken
 over every in-scope file, prefiltered or not, and a run whose count differs is
-a finding: the set of excused files is fixed, and changing it is a reviewed
-edit to a number. The count is judged on the live tree only: a fixture proves
+a finding: the set of owners is fixed, and changing it is a reviewed edit to a
+number.
+
+**A credential sanctions the declaration its line opens, never the file
+(0.14).** The engine masks that declaration and judges every other line of the
+file, so a second violation beside the owner fires. The extent is read from
+the source as written: in Go, the statement the line's first token begins (a
+func or method through its closing brace, a const/var/type spec through its
+value), with a `package` clause covering the whole file; in Dart and proto, the
+declaration through the close of its first top-level block or a top-level
+semicolon, with comments and strings blanked. A credential on a comment line
+sanctions only that line. A non-code file (Markdown, YAML, SQL) has no
+declaration structure, so its credential line declares the document. The count is judged on the live tree only: a fixture proves
 the trigger and the excusal, and cannot honestly hold the repository's number,
 so prove the count on the real tree (a mutation that duplicates a holder line). A rule carrying a credential is evaluated over the whole tree
 even under `--staged`/`--range`. A library rule cannot carry one: its holder
@@ -1190,12 +1212,39 @@ judged, and every error-severity finding fails the run. The `except:` block is
 refused at load (exit 2), whichever of its former keys (`paths`, `marker`,
 `allowlist`) it carries.
 
-What remains is scope itself — `scope.include`, `scope.exclude` and
-`scope.not_declaring` — and every subtraction is enumerated by `formwork lint`'s
-escape-hatch census, so none is silent. `scope.not_declaring` reports, per
-marker, how many in-scope files it removed and how many of those the rule would
-have fired on, so a marker protecting nothing reads `0 would fire` rather than
-printing like a live one.
+What remains is scope itself — `scope.include`, `scope.exclude`,
+`scope.not_declaring` and the repository's generated-output definition — and
+every subtraction is enumerated by `formwork lint`'s escape-hatch census, so
+none is silent. `scope.not_declaring` reports, per marker, how many home
+declarations it removed and how many of those the rule would have fired inside,
+so a marker protecting nothing reads `0 would fire` rather than printing like a
+live one.
+
+### Generated output
+
+```yaml
+generated:
+  - {marker: 'Code generated by protoc-gen-go. DO NOT EDIT.', proven_by: [proto-regen-fresh]}
+  - {marker: 'GENERATED CODE - DO NOT MODIFY BY HAND', proven_by: [dart-codegen-fresh]}
+```
+
+A rule about hand-written code does not judge what a generator wrote; the
+generator's output is right when it reproduces from its input. The repository
+declares each generator's header once, here, instead of every rule carrying its
+own list of output globs. A file is generated when a declared marker appears in
+its LEADING comment block (the lines before its first line that is neither
+blank nor a comment); a marker in a string, or in a comment after code,
+declares nothing. Generated files are outside every rule that does not declare
+`scope.generated: true`.
+
+`proven_by` is required and names the rules that prove a file carrying the
+header reproduces from its generator. That proof is what keeps the header from
+being a self-granted exemption: a hand-written file that copies it fails the
+freshness gate, because regenerating does not produce it. Each proven_by id
+must be a rule in the corpus (checked at load); `formwork lint`'s
+`generated-definition` check fails a proving rule no CI lane selects and a
+marker no scanned file carries, and the census counts each marker's files on
+every run.
 
 ---
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/buildfoundry-nz/formwork/internal/declspan"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"gopkg.in/yaml.v3"
@@ -28,11 +29,17 @@ import (
 //
 // An excusal is now one of exactly two things, and says which.
 //
-// A CREDENTIAL names an owner: "this file is the declaration, so it may spell
-// what everyone else must not". It is a line pattern anchored at the start of
-// the line, and it declares `holders`, the exact number of lines in the rule's
-// scope that match it. A run whose count differs is a finding, so the set of
-// excused files is fixed and every change to it is a reviewed edit to a number.
+// A CREDENTIAL names an owner: "this declaration is the one place that may
+// spell what everyone else must not". It is a line pattern anchored at the
+// start of the line, and it declares `holders`, the exact number of lines in
+// the rule's scope that match it. A run whose count differs is a finding, so
+// the set of owners is fixed and every change to it is a reviewed edit to a
+// number.
+//
+// A credential sanctions the DECLARATION its line opens (internal/declspan),
+// never the file. Before 0.14 it excused the whole file that held it, so a
+// second violation anywhere else in an owner's file was invisible. The owner
+// declaration is now masked out and every other line of the file is judged.
 //
 // EVIDENCE names a discharge: "this trigger is handled, and here is the proof".
 // It excuses only a trigger it occurs within `within` lines of (before or
@@ -154,35 +161,54 @@ func compileExcusal(where, pattern, syntax string) (lineMatcher, error) {
 	return compileMatcher(where, pattern, syntax)
 }
 
-// holdsCredential counts every credential line in f and reports whether f
-// holds at least one. It runs on every in-scope file before any prefilter, so
-// the count is over the whole scope.
-func (x excusals) holdsCredential(f *scan.File) (bool, error) {
+// homes counts every credential line in f and returns f with the
+// declaration each held credential opens masked out (internal/declspan), so
+// the rule judges every other line of the file. It runs on every in-scope file
+// before any prefilter, so the count is over the whole scope.
+//
+// The credential is matched on f, the variant the rule reads; the extent of
+// the declaration it opens is read off f.Raw(), the source as written, because
+// a comments-only or strings-only projection has no declaration structure.
+func (x excusals) homes(f *scan.File) (*scan.File, error) {
 	if len(x.credentials) == 0 {
-		return false, nil
+		return f, nil
 	}
 	lines, err := f.Lines()
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	held := false
+	var spans []declspan.Span
+	var raw []byte
 	for _, cr := range x.credentials {
 		var n int64
-		for _, line := range lines {
+		for i, line := range lines {
 			ok, err := cr.m.MatchString(line)
 			if err != nil {
-				return false, err
+				return nil, err
 			}
-			if ok {
-				n++
+			if !ok {
+				continue
 			}
+			n++
+			if raw == nil {
+				if raw, err = f.Raw().Content(); err != nil {
+					return nil, err
+				}
+			}
+			spans = append(spans, declspan.Extent(f.Path(), raw, i+1))
 		}
 		if n > 0 {
 			cr.seen.Add(n)
-			held = true
 		}
 	}
-	return held, nil
+	if len(spans) == 0 {
+		return f, nil
+	}
+	content, err := f.Content()
+	if err != nil {
+		return nil, err
+	}
+	return scan.NewMemFile(f.Path(), declspan.Mask(content, spans)), nil
 }
 
 // evidenceIndex holds, per evidence entry, the 1-based lines where a match
@@ -276,15 +302,16 @@ func (c counted) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) {
 }
 
 // Finalize reports every credential whose holder count differs from its
-// declaration. A credential excuses each file that holds it, so a holder the
-// declaration does not account for is a file that excused itself.
+// declaration. A credential sanctions the declaration it opens, so a holder
+// the declaration does not account for is a declaration that sanctioned
+// itself.
 func (c counted) Finalize() []rules.Match {
 	var out []rules.Match
 	for _, cr := range c.ex.credentials {
 		if got := cr.seen.Load(); got != cr.want {
 			out = append(out, rules.Match{
 				Message: fmt.Sprintf("credential %q is held by %d line(s) across scope, declared holders %d: "+
-					"a credential excuses every file that holds it, so its holders are fixed", cr.src, got, cr.want),
+					"a credential sanctions the declaration it opens, so its holders are fixed", cr.src, got, cr.want),
 			})
 		}
 	}

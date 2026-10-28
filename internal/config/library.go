@@ -33,6 +33,10 @@ func (e *Envelope) LoadRules() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
 	}
+	generation, err := compileGenerated(e.root.Generated)
+	if err != nil {
+		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
+	}
 
 	ruleFiles, err := filepath.Glob(filepath.Join(e.dir, "rules", "*.yaml"))
 	if err != nil {
@@ -44,7 +48,7 @@ func (e *Envelope) LoadRules() (*Config, error) {
 		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
 	}
 
-	cfg := &Config{Version: e.Version, Engine: e.Engine, EngineConstraint: e.EngineConstraint, Lanes: lanes, Scope: scope, Ignore: ignore, Gitignore: gitignore, Library: append([]string(nil), e.root.Library...), RuleFiles: len(ruleFiles)}
+	cfg := &Config{Version: e.Version, Engine: e.Engine, EngineConstraint: e.EngineConstraint, Lanes: lanes, Scope: scope, Ignore: ignore, Gitignore: gitignore, Library: append([]string(nil), e.root.Library...), RuleFiles: len(ruleFiles), Generation: generation}
 	seen := map[string]string{} // rule id -> file it was defined in
 	index := map[string]int{}   // rule id -> slot in cfg.Rules
 
@@ -83,6 +87,12 @@ func (e *Envelope) LoadRules() (*Config, error) {
 		}
 	}
 	sort.Slice(cfg.Rules, func(i, j int) bool { return cfg.Rules[i].ID < cfg.Rules[j].ID })
+	if err := generation.validateProvenBy(cfg.Rules); err != nil {
+		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
+	}
+	for _, r := range cfg.Rules {
+		r.generation = generation
+	}
 	return cfg, nil
 }
 

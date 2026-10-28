@@ -139,6 +139,10 @@ type File struct {
 
 	variantMu sync.Mutex
 	variants  map[string]*File
+
+	// raw is the file a preprocessor variant was computed from; nil on the
+	// file itself. See Raw.
+	raw *File
 }
 
 // NewMemFile returns an in-memory File. For tests and fixture runners.
@@ -150,6 +154,17 @@ func NewMemFile(relPath string, content []byte) *File {
 
 // Path returns the repo-relative, slash-separated path.
 func (f *File) Path() string { return f.relPath }
+
+// Raw returns the file as written: the source a preprocessor variant was
+// computed from, or f itself when f is not a variant. A checker that judges a
+// variant still needs the source's own structure for some questions — where a
+// declaration ends cannot be read off a comments-only projection.
+func (f *File) Raw() *File {
+	if f.raw != nil {
+		return f.raw
+	}
+	return f
+}
 
 // Content returns the file bytes, reading from disk on first call only.
 func (f *File) Content() ([]byte, error) {
@@ -228,6 +243,7 @@ func (f *File) Variant(name string) (*File, error) {
 			f.relPath, name, wantLines, gotLines)
 	}
 	v := NewMemFile(f.relPath, transformed)
+	v.raw = f.Raw()
 	if f.variants == nil {
 		f.variants = map[string]*File{}
 	}

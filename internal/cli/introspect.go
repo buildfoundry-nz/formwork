@@ -226,6 +226,12 @@ type excludeOut struct {
 	Comment string `json:"comment,omitempty"`
 }
 
+// declOut is one scope.not_declaring entry: the marker and its pinned holders.
+type declOut struct {
+	Marker  string `json:"marker"`
+	Holders int    `json:"holders"`
+}
+
 // explainOut is the full JSON rendering of one rule.
 type explainOut struct {
 	ID           string       `json:"id"`
@@ -235,7 +241,7 @@ type explainOut struct {
 	Preprocess   string       `json:"preprocess,omitempty"`
 	Include      []string     `json:"include"`
 	Exclude      []excludeOut `json:"exclude,omitempty"`
-	NotDeclaring []string     `json:"not_declaring,omitempty"`
+	NotDeclaring []declOut    `json:"not_declaring,omitempty"`
 	MinFiles     int          `json:"min_files,omitempty"`
 	Params       any          `json:"params,omitempty"`
 	Cure         string       `json:"cure,omitempty"`
@@ -285,12 +291,15 @@ func runExplain(args []string, stdout, stderr io.Writer) int {
 	out := explainOut{
 		ID: rule.ID, Type: rule.Type, Severity: string(rule.Severity),
 		Cost: string(rule.Cost()), Preprocess: rule.Preprocess,
-		Include: rule.Include(), NotDeclaring: rule.NotDeclaring(), MinFiles: rule.MinFiles(),
+		Include: rule.Include(), MinFiles: rule.MinFiles(),
 		Cure: rule.Cure, Origin: rule.Origin,
 		Tags: rule.Tags, Lanes: lanesOf(cfg, rule), Fixtures: fixtures,
 	}
 	for _, e := range rule.ExcludeEntries() {
 		out.Exclude = append(out.Exclude, excludeOut{Glob: e.Glob, Comment: e.Comment})
+	}
+	for _, e := range rule.NotDeclaringEntries() {
+		out.NotDeclaring = append(out.NotDeclaring, declOut{Marker: e.Marker, Holders: e.Holders})
 	}
 	// Both params renderings are guarded HERE, before the format branch, so
 	// neither format can ever print a rule with silently-missing params — a
@@ -344,8 +353,8 @@ func renderExplain(w io.Writer, paramsYAML string, out explainOut) int {
 	}
 	if len(out.NotDeclaring) > 0 {
 		fmt.Fprintln(w, "  not_declaring:")
-		for _, m := range out.NotDeclaring {
-			fmt.Fprintf(w, "    - %q\n", m)
+		for _, e := range out.NotDeclaring {
+			fmt.Fprintf(w, "    - {marker: %q, holders: %d}\n", e.Marker, e.Holders)
 		}
 	}
 	// Omitted when unset, like every other optional field this renderer prints

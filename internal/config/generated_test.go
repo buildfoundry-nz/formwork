@@ -63,7 +63,6 @@ func TestDeclaresReadsOnlyTheLeadingCommentBlock(t *testing.T) {
 func TestLoadRejectsBadGeneratedDefinition(t *testing.T) {
 	for _, tc := range []struct{ name, gen, want string }{
 		{"no proving rule", "generated:\n  - {marker: 'DO NOT EDIT.'}\n", "proven_by is required"},
-		{"proving rule not in the corpus", "generated:\n  - {marker: 'DO NOT EDIT.', proven_by: [nope]}\n", "names no rule"},
 		{"empty marker", "generated:\n  - {marker: '', proven_by: [codegen-fresh]}\n", "marker is empty"},
 		{"duplicate marker", "generated:\n  - {marker: 'X', proven_by: [codegen-fresh]}\n  - {marker: 'X', proven_by: [codegen-fresh]}\n", "declared twice"},
 		{"unknown key", "generated:\n  - {marker: 'X', proven_by: [codegen-fresh], why: y}\n", "why"},
@@ -74,5 +73,19 @@ func TestLoadRejectsBadGeneratedDefinition(t *testing.T) {
 				t.Fatalf("Load error = %v, want it to mention %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// A proving rule absent from the loaded corpus is not a load error: tools load
+// pruned corpora beside the repository's formwork.yaml, and refusing them made
+// every such run unevaluable (formwork 0.14.2). `formwork lint` reports the
+// missing rule over the whole corpus instead (meta TestLintGeneratedRefusesAProvingRuleNotInTheCorpus).
+func TestLoadAcceptsAProvingRuleOutsideTheLoadedCorpus(t *testing.T) {
+	cfg, err := config.Load(genRepo(t, "generated:\n  - {marker: 'DO NOT EDIT.', proven_by: [nope]}\n"))
+	if err != nil {
+		t.Fatalf("Load = %v, want a pruned corpus to load", err)
+	}
+	if cfg.Generation == nil || cfg.Generation.Markers[0].ProvenBy[0] != "nope" {
+		t.Fatalf("Generation = %+v, want the marker kept verbatim", cfg.Generation)
 	}
 }

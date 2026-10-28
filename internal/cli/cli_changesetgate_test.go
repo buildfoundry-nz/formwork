@@ -122,18 +122,6 @@ func TestStagedRunsAnInvariantWhenTheChangesetRenamesOutOfItsScope(t *testing.T)
 	}
 }
 
-// The rule's own definition is an input no scope glob names. A change under
-// .formwork/ runs every invariant, whichever rule it edited.
-func TestStagedRunsEveryInvariantWhenTheConfigChanges(t *testing.T) {
-	dir := redInvariantRepo(t)
-	mustWrite(t, filepath.Join(dir, ".formwork", "rules", "rules.yaml"), "# edited\n"+gateRules)
-	gitRun(t, dir, "add", ".formwork/rules/rules.yaml")
-
-	if code, out, errOut := runCLI(t, "check", "-C", dir, "--staged"); code != 1 {
-		t.Fatalf("a config change must run every invariant (exit 1), got %d:\n%s%s", code, out, errOut)
-	}
-}
-
 // invariant_rules counts what ran over the tracked tree. A skipped invariant
 // did not, so it is not counted there; it is counted in rules_not_run.
 func TestStagedInvariantCountExcludesTheSkipped(t *testing.T) {

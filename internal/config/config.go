@@ -42,6 +42,12 @@ type Rule struct {
 	// live in the pack and are proven by `formwork test -C stdlib/<name>`.
 	Library string
 
+	// File is the slash-separated, repo-relative path of the rule file that
+	// declared this rule (.formwork/rules/<name>.yaml). Empty for a library
+	// rule, whose definition ships in the binary. A changeset that edits it may
+	// have changed the rule itself, so the changeset gate runs the rule.
+	File string
+
 	include  []string
 	exclude  []string
 	minFiles int

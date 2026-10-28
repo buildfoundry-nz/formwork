@@ -4,6 +4,7 @@ import (
 	"fmt"
 	iofs "io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -115,6 +116,9 @@ func loadRuleFile(cfg *Config, seen map[string]string, index map[string]int, src
 			return fmt.Errorf("config: %s: %w", src, err)
 		}
 		rule.Library = library
+		if library == "" {
+			rule.File = path.Join(".formwork", "rules", filepath.Base(src))
+		}
 		// A credential's holder count is a fact about the consuming repo, which a
 		// pack cannot know. The consumer declares such a rule locally (local wins
 		// by id), where the count is its own.

@@ -55,6 +55,9 @@ type FinalizeContext struct {
 	// missing ref or skips its range in CI as well, which is a gate that
 	// fails open. It reaches the tool as FORMWORK_FIXTURE=1 (#28).
 	Fixture bool
+	// Changeset is true when the run judges a changeset (--staged or --range):
+	// the files a rule was handed are the changed in-scope files, not the tree.
+	Changeset bool
 }
 
 // ErrFinalizer is a Finalizer that may fail and needs run context. Rule types

@@ -263,7 +263,11 @@ type FileSet struct {
 	// live repository — derived, never set by hand: it is exactly the case
 	// where the corpus root and the tree under evaluation differ (#28).
 	Fixture bool
-	Files   []*File
+	// Changeset is true when this set is a CHANGESET — the files a --staged or
+	// --range run restricted the walk to — rather than every file of the tree.
+	// Set by the caller that restricts, never derived.
+	Changeset bool
+	Files     []*File
 	// Ignored is every path a scan.ignore glob removed from this walk,
 	// sorted by Path. Empty unless the walk ran with ignore globs.
 	Ignored []Ignored

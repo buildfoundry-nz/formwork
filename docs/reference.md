@@ -1148,6 +1148,15 @@ it mandatory in CI — without it the detector either dies on the missing ref or
 skips the range everywhere, which is a gate that fails open. Nothing is ever
 removed from the environment (see the refusal above); this is added.
 
+A `--staged` or `--range` run sets **`FORMWORK_FILES`** to the path of a file
+listing, one root-relative path per line, the changed files this rule's scope
+admits: the files the engine handed it. A detector whose verdict for a file
+depends only on that file can judge those and parse nothing else, which turns
+a whole-root scan per commit into a scan of the commit. An empty listing is an
+empty file, never an unset variable. A whole-tree run sets nothing, so the
+detector judges the root there; that run is the backstop every changeset skip
+names. A detector that ignores the variable behaves exactly as before.
+
 Isolation arrives **with** the migration, not ahead of it. A rule still naming
 paths relative to its caller is asking for the arm-inside-the-repository
 layout, and its detector commonly resolves a repo-resident helper by walking up

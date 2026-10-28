@@ -184,13 +184,31 @@ reaches the engine as `converted call sites consume the accessor (audit-1`. The
 `include` and `exclude` are doublestar globs, matched against repo-relative
 paths. A file is in scope when it matches an `include` and no `exclude`.
 
+**The walk reads every file but two kinds:** `.git` directories, at any depth,
+and the root's `.formwork/fixtures` — each fixture is its own rule's proof,
+judged by `formwork test` and by no other rule. The rest of the root's
+`.formwork` — `formwork.yaml`, the rule YAML, the mutation specs — is scanned,
+and a rule reaches it **only through an include glob rooted at `.formwork/`**:
+`**` and `**/*.yaml` do not descend into it, because a rule written for
+application code was not written for the corpus that defines it, and would
+fire on every rule YAML that spells its forbidden token. A rule over the
+corpus names the corpus (`.formwork/rules/*.yaml`).
+
 `scope.not_declaring` lists `{marker, holders}` entries. Each place a marker
 (a literal) occurs opens a HOME: the declaration that begins on that line, with
 the same extents a credential uses. The engine masks each home before the rule
 reads the file and judges every other line. `holders` is the exact number of
 places in scope that declare the marker; a different count is a finding,
 judged on the live tree only, and a rule declaring the key runs over the whole
-tree under `--staged`/`--range`. A bare-string entry is refused at load.
+tree under `--staged`/`--range`. A count of zero is `formwork lint`'s, not the
+check's (0.14.3): a pruned or synthetic tree carrying one rule holds none of
+the repository's homes, which a check cannot tell from a dead marker, and lint
+reports a marker no file declares over the whole tree. A bare-string entry is
+refused at load.
+
+`scope.subject: production` makes the rule read no file the repository's
+`tests:` names (see Test code and production subjects); the default, `all`,
+reads tests.
 
 `scope.generated: true` makes the rule judge files a declared generator wrote
 (see Generated output); every other rule never reads them.
@@ -283,7 +301,8 @@ A **credential** names an owner. It must be anchored at the start of a line
 exact number of lines in the rule's scope that match it. The count is taken
 over every in-scope file, prefiltered or not, and a run whose count differs is
 a finding: the set of owners is fixed, and changing it is a reviewed edit to a
-number.
+number. A count of zero is `formwork lint`'s (0.14.3), as for a not_declaring
+marker: lint reports a credential no in-scope line holds.
 
 **A credential sanctions the declaration its line opens, never the file
 (0.14).** The engine masks that declaration and judges every other line of the
@@ -903,12 +922,27 @@ no naive `;` split, so a semicolon inside a string literal does not truncate a
 statement.
 
 `internal/sqlextract` reassembles SQL from Go string literals, so these rules
-see queries composed in Go as well as `.sql` files.
+see queries composed in Go as well as `.sql` files. A Go string constant is read
+as its value wherever the module declares it — in the file, elsewhere in its
+package, or in an imported package of the module — so a query composed of
+literals and named constants is read whole. A SQL template — a package-level
+function whose parameters and result are all `string` and whose body is one
+`return` — is read too: a call with constant arguments reads as what it builds,
+and the definition is judged once per argument set its callers pass.
+
+**`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
+that carries SQL (a statement, a clause, or a SQL-only token such as a cast or
+`$1`) and has an operand that is not a constant — a variable, a call, a field —
+is a finding: `SQL could not be read (…), so this rule cannot judge it`. The
+rule cannot vouch for text decided at run time. The cure is to compose the
+statement from constants and bind what varies as a parameter. A composition
+that is not SQL — a log line, a path — is not one.
 
 #### `sql/parses`
 Takes **no parameters**. Flags SQL that fails to parse. For `.sql` every
 failure is reported; for `.go` only SQL-shaped candidates are, so an ordinary
-string literal never fires.
+string literal never fires. A `.go` composition it cannot read is a finding
+(see above).
 
 ```yaml
 - id: sql-parses
@@ -935,7 +969,9 @@ A locking `SELECT` without a deterministic `ORDER BY` is a deadlock shape.
 
 #### `sql/statement-predicate`
 Per-statement assertions scoped to a table. `require` and `forbid` are lists of
-regexes over the statement, and at least one of them is required.
+regexes over the statement, and at least one of them is required. A `.go`
+composition it cannot read is a finding whatever its text names: the part it
+cannot read may be the table (see above).
 
 `table` is an unanchored RE2 regex matched against the whole
 **statement text**, so it selects statements rather than naming a relation: a
@@ -1172,6 +1208,15 @@ it mandatory in CI — without it the detector either dies on the missing ref or
 skips the range everywhere, which is a gate that fails open. Nothing is ever
 removed from the environment (see the refusal above); this is added.
 
+A `--staged` or `--range` run sets **`FORMWORK_FILES`** to the path of a file
+listing, one root-relative path per line, the changed files this rule's scope
+admits: the files the engine handed it. A detector whose verdict for a file
+depends only on that file can judge those and parse nothing else, which turns
+a whole-root scan per commit into a scan of the commit. An empty listing is an
+empty file, never an unset variable. A whole-tree run sets nothing, so the
+detector judges the root there; that run is the backstop every changeset skip
+names. A detector that ignores the variable behaves exactly as before.
+
 Isolation arrives **with** the migration, not ahead of it. A rule still naming
 paths relative to its caller is asking for the arm-inside-the-repository
 layout, and its detector commonly resolves a repo-resident helper by walking up
@@ -1300,6 +1345,34 @@ carries, and the census counts each marker's files on every run. A missing
 proving rule is a lint finding rather than a load error so that a pruned corpus
 — one rule and its fixtures beside the repository's `formwork.yaml` — still
 loads.
+
+### Test code and production subjects (0.15)
+
+```yaml
+tests:
+  - '**/*_test.go'
+  - 'packages/*/test/**'
+```
+
+Every rule reads tests by default: a test is code. `tests:` declares the
+repository's test code once, by path, the way its toolchains define it (`go
+build` leaves `*_test.go` out). A rule whose subject only production code can
+have — a production import of a testing package, reflection in shipped code, a
+request message no production handler consumes — says so:
+
+```yaml
+scope:
+  include: ['**/*.go']
+  subject: production
+```
+
+A production subject reads no file `tests:` names; `subject: all` (the
+default) reads everything its include reaches. This replaces a per-rule
+`scope.exclude` of test globs, which could not be told from an exclude that
+forgives a violation. The census prints, for each production-subject rule, how
+many test files its subject leaves out, and `formwork lint` refuses a
+production subject that leaves out none. A production subject with no `tests:`
+definition is refused at load.
 
 ---
 

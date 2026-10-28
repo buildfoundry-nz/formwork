@@ -7,10 +7,6 @@ rules:
       include:
         - "**/*_test.dart"
         - "**/testing/**/*.dart"
-      exclude:
-        - "**/*.g.dart"
-        - "**/*.freezed.dart"
-        - "**/*.pb*.dart"
     params:
       pattern: '(?:on\s+\w+\s+)?\bcatch\b\s*(?:\(\s*[_a-zA-Z]\w*(?:\s*:\s*\w+)?\s*\)|\(\s*\))?\s*\{\s*(?://[^\n]*)?\}'
     cure: >-

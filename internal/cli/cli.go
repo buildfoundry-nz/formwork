@@ -469,6 +469,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 			allow[p] = true
 		}
 		changedFset := fset.Restrict(allow)
+		changedFset.Changeset = true
 		// Every path git named must be accounted for: scanned, or absent for a
 		// reason the WALK owns. #151 row 9 and #158 are the two ways it was not —
 		// a declared prune channel removed the path, or the path was never on

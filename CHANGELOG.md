@@ -1,9 +1,17 @@
 # Changelog
 
-## 0.14.2
+## 0.15.2
 
 ### Added
 
+- **`FORMWORK_FILES`: a changeset run tells a detector which files changed.**
+  Under `--staged` and `--range`, a command or census detector runs with
+  `FORMWORK_FILES` naming a listing of the changed files its rule's scope
+  admits. A detector that judges each file on its own can read that and parse
+  nothing else. A whole-tree run sets nothing, so the detector judges the root
+  as before. On a 4,300-rule corpus, nine Go census detectors re-parsed about
+  22,700 Go files on every Go commit, roughly 170 CPU-seconds, to judge the
+  handful of files the commit changed.
 - **`dart/marked-single-home`: the Dart form of `go/marked-single-home`.** A
   top-level declaration whose comment run carries `params.marker` is the one
   declaration of its identity in scope; any second declaration of it is a
@@ -12,6 +20,126 @@
   on its file. On a 4,300-rule corpus, 48 Dart `pattern-count` rules each
   pinned one such name to `n: 1`, and each one's mutation proof planted a
   second declaration.
+
+## 0.15.1
+
+### Fixed
+
+- **A release names its repository.** v0.14.3 and v0.15.0 were tagged but
+  never published: the release runner fetched through a git mirror, whose URL
+  rewrite (`url.<mirror>.insteadOf`) is what `git remote get-url` reports, and
+  GoReleaser read the repository from that URL — owner `github.com` — so every
+  GitHub API call 404'd. `.goreleaser.yaml` now names
+  `buildfoundry-nz/formwork`. 0.15.1 is 0.15.0 (and so 0.14.3) published.
+
+## 0.15.0
+
+### Added
+
+- **`tests:` and `scope.subject: production`.** A repository declares its test
+  code once in `formwork.yaml` (`tests:`, path globs). A rule whose subject only
+  production code can have says `scope.subject: production` and reads no file
+  `tests:` names; every other rule reads tests. This replaces a per-rule
+  `scope.exclude` of test globs, which could not be told from an exclude that
+  forgives a violation. The escape-hatch census counts the test files each
+  production subject leaves out, `formwork lint` refuses one that leaves out
+  none, and a production subject with no `tests:` definition is refused at
+  load.
+
+### Changed
+
+- **The walk reads the repository's `.formwork`, except its fixtures.** The
+  root `.formwork` was pruned whole, so no rule could read `formwork.yaml`,
+  the rule YAML or the mutation specs, and every check over the corpus itself
+  had to shell out (`type: command`). Only the root's `.formwork/fixtures` is
+  pruned now — each fixture is its own rule's proof, judged by `formwork
+  test`. The rest is scanned, and reached only by an include glob rooted at
+  `.formwork/`: `**` does not descend into it, so a rule written for
+  application code never reads the definitions that spell its own token. A
+  root `.formwork` symlink (a shared rule set) is still skipped, and now
+  recorded as a link the walk declined to follow. A `scan.ignore` glob hiding
+  tracked rule YAML is reported like any other hidden tracked path.
+- **The SQL rules read SQL template functions.** A repository keeps a
+  predicate in one place as a function of the aliases and placeholders it is
+  spliced with — `VisibleWhere("p")`, `OverdueSQL("$1")` — and both its body
+  and every query calling it were compositions no rule could read. A
+  *template* — a package-level function whose parameters and result are all
+  `string` and whose body is one `return` — is now read: a call with constant
+  arguments reads as the instance it builds, at the call, and the definition
+  is judged once per distinct argument set the walk calls it with. Its body is
+  then not unread SQL. A template some call feeds a non-constant, or that
+  nothing calls, stays unread at the definition, and the non-constant call is
+  unread where it stands.
+- **`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
+  carrying SQL that the extractor cannot read — an operand that is a variable,
+  a call or a field — is a finding, `SQL could not be read (…), so this rule
+  cannot judge it`, where it was a census line and a pass. For
+  `sql/statement-predicate` it is a finding whatever the `table` pattern says,
+  since the unread operand may be the table. The escape-hatch census no longer
+  lists these two types. **Migration:** compose such statements from Go
+  constants and bind what varies as a parameter; `formwork lint` on the
+  previous release lists every site.
+- **The SQL rules read Go string constants.** A query composed from a named
+  constant — `"SELECT " + cols + " FROM t"`, `scanvault.Cols + " WHERE …"`,
+  `fmt.Sprintf("… %s …", cte)` — was a composition no SQL rule could read,
+  so it was judged as fragments or not at all. Both extractors now read a Go
+  constant expression of string type whole: literals, constants declared in
+  the file, elsewhere in its package, or in an imported package of the module
+  (located by `go.mod`, its module path and its directory `replace`s), `+`,
+  conversions to a string type, and `fmt.Sprint*` calls of constants with
+  plain `%s`/`%v` verbs. A name declared more than once in a package is not
+  read. On one corpus this took the census from 1,909 unreadable SQL
+  compositions to 1,025, and its SQL rules found 22 violations the fragments
+  had hidden. A rule now reads a sibling file on a `--staged`/`--range` run
+  even when only the composing file changed.
+- **The escape-hatch census lists only SQL it could not read.** For
+  `sql/parses` and `sql/statement-predicate` it listed every `+` chain and
+  `fmt.Sprint*` call it could not fold as "SQL … could not be read", whatever
+  the string held. One corpus's SQL rules were each told this about 22,693
+  lines, 2,040 of which carried SQL; the rest were log messages, paths,
+  regular expressions and e-mail text. A composition is now listed when its
+  text carries a statement, a clause or a SQL-only token (a cast, a positional
+  parameter, `IS NULL`); `internal/rules/sqlparse/sqlbearing.go` states the
+  test and what it misses. A composition nested in another is listed once, as
+  the whole.
+- **The `generic` pack carries no generated, vendored, build or test
+  excludes.** Its rules read every file the adopting repository does not
+  declare as generated (`generated:`), test code for a production subject
+  (`tests:`), or ignored (`scan.ignore`, `scan.gitignore`). The per-rule
+  globs that stood in for those facts are gone, with the paths one adopter
+  had pinned into a portable pack (`gcs/`, `blobstore/`, `internal/vendorjson/`,
+  `internal/lockdowntests/`, `tools/formwork/`). Three pack rules state
+  `scope.subject: production`, so an adopter loading `library: [generic]`
+  declares `tests:`; without it the load names what is missing. The one
+  exclude left is typed: markdown under `.husky/` is documentation, not a
+  hook script.
+
+## 0.14.3
+
+### Fixed
+
+- **A pruned tree runs beside a rule with homes.** A synthetic or scratch tree
+  that carries one rule beside only the files its own proof needs holds none
+  of the repository's not_declaring homes or credential holders. `formwork
+  check` reported each as a holder count of zero, so a synthetic test could
+  not run any rule that names a home outside its scratch tree. A count of zero
+  is now `formwork lint`'s: lint reports a not_declaring marker no file
+  declares (as before) and, new, a require_absent credential no in-scope line
+  holds. A count above zero that differs from the declaration is still a
+  `formwork check` finding.
+
+### Performance
+
+- **A credential's holder count skips files that cannot hold it.** 0.14
+  counts every credential over every in-scope file, ahead of any prefilter,
+  and the line scan was about a third of a credential rule's CPU. Each
+  credential now carries the literal gate `autoPrefilter` already derives for
+  a pattern: a file holding none of the credential's guaranteed literals holds
+  none of its lines, so it is skipped without changing the count. On
+  TakeoffQS's 243 home-carrying rules over the whole tree, CPU went from 128 s
+  to 82 s.
+
+## 0.14.2
 
 ### Fixed
 

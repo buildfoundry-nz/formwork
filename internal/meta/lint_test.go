@@ -54,7 +54,7 @@ func TestLintExemptsExternalToolRulesFromFixturesAndScope(t *testing.T) {
 
 func TestLintSkipsFixtureCoverageForLibraryRules(t *testing.T) {
 	failed, out := lint(t, map[string]string{
-		".formwork/formwork.yaml":                   "version: 1\nlibrary: [generic]\n",
+		".formwork/formwork.yaml":                   "version: 1\nlibrary: [generic]\ntests: ['**/*_test.go', '**/*_test.dart']\n",
 		".formwork/rules/r.yaml":                    lintRule,
 		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
 		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
@@ -433,7 +433,7 @@ func TestLintEnumeratesScanIgnoreWithMatchCounts(t *testing.T) {
 	// a pruned dir are deliberately never counted. zz-nothing/** matches
 	// nothing: the census must expose the dead glob, not hide it.
 	for _, want := range []string{
-		"engine: never scans directories named .formwork, .git (any depth)",
+		"engine: never scans directories named .git (any depth) and the root's .formwork/fixtures",
 		"scan.ignore: vendor/** — 1 dirs pruned (subtrees not scanned), 0 files ignored (vendored source)",
 		"scan.ignore: zz-nothing/** — 0 matches (reserved for future noise)",
 	} {

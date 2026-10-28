@@ -5,8 +5,6 @@ rules:
   scope:
     include:
     - '**/*_test.go'
-    exclude:
-    - '**/internal/lockdowntests/**'
   params:
     # Package-collective (#12249 §B): the *Concurrent* test is the trigger;
     # the go/WaitGroup/chan lives in a sibling helper (raceCancel). same-func

@@ -143,6 +143,10 @@ type File struct {
 	// raw is the file a preprocessor variant was computed from; nil on the
 	// file itself. See Raw.
 	raw *File
+
+	// tree is the walk that found this file; nil for a file made in memory.
+	// See Tree.
+	tree *FileSet
 }
 
 // NewMemFile returns an in-memory File. For tests and fixture runners.
@@ -244,6 +248,7 @@ func (f *File) Variant(name string) (*File, error) {
 	}
 	v := NewMemFile(f.relPath, transformed)
 	v.raw = f.Raw()
+	v.tree = f.Tree()
 	if f.variants == nil {
 		f.variants = map[string]*File{}
 	}
@@ -263,10 +268,21 @@ type FileSet struct {
 	// live repository — derived, never set by hand: it is exactly the case
 	// where the corpus root and the tree under evaluation differ (#28).
 	Fixture bool
-	Files   []*File
+	// Changeset is true when this set is a CHANGESET — the files a --staged or
+	// --range run restricted the walk to — rather than every file of the tree.
+	// Set by the caller that restricts, never derived.
+	Changeset bool
+	Files     []*File
 	// Ignored is every path a scan.ignore glob removed from this walk,
 	// sorted by Path. Empty unless the walk ran with ignore globs.
 	Ignored []Ignored
+
+	indexOnce sync.Once
+	byPath    map[string]*File
+	byDir     map[string][]*File
+
+	memoMu sync.Mutex
+	memo   map[any]any
 }
 
 // Ignored is one path removed from the walk. A Dir record means the subtree
@@ -670,6 +686,15 @@ func WalkWith(root string, opts Opts) (*FileSet, error) {
 				// walk would otherwise have enumerated, so the rationale above
 				// stops applying to it exactly where the prune does, and it
 				// gets the ordinary refusal.
+				// A root `.formwork` linked in from a shared rule set is the
+				// same case one level up: config loading reads through the
+				// link, the walk never follows one, and refusing it would fail
+				// every repository sharing its corpus that way. It is recorded,
+				// so the census says that governance went unwalked.
+				if rel == ".formwork" {
+					fset.Ignored = append(fset.Ignored, Ignored{Path: rel, Dir: true, By: SourceSymlink})
+					return nil
+				}
 				if !builtinSkipDir(rel) && hidesASubtree(p, walkRoot) {
 					return fmt.Errorf("scan: committed directory symlink %s (formwork does not follow symlinks, so nothing under it is scanned; remove it or replace it with a real directory)", rel)
 				}
@@ -691,5 +716,8 @@ func WalkWith(root string, opts Opts) (*FileSet, error) {
 	}
 	sort.Slice(fset.Files, func(i, j int) bool { return fset.Files[i].relPath < fset.Files[j].relPath })
 	sort.Slice(fset.Ignored, func(i, j int) bool { return fset.Ignored[i].Path < fset.Ignored[j].Path })
+	for _, f := range fset.Files {
+		f.tree = fset
+	}
 	return fset, nil
 }

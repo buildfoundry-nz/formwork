@@ -51,7 +51,7 @@ import (
 // declined to read.
 func sitesFor(t *testing.T, src string) []sqlextract.Site {
 	t.Helper()
-	sites, err := sqlparse.UnreadableSites("q.go", []byte(src))
+	sites, err := sqlparse.UnreadableSites(nil, "q.go", []byte(src))
 	if err != nil {
 		t.Fatalf("UnreadableSites: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestCensusSitesFollowTheRuleTypesOwnExtractor(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.ruleType, func(t *testing.T) {
-			sites, ok, err := sqlparse.CensusSites(c.ruleType, "q.go", []byte(dynSprintf))
+			sites, ok, err := sqlparse.CensusSites(nil, c.ruleType, "q.go", []byte(dynSprintf))
 			if err != nil {
 				t.Fatalf("CensusSites: %v", err)
 			}
@@ -280,7 +280,7 @@ func TestEverySQLRuleTypeNamesTheExtractorItSourcesThrough(t *testing.T) {
 // answer. The prefix match that made `sql/` mean "sources through FromGo" is
 // exactly how the false claim shipped.
 func TestCensusSitesRefusesANonSQLRuleType(t *testing.T) {
-	if _, ok, _ := sqlparse.CensusSites("forbidden-pattern", "q.go", []byte(dynSprintf)); ok {
+	if _, ok, _ := sqlparse.CensusSites(nil, "forbidden-pattern", "q.go", []byte(dynSprintf)); ok {
 		t.Fatal("a forbidden-pattern rule has no opinion about SQL, and crediting " +
 			"it with declining to analyse some would tell an operator a rule " +
 			"declined something it was never analysing")
@@ -302,7 +302,7 @@ func TestCensusSitesRefusesANonSQLRuleType(t *testing.T) {
 // census's own gap and has to be said out loud, because skipping it reports
 // that rule's coverage as clean.
 func TestCensusSitesRefusesASQLTypeNeitherTableNames(t *testing.T) {
-	sites, ok, err := sqlparse.CensusSites("sql/not-yet-taught", "q.go", []byte(dynSprintf))
+	sites, ok, err := sqlparse.CensusSites(nil, "sql/not-yet-taught", "q.go", []byte(dynSprintf))
 	if !ok {
 		t.Fatal("a sql/* type is a SQL rule whether or not the census can source " +
 			"for it; ok=false says the caller asked about the wrong kind of rule")
@@ -330,7 +330,7 @@ func TestCensusSitesStillAnswersForEveryRegisteredType(t *testing.T) {
 			continue
 		}
 		t.Run(name, func(t *testing.T) {
-			if _, ok, err := sqlparse.CensusSites(name, "q.go", []byte(dynSprintf)); err != nil || !ok {
+			if _, ok, err := sqlparse.CensusSites(nil, name, "q.go", []byte(dynSprintf)); err != nil || !ok {
 				t.Fatalf("a registered sql/* type must be sourced, not refused: ok=%v err=%v", ok, err)
 			}
 		})
@@ -467,7 +467,7 @@ func TestTheFourFileReproductionIsNoLongerSilent(t *testing.T) {
 			if ms := matches(t, c, file(name, src)); len(ms) != 0 {
 				t.Fatalf("premise: the rule is supposed to report nothing here: %+v", ms)
 			}
-			sites, ok, err := sqlparse.CensusSites("sql/locking-select-order", name, []byte(src))
+			sites, ok, err := sqlparse.CensusSites(nil, "sql/locking-select-order", name, []byte(src))
 			if err != nil || !ok {
 				t.Fatalf("CensusSites: ok=%v err=%v", ok, err)
 			}
@@ -562,7 +562,7 @@ func TestBuilderWrittenFromALiteralSeededLocalIsNotSilent(t *testing.T) {
 			if ms := matches(t, c, file("b.go", src)); len(ms) != 0 {
 				t.Fatalf("premise: the rule is supposed to report nothing here: %+v", ms)
 			}
-			sites, ok, err := sqlparse.CensusSites("sql/locking-select-order", "b.go", []byte(src))
+			sites, ok, err := sqlparse.CensusSites(nil, "sql/locking-select-order", "b.go", []byte(src))
 			if err != nil || !ok {
 				t.Fatalf("CensusSites: ok=%v err=%v", ok, err)
 			}
@@ -594,7 +594,7 @@ func TestBuilderWrittenFromANonSQLLocalStaysUnreported(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			src := "package db\n\nimport \"strings\"\n\nfunc runtimeQuery() string { return \"\" }\n\nfunc Q() string {\n" + tc.body + "}\n"
-			sites, ok, err := sqlparse.CensusSites("sql/locking-select-order", "b.go", []byte(src))
+			sites, ok, err := sqlparse.CensusSites(nil, "sql/locking-select-order", "b.go", []byte(src))
 			if err != nil || !ok {
 				t.Fatalf("CensusSites: ok=%v err=%v", ok, err)
 			}
@@ -603,5 +603,49 @@ func TestBuilderWrittenFromANonSQLLocalStaysUnreported(t *testing.T) {
 					"it buries the ones that are: %+v", sites)
 			}
 		})
+	}
+}
+
+// The FromGo half of the census, which reported every composition FromGo could
+// not reassemble. Most are not SQL: one measured corpus's SQL rules were each
+// told 22,693 lines held SQL they could not read, and 2,040 did. A log line
+// built with '+' is not a coverage gap in a SQL rule, and a census line saying
+// it is buries the ones that are. The SQL composition beside it is the control:
+// without it, reporting nothing passes.
+func TestCensusSitesSkipFromGoCompositionsThatAreNotSQL(t *testing.T) {
+	src := "package db\n\nimport \"fmt\"\n\nfunc f(id, col string, n int) (string, string, string) {\n" +
+		"\tmsg := \"could not reach the pallet service for \" + id\n" +
+		"\tpath := fmt.Sprintf(\"exports/%s/%d.csv\", id, n)\n" +
+		"\tq := \"SELECT \" + col + \" FROM takeoffqs.boqs WHERE id = $1\"\n" +
+		"\treturn msg, path, q\n}\n"
+	for _, ruleType := range []string{"sql/parses", "sql/statement-predicate"} {
+		t.Run(ruleType, func(t *testing.T) {
+			sites, ok, err := sqlparse.CensusSites(nil, ruleType, "q.go", []byte(src))
+			if err != nil || !ok {
+				t.Fatalf("CensusSites: ok=%v err=%v", ok, err)
+			}
+			if len(sites) != 1 || sites[0].Line != 8 {
+				t.Fatalf("want the one SQL composition (line 8) and neither the "+
+					"message nor the path: %+v", sites)
+			}
+		})
+	}
+}
+
+// One composition, one census line. "x" + a + "y" is two '+' nodes FromGo
+// cannot fold, the inner one inside the outer one, and the census listed the
+// same SQL once per node.
+func TestCensusSitesReportAComposedQueryOnce(t *testing.T) {
+	src := "package db\n\nfunc f(col, cond string) string {\n" +
+		"\treturn \"SELECT \" + col + \" FROM takeoffqs.boqs WHERE \" + cond + \" ORDER BY id\"\n}\n"
+	sites, ok, err := sqlparse.CensusSites(nil, "sql/statement-predicate", "q.go", []byte(src))
+	if err != nil || !ok {
+		t.Fatalf("CensusSites: ok=%v err=%v", ok, err)
+	}
+	if len(sites) != 1 {
+		t.Fatalf("one composed query, %d census site(s): %+v", len(sites), sites)
+	}
+	if want := "SELECT fw_expr FROM takeoffqs.boqs WHERE fw_expr ORDER BY id"; sites[0].Text != want {
+		t.Fatalf("the site is the whole composition: text %q, want %q", sites[0].Text, want)
 	}
 }

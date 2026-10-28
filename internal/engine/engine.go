@@ -401,7 +401,7 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 		t0 := time.Now()
 		switch fin := r.Checker.(type) {
 		case rules.ErrFinalizer:
-			matches, err = finalizeErr(r, fin, rules.FinalizeContext{Root: fset.Root, Repo: fset.Repo, Fixture: fset.Fixture})
+			matches, err = finalizeErr(r, fin, rules.FinalizeContext{Root: fset.Root, Repo: fset.Repo, Fixture: fset.Fixture, Changeset: fset.Changeset})
 		case rules.Finalizer:
 			matches, err = finalize(r, fin)
 		}
@@ -506,10 +506,18 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 	// The not_declaring holder counts, judged on a live tree only: a fixture
 	// tree proves the marker and the home, and cannot honestly hold the
 	// repository's number (the same reason a credential's count is live-only).
+	//
+	// A count of ZERO is not judged here. A tree that holds none of a marker's
+	// homes is either a pruned one (a synthetic or scratch tree carrying one
+	// rule beside the files its proof needs) or one where the marker is dead,
+	// and a check cannot tell which. `formwork lint` reports a marker no file
+	// declares over the whole tree (notDeclaringProblems), so the dead case
+	// still fails CI, and a pruned tree still runs. A count above zero that
+	// differs from the declaration is a home added or lost, judged here.
 	if !fset.Fixture {
 		for _, r := range rls {
 			for i, e := range r.NotDeclaringEntries() {
-				if got := homeCount[r][i].Load(); got != int64(e.Holders) {
+				if got := homeCount[r][i].Load(); got != 0 && got != int64(e.Holders) {
 					findings = append(findings, toFinding(r, "", rules.Match{Message: fmt.Sprintf(
 						"scope.not_declaring %q is declared by %d place(s) across scope, declared holders %d: "+
 							"a marker sanctions the declaration it opens, so its holders are fixed", e.Marker, got, e.Holders)}))
@@ -570,7 +578,7 @@ func evalFile(r *config.Rule, f *scan.File, homes []declspan.Span) ([]finding.Fi
 		if err != nil {
 			return nil, fmt.Errorf("rule %s: %s: %w", r.ID, f.Path(), err)
 		}
-		work = scan.NewMemFile(f.Path(), declspan.Mask(content, homes))
+		work = work.WithContent(declspan.Mask(content, homes))
 	}
 	matches, err := checkFile(r, work)
 	if err != nil {

@@ -35,23 +35,6 @@ rules:
   scope:
     include:
     - '**/*.go'
-    exclude:
-    # Engine-level: scan.Walk drops any directory named .formwork before rules
-    # run (tools/formwork/internal/scan/scan.go:19,125). Declared here so this
-    # rule's written scope equals its scanned scope. The skip is load-bearing —
-    # .formwork/fixtures holds 1,449 FIRE fixtures whose job is to contain the
-    # violation this rule bans. Pinned by formwork-engine-skip-declared.
-    - '.formwork/**'
-    - "tools/formwork/**"  # vendored engine source, not TakeoffQS code
-    - '**/*_test.go'
-    - '**/vendor/**'  # preventative: vendor trees are not always present on disk
-    - '**/gen/**'  # preventative: generated Go trees may be absent
-    - '**/generated/**'
-    - '**/internal/vendorjson/**'
-    - '**/internal/proto/**'
-    - '**/*.pb.go'  # preventative: generated Go; pinned by pass-pb (#10797)
-    - '**/zz_generated_*.go'  # preventative: generated Go artifacts may be absent
-    - '**/*_generated.go'  # preventative: generated Go artifacts may be absent
   preprocess: decomment-go
   params:
     # Qualifier-free Unmarshal so import aliases cannot evade; Decode was

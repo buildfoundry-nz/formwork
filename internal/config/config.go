@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/bmatcuk/doublestar/v4"
@@ -59,6 +60,10 @@ type Rule struct {
 	// every rule Load builds; judgesGenerated is scope.generated: true.
 	generation      *Generation
 	judgesGenerated bool
+	// testCode is the config's definition of test code; productionOnly is
+	// scope.subject: production (testcode.go).
+	testCode       *TestCode
+	productionOnly bool
 	// excludeComments is parallel to exclude: the YAML head/line comment on
 	// each scope.exclude entry (trimmed, without the leading '#'), empty when
 	// the entry had no comment. Lint uses it to require a justification on
@@ -96,7 +101,40 @@ func New(id, typeName string, sev finding.Severity, cure string, include, exclud
 
 // Applies reports whether relPath (slash-separated) is in this rule's scope.
 func (r *Rule) Applies(relPath string) bool {
-	return matchStored(r.include, relPath) && !matchStored(r.exclude, relPath)
+	if r.productionOnly && r.testCode.Contains(relPath) {
+		return false
+	}
+	return r.InPathScope(relPath)
+}
+
+// InPathScope reports whether relPath matches the rule's include and not its
+// exclude, before scope.subject: the path scope a production subject narrows.
+func (r *Rule) InPathScope(relPath string) bool {
+	return matchIncludes(r.include, relPath) && !matchStored(r.exclude, relPath)
+}
+
+// governanceDir is the walk root's .formwork: formwork.yaml, the rule YAML and
+// the mutation specs the walk reads since #24467 item 9 (its fixtures it
+// still prunes, scan.BuiltinSkipDirs).
+const governanceDir = ".formwork/"
+
+// matchIncludes is matchStored for include globs, with one rule: a path in
+// the governance directory is reached only by a glob WRITTEN for it — one
+// rooted at a literal `.formwork/`. A rule about application code scoped `**`
+// was never written for the corpus that defines it, and reaching it would fire
+// every forbidden token on the rule YAML that spells it; a rule over the
+// corpus names the corpus.
+func matchIncludes(patterns []string, path string) bool {
+	governance := strings.HasPrefix(path, governanceDir)
+	for _, p := range patterns {
+		if governance && !strings.HasPrefix(p, governanceDir) {
+			continue
+		}
+		if doublestar.MatchUnvalidated(p, path) {
+			return true
+		}
+	}
+	return false
 }
 
 // Exclude returns this rule's scope.exclude globs (read-only; do not mutate).
@@ -313,6 +351,9 @@ type Config struct {
 	// Generation is the formwork.yaml `generated:` definition, nil when the
 	// key is absent. Every rule loaded with this config carries it.
 	Generation *Generation
+	// Tests is the formwork.yaml `tests:` definition of test code, nil when
+	// the repository declares none (testcode.go).
+	Tests *TestCode
 }
 
 // ScopeConfig classifies a changeset (spec §8): which paths are docs,
@@ -396,6 +437,8 @@ type rootSpec struct {
 	Scan    scanSpec            `yaml:"scan"`
 	// Generated is the one definition of generated output (generated.go).
 	Generated []generatedSpec `yaml:"generated"`
+	// Tests is the one definition of test code (testcode.go).
+	Tests []string `yaml:"tests"`
 }
 
 type laneSpec struct {
@@ -453,6 +496,9 @@ type scopeSpec struct {
 	// Generated: true makes the rule judge files a declared generator wrote,
 	// which every other rule never reads (generated.go).
 	Generated bool `yaml:"generated"`
+	// Subject: production makes the rule read no file the repository's
+	// `tests:` names; the default, all, reads tests (testcode.go).
+	Subject string `yaml:"subject"`
 }
 
 var idRE = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -647,6 +693,9 @@ func compile(spec ruleSpec) (*Rule, error) {
 	rule.excludeComments = excludeComments
 	rule.notDeclaring = notDeclaring
 	rule.judgesGenerated = spec.Scope.Generated
+	if rule.productionOnly, err = parseSubject(spec.Scope.Subject); err != nil {
+		return nil, fmt.Errorf("rule %s: scope.subject: %w", spec.ID, err)
+	}
 	rule.Origin = spec.Origin
 	rule.Tags = spec.Tags
 	if rule.FixtureExempt, err = fixtureExemptReason(spec.ID, spec.FixtureExempt); err != nil {

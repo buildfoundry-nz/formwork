@@ -59,7 +59,7 @@ func q(tbl string) string {
 	return fmt.Sprintf("SELECT id FROM %s FOR UPDATE", tbl)
 }
 `
-	sites, ok, err := sqlparse.CensusSites("sql/locking-select-order", "db/q.go", []byte(src))
+	sites, ok, err := sqlparse.CensusSites(nil, "sql/locking-select-order", "db/q.go", []byte(src))
 	if !ok {
 		t.Fatal("CensusSites answered \"not a SQL rule\" for sql/locking-select-order — the census " +
 			"would then owe this rule no line at all, which is the silent half of #311")
@@ -82,7 +82,7 @@ func q(tbl string) string {
 // sql/* type in neither extractor table must be refused, not handed FromGo's
 // answer — a guess rendered as a census line is indistinguishable from a fact.
 func TestCensusRefusesARegisteredTypeItCannotSource(t *testing.T) {
-	_, ok, err := sqlparse.CensusSites("sql/not-a-real-type", "db/q.go", []byte("package db\n"))
+	_, ok, err := sqlparse.CensusSites(nil, "sql/not-a-real-type", "db/q.go", []byte("package db\n"))
 	if !ok {
 		t.Fatal("CensusSites answered \"not a SQL rule\" for a sql/-prefixed type — the caller " +
 			"asked the right question and is owed a refusal, not a shrug")

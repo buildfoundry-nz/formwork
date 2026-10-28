@@ -7,10 +7,6 @@ rules:
     scope:
       include:
         - "**/*_test.dart"
-      exclude:
-        - "**/*.g.dart"
-        - "**/*.freezed.dart"
-        - "**/*.pb.dart"
     preprocess: code-only-dart
     params:
       pattern: '(^|[^A-Za-z0-9_.])skip:'

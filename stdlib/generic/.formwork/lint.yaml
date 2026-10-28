@@ -12,9 +12,10 @@ skip:
       name every file-reading rule. Proof is formwork test against fixtures.
   - check: exemption-hygiene
     reason: >-
-      With no source tree every scope.exclude is dead by construction. The
-      pack's excludes are preventative (generated, vendor, .formwork) and are
-      justified in the adopting-repo skip of library rules, not here.
+      With no source tree every scope.exclude is dead by construction. The one
+      exclude the pack keeps is typed (markdown in .husky/ is not a hook
+      script); generated output, vendored trees and tests are the adopting
+      repo's formwork.yaml facts, not pack excludes.
   - check: command-trigger-armable
     reason: >-
       This pack has no source tree, so no file can arm a when.paths_changed

@@ -5,10 +5,6 @@ rules:
     scope:
       include:
         - "**/*.dart"
-      exclude:
-        - "**/*.g.dart"
-        - "**/*.freezed.dart"
-        - "**/*.pb.dart"
     params:
       method: "."
     cure: >-

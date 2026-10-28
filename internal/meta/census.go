@@ -273,7 +273,7 @@ func enumerateEscapeHatches(cfg *config.Config, root string, fset *scan.FileSet,
 			if err != nil {
 				continue
 			}
-			sites, ok, err := sqlparse.CensusSites(r.Type, f.Path(), content)
+			sites, ok, err := sqlparse.CensusSites(f.Tree(), r.Type, f.Path(), content)
 			if !ok {
 				break // not a SQL rule; no file of its scope will be either
 			}

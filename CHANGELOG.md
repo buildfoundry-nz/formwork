@@ -16,6 +16,19 @@
 
 ### Changed
 
+- **The SQL rules read Go string constants.** A query composed from a named
+  constant — `"SELECT " + cols + " FROM t"`, `scanvault.Cols + " WHERE …"`,
+  `fmt.Sprintf("… %s …", cte)` — was a composition no SQL rule could read,
+  so it was judged as fragments or not at all. Both extractors now read a Go
+  constant expression of string type whole: literals, constants declared in
+  the file, elsewhere in its package, or in an imported package of the module
+  (located by `go.mod`, its module path and its directory `replace`s), `+`,
+  conversions to a string type, and `fmt.Sprint*` calls of constants with
+  plain `%s`/`%v` verbs. A name declared more than once in a package is not
+  read. On one corpus this took the census from 1,909 unreadable SQL
+  compositions to 1,025, and its SQL rules found 22 violations the fragments
+  had hidden. A rule now reads a sibling file on a `--staged`/`--range` run
+  even when only the composing file changed.
 - **The escape-hatch census lists only SQL it could not read.** For
   `sql/parses` and `sql/statement-predicate` it listed every `+` chain and
   `fmt.Sprint*` call it could not fold as "SQL … could not be read", whatever

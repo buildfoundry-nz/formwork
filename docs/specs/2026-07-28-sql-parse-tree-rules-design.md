@@ -133,6 +133,9 @@ internal/rules/sqltext/     EDIT — sources Go candidates from sqlextract; beha
 Boundaries hold to design spec §6:
 
 - `sqlextract` knows nothing about rules (a pure Go-AST → string utility).
+  **[§11]** It reads the walk (`scan.FileSet`) since 2026-10-29, to answer one
+  Go question — what string a named constant holds — and still knows nothing
+  of rules.
 - `sqlparse`'s parser wrapper knows nothing about lanes / git / output formats.
 - The rule types know only the wrapper + extractor; nothing else imports
   go-pgquery.
@@ -444,3 +447,38 @@ each finding refuted against the real code before acceptance — 9 confirmed of 
   `sqltext` has always tolerated but which would false-positive `sql/parses`.
   Mark them `Partial` (keeping `sqltext` byte-identical) and skip them on the
   parse-tree path. §4, §5.2.
+
+## 11. Revision 2026-10-29: named constants are literals
+
+Constant folding was the extractors' boundary from the start (`stringValue`
+folds a `+` chain of literals), and it stopped at the literal. A query composed
+from a named constant — a shared CTE, a column list, a status predicate kept in
+one place — was a composition neither extractor could read, so `sqltext` judged
+its literal fragments and the parse-tree rules skipped it. Measured on the
+TakeoffQS corpus (buildfoundry-nz/TakeoffQS#24467): of 2,040 SQL compositions in
+the files its 71 SQL rules govern, 900 were made of nothing but literals and
+constants, 501 from constants of their own package and the rest from constants
+another package of the module exports.
+
+**Decision.** The boundary is the Go language's: a constant expression of string
+type. `consts.go` rewrites each `+` operand and `fmt.Sprint*` argument that
+names one into a parenthesised literal spanning the operand, before either walk
+starts, so no extractor arm changes and the R9 `Partial` marking stays
+positional. A bare constant is left alone — its declaration is already a
+candidate — and the literals the pass makes are never candidates of their own.
+`fmt.Sprint*` of constants with plain `%s`/`%v` verbs is a value too.
+
+**The boundary change.** A constant is declared in another file of the package,
+or another package of the module, more often than in the file that composes the
+query, so `sqlextract` now reads the walk the file came from
+(`scan.File.Tree`): the package's other files by directory, and an import by
+the importing module's `go.mod` (module path, directory `replace`s). The walk is
+the whole tree under a `--staged`/`--range` run too, so a change to the
+composing file alone still reads the constant it did not touch. A name declared
+twice in one package (two build-constrained files) is not read; go.work, vendor
+directories and modules outside the tree are not read either. Each of those
+fails toward the census, which lists the composition, never toward a pass.
+
+**Effect on §4.** `Candidate` now also covers a chain of literals and named
+constants; R4's line-handling and R9's `Partial` are unchanged. The `Site` set
+shrinks by every composition that was constant all along.

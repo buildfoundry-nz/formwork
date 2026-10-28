@@ -143,6 +143,10 @@ type File struct {
 	// raw is the file a preprocessor variant was computed from; nil on the
 	// file itself. See Raw.
 	raw *File
+
+	// tree is the walk that found this file; nil for a file made in memory.
+	// See Tree.
+	tree *FileSet
 }
 
 // NewMemFile returns an in-memory File. For tests and fixture runners.
@@ -244,6 +248,7 @@ func (f *File) Variant(name string) (*File, error) {
 	}
 	v := NewMemFile(f.relPath, transformed)
 	v.raw = f.Raw()
+	v.tree = f.Tree()
 	if f.variants == nil {
 		f.variants = map[string]*File{}
 	}
@@ -267,6 +272,13 @@ type FileSet struct {
 	// Ignored is every path a scan.ignore glob removed from this walk,
 	// sorted by Path. Empty unless the walk ran with ignore globs.
 	Ignored []Ignored
+
+	indexOnce sync.Once
+	byPath    map[string]*File
+	byDir     map[string][]*File
+
+	memoMu sync.Mutex
+	memo   map[any]any
 }
 
 // Ignored is one path removed from the walk. A Dir record means the subtree
@@ -691,5 +703,8 @@ func WalkWith(root string, opts Opts) (*FileSet, error) {
 	}
 	sort.Slice(fset.Files, func(i, j int) bool { return fset.Files[i].relPath < fset.Files[j].relPath })
 	sort.Slice(fset.Ignored, func(i, j int) bool { return fset.Ignored[i].Path < fset.Ignored[j].Path })
+	for _, f := range fset.Files {
+		f.tree = fset
+	}
 	return fset, nil
 }

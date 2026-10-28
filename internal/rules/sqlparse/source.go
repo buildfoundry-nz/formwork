@@ -105,7 +105,7 @@ func statements(f *scan.File) ([]Stmt, []parseFailure, error) {
 		// #311: it asked FromGo for every rule spelled `sql/`, which is right
 		// here and wrong for the two locking types, whose limits are the fold's
 		// and not FromGo's. CensusSites (unreadable.go) owns that mapping now.
-		cands, _, err := sqlextract.FromGo(f.Path(), content)
+		cands, _, err := sqlextract.FromGoIn(f.Tree(), f.Path(), content)
 		if err != nil {
 			return nil, nil, err // Go AST parse failure ⇒ exit 2
 		}
@@ -200,7 +200,7 @@ func lockingStatements(f *scan.File) ([]Stmt, error) {
 		// the same extractor for the #75 census, so the fold's coverage limits
 		// reach an operator through the channel built for them rather than as a
 		// finding on ordinary dynamic SQL nobody meant to police (#311).
-		cands, _, err := sqlextract.FromGoReassembled(f.Path(), content)
+		cands, _, err := sqlextract.FromGoReassembledIn(f.Tree(), f.Path(), content)
 		if err != nil {
 			return nil, err // Go AST parse failure ⇒ exit 2 — always checked first
 		}

@@ -38,10 +38,11 @@
 // imports go-pgquery.
 //
 // HEURISTIC LIMITS remain, and are sqlextract's: SQL composed by fmt.Sprintf,
-// by concatenation with a non-literal operand, or through strings.Builder is
-// not reassembled, so a statement built that way is split into fragments or
-// dropped entirely. Constant folding is the boundary — see sqlextract's own
-// HEURISTIC LIMITS block. One further limit lives here: `require` is RE2
+// by concatenation with an operand that is not a Go constant, or through
+// strings.Builder is not reassembled, so a statement built that way is split
+// into fragments or dropped entirely. Constant folding is the boundary, and it
+// is the Go language's: a named constant is read wherever the module declares
+// it, through the walk the file came from (sqlextract's consts.go). One further limit lives here: `require` is RE2
 // MatchString over the whole statement, so a single data-modifying CTE carrying
 // two INSERT arms is satisfied by the compliant arm.
 package sqltext
@@ -133,7 +134,7 @@ func (c *predicate) CheckFile(f *scan.File) ([]rules.Match, error) {
 		if err != nil {
 			return nil, err
 		}
-		stmts, err = goStatements(f.Path(), content)
+		stmts, err = goStatements(f.Tree(), f.Path(), content)
 		if err != nil {
 			return nil, err
 		}
@@ -424,7 +425,7 @@ func sqlIdentStartByte(c byte) bool {
 // loses reliable interior line positions, so every statement derived from one
 // candidate reports the line of the string expression it came from. A Go parse
 // failure is returned as an error.
-func goStatements(path string, src []byte) ([]statement, error) {
+func goStatements(tree *scan.FileSet, path string, src []byte) ([]statement, error) {
 	// The unresolved Sites are discarded HERE, deliberately (#75). They are no
 	// longer unread: lint's escape-hatch census asks FromGo the same question
 	// over the files this rule governs and enumerates every composition the
@@ -435,7 +436,7 @@ func goStatements(path string, src []byte) ([]statement, error) {
 	// would fail on ordinary dynamic SQL the corpus never intended to police.
 	// The cost of that split is that `check` alone still shows no trace; run
 	// `formwork lint` to see what was not analysed.
-	cands, _, err := sqlextract.FromGo(path, src)
+	cands, _, err := sqlextract.FromGoIn(tree, path, src)
 	if err != nil {
 		return nil, fmt.Errorf("sql/statement-predicate: %w", err)
 	}

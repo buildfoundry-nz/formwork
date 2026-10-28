@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"github.com/buildfoundry-nz/formwork/internal/sqlextract"
 )
 
@@ -62,11 +63,11 @@ var ErrExtractorUnknown = errors.New("formwork: the census does not know which e
 //
 // A file that is not .go has no Go compositions and returns nothing. err is a
 // Go AST parse failure only, which is the rule's to report, not the census's.
-func UnreadableSites(path string, content []byte) ([]sqlextract.Site, error) {
+func UnreadableSites(tree *scan.FileSet, path string, content []byte) ([]sqlextract.Site, error) {
 	if sqlextract.FileKind(path) != "go" {
 		return nil, nil
 	}
-	_, sites, err := sqlextract.FromGoReassembled(path, content)
+	_, sites, err := sqlextract.FromGoReassembledIn(tree, path, content)
 	if err != nil {
 		return nil, err
 	}
@@ -146,12 +147,12 @@ var fromGoTypes = map[string]bool{
 // — it is a SQL rule, and the caller asked the right question — so the refusal
 // reaches the caller as the census's own gap, which it owes a line, and not as
 // "not a SQL rule", which it owes nothing.
-func CensusSites(ruleType, path string, content []byte) ([]sqlextract.Site, bool, error) {
+func CensusSites(tree *scan.FileSet, ruleType, path string, content []byte) ([]sqlextract.Site, bool, error) {
 	if !strings.HasPrefix(ruleType, "sql/") {
 		return nil, false, nil
 	}
 	if reassembledTypes[ruleType] {
-		sites, err := UnreadableSites(path, content)
+		sites, err := UnreadableSites(tree, path, content)
 		return sites, true, err
 	}
 	if !fromGoTypes[ruleType] {
@@ -160,7 +161,7 @@ func CensusSites(ruleType, path string, content []byte) ([]sqlextract.Site, bool
 	if sqlextract.FileKind(path) != "go" {
 		return nil, true, nil
 	}
-	_, sites, err := sqlextract.FromGo(path, content)
+	_, sites, err := sqlextract.FromGoIn(tree, path, content)
 	if err != nil {
 		return nil, true, err
 	}

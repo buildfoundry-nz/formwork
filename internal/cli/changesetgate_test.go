@@ -79,3 +79,56 @@ func TestGateLeavesAnOrdinaryPerFileRuleAlone(t *testing.T) {
 		t.Fatalf("a rule that declares neither class must not be gated: ran %v, skipped %+v", ranIDs(run), skipped)
 	}
 }
+
+// censusChecker is a per-file rule whose detector reads the whole root.
+type censusChecker struct{}
+
+func (censusChecker) CheckFile(*scan.File) ([]rules.Match, error) { return nil, nil }
+func (censusChecker) SubjectScoped() bool                         { return true }
+
+func scopedRule(t *testing.T, id string, include string, c rules.Checker) *config.Rule {
+	t.Helper()
+	r, err := config.New(id, "fake", finding.SeverityError, "", []string{include}, nil, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+// Editing a rule file may change the rules it declares and no others.
+func TestGateRunsOnlyTheRulesOfTheEditedFile(t *testing.T) {
+	edited := gateRule(t, "edited", true)
+	edited.File = ".formwork/rules/edited.yaml"
+	other := gateRule(t, "other", true)
+	other.File = ".formwork/rules/other.yaml"
+
+	run, skipped := gateOnChangeset([]*config.Rule{edited, other}, []string{".formwork/rules/edited.yaml"})
+	if ids := ranIDs(run); len(ids) != 1 || ids[0] != "edited" {
+		t.Fatalf("only the edited file's rule should run, ran %v", ids)
+	}
+	if len(skipped) != 1 || skipped[0].RuleID != "other" {
+		t.Fatalf("the other file's rule should be named as skipped, got %+v", skipped)
+	}
+}
+
+// The walk prunes .formwork only at the root. A fixture there is invisible to a
+// scope-bound invariant whatever its globs match; a nested corpus's .formwork is
+// scanned content and still reaches it.
+func TestGateJudgesAnInvariantByWhatTheWalkSees(t *testing.T) {
+	r := scopedRule(t, "inv", "**/*.go", invariantChecker{bound: true})
+	if run, _ := gateOnChangeset([]*config.Rule{r}, []string{".formwork/fixtures/inv/fire-1/a.go"}); len(run) != 0 {
+		t.Fatalf("a root .formwork fixture must not reach a scope-bound invariant, ran %v", ranIDs(run))
+	}
+	if run, _ := gateOnChangeset([]*config.Rule{r}, []string{"examples/corpus/.formwork/rules/a.go"}); len(run) != 1 {
+		t.Fatalf("a nested .formwork is scanned and must reach the invariant, ran %v", ranIDs(run))
+	}
+}
+
+// A census detector reads the root itself, so a path its scope admits counts
+// even where the walk would not descend.
+func TestGateRunsACensusOnAnAdmittedPathTheWalkSkips(t *testing.T) {
+	r := scopedRule(t, "census", "**/*.go", censusChecker{})
+	if run, _ := gateOnChangeset([]*config.Rule{r}, []string{".formwork/fixtures/census/fire-1/a.go"}); len(run) != 1 {
+		t.Fatalf("an admitted path must run a census, ran %v", ranIDs(run))
+	}
+}

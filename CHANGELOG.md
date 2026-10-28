@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.13.2
+
+### Changed
+
+- **A `.formwork/` change runs only what it can affect.** Under `--staged`
+  and `--range`, any path under `.formwork/` used to run every
+  changeset-gated rule. Now `formwork.yaml` still runs every rule, and an
+  edited rule file runs the rules it declares. Fixtures, mutation specs and
+  the durations hint run nothing extra, because `check` loads only
+  `formwork.yaml` and `rules/*.yaml` and its walk never enters the
+  directory. For the same reason, a path under a root `.formwork/` no longer
+  reaches a scope-bound invariant whose globs happen to match it. A census
+  detector reads the root itself, so an admitted path still runs it. Each rule
+  now records its source file (`Rule.File`). On a 4,300-rule corpus a range
+  touching one mutation spec took 494 s, against 33 s for one touching a
+  docs file.
+
 ## 0.13.1
 
 ### Changed

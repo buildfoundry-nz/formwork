@@ -55,6 +55,11 @@ var ErrExtractorUnknown = errors.New("formwork: the census does not know which e
 // with the same residual: a fragment with a leading SQL keyword and no other
 // structural keyword is not SQL-shaped and is not reported.
 //
+// Not sqlBearing, which FromGo's sites go through. A seed is literal text with
+// no placeholder for what the function wrote around it — a name this pass
+// cannot read contributes nothing (builder.go) — so sqlBearing's arms that read
+// a clause continuing an operand have no operand to see.
+//
 // A file that is not .go has no Go compositions and returns nothing. err is a
 // Go AST parse failure only, which is the rule's to report, not the census's.
 func UnreadableSites(path string, content []byte) ([]sqlextract.Site, error) {
@@ -72,6 +77,17 @@ func UnreadableSites(path string, content []byte) ([]sqlextract.Site, error) {
 		}
 	}
 	return out, nil
+}
+
+// sqlBearingSites keeps the sites whose text carries SQL (sqlBearing).
+func sqlBearingSites(sites []sqlextract.Site) []sqlextract.Site {
+	var out []sqlextract.Site
+	for _, s := range sites {
+		if sqlBearing(s.Text) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // reassembledTypes are the rule types that source through
@@ -115,10 +131,15 @@ var fromGoTypes = map[string]bool{
 // that never calls it. ok is false for a type that is not a SQL rule at all, so
 // a caller cannot silently get an answer meant for one.
 //
-// The FromGo half is unfiltered, deliberately: FromGo emits a Site only for a
-// composition it already identified as string-valued (unresolvedReason), so
-// there is no flood to filter, and filtering would newly hide compositions the
-// census has reported since #75.
+// THE FromGo HALF IS FILTERED BY sqlBearing. It was not, on the
+// reasoning that FromGo emits a Site only for a composition it identified as
+// string-valued, so there was no flood to filter. There was: string-valued is
+// every '+' with a literal on one side, and one corpus's SQL rules were each
+// told that 22,693 lines held SQL they could not read, of which 2,040 did. The
+// rest were log messages, paths and regular expressions, and a census line
+// saying "SQL at … could not be read" about them was false. FromGo also
+// reports a composition nested in another one again, once per '+'; only the
+// outermost is kept, since the inner ones are the same SQL.
 //
 // A sql/* type in NEITHER table is refused with ErrExtractorUnknown rather than
 // sourced by whichever extractor happens to be written last here. ok stays true
@@ -140,7 +161,10 @@ func CensusSites(ruleType, path string, content []byte) ([]sqlextract.Site, bool
 		return nil, true, nil
 	}
 	_, sites, err := sqlextract.FromGo(path, content)
-	return sites, true, err
+	if err != nil {
+		return nil, true, err
+	}
+	return sqlBearingSites(sites), true, nil
 }
 
 // AccountedForByTheCensus reports whether ruleType is one whose extractor

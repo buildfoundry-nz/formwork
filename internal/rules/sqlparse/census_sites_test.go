@@ -605,3 +605,47 @@ func TestBuilderWrittenFromANonSQLLocalStaysUnreported(t *testing.T) {
 		})
 	}
 }
+
+// The FromGo half of the census, which reported every composition FromGo could
+// not reassemble. Most are not SQL: one measured corpus's SQL rules were each
+// told 22,693 lines held SQL they could not read, and 2,040 did. A log line
+// built with '+' is not a coverage gap in a SQL rule, and a census line saying
+// it is buries the ones that are. The SQL composition beside it is the control:
+// without it, reporting nothing passes.
+func TestCensusSitesSkipFromGoCompositionsThatAreNotSQL(t *testing.T) {
+	src := "package db\n\nimport \"fmt\"\n\nfunc f(id, col string, n int) (string, string, string) {\n" +
+		"\tmsg := \"could not reach the pallet service for \" + id\n" +
+		"\tpath := fmt.Sprintf(\"exports/%s/%d.csv\", id, n)\n" +
+		"\tq := \"SELECT \" + col + \" FROM takeoffqs.boqs WHERE id = $1\"\n" +
+		"\treturn msg, path, q\n}\n"
+	for _, ruleType := range []string{"sql/parses", "sql/statement-predicate"} {
+		t.Run(ruleType, func(t *testing.T) {
+			sites, ok, err := sqlparse.CensusSites(ruleType, "q.go", []byte(src))
+			if err != nil || !ok {
+				t.Fatalf("CensusSites: ok=%v err=%v", ok, err)
+			}
+			if len(sites) != 1 || sites[0].Line != 8 {
+				t.Fatalf("want the one SQL composition (line 8) and neither the "+
+					"message nor the path: %+v", sites)
+			}
+		})
+	}
+}
+
+// One composition, one census line. "x" + a + "y" is two '+' nodes FromGo
+// cannot fold, the inner one inside the outer one, and the census listed the
+// same SQL once per node.
+func TestCensusSitesReportAComposedQueryOnce(t *testing.T) {
+	src := "package db\n\nfunc f(col, cond string) string {\n" +
+		"\treturn \"SELECT \" + col + \" FROM takeoffqs.boqs WHERE \" + cond + \" ORDER BY id\"\n}\n"
+	sites, ok, err := sqlparse.CensusSites("sql/statement-predicate", "q.go", []byte(src))
+	if err != nil || !ok {
+		t.Fatalf("CensusSites: ok=%v err=%v", ok, err)
+	}
+	if len(sites) != 1 {
+		t.Fatalf("one composed query, %d census site(s): %+v", len(sites), sites)
+	}
+	if want := "SELECT fw_expr FROM takeoffqs.boqs WHERE fw_expr ORDER BY id"; sites[0].Text != want {
+		t.Fatalf("the site is the whole composition: text %q, want %q", sites[0].Text, want)
+	}
+}

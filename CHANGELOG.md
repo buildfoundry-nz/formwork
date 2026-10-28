@@ -16,6 +16,16 @@
 
 ### Changed
 
+- **The escape-hatch census lists only SQL it could not read.** For
+  `sql/parses` and `sql/statement-predicate` it listed every `+` chain and
+  `fmt.Sprint*` call it could not fold as "SQL … could not be read", whatever
+  the string held. One corpus's SQL rules were each told this about 22,693
+  lines, 2,040 of which carried SQL; the rest were log messages, paths,
+  regular expressions and e-mail text. A composition is now listed when its
+  text carries a statement, a clause or a SQL-only token (a cast, a positional
+  parameter, `IS NULL`); `internal/rules/sqlparse/sqlbearing.go` states the
+  test and what it misses. A composition nested in another is listed once, as
+  the whole.
 - **The `generic` pack carries no generated, vendored, build or test
   excludes.** Its rules read every file the adopting repository does not
   declare as generated (`generated:`), test code for a production subject

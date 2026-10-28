@@ -173,15 +173,27 @@ func FromGo(path string, src []byte) (resolved []Candidate, unresolved []Site, e
 			return false // fully consumed; do not descend
 		}
 		if key, reason, ok := unresolvedReason(expr); ok {
+			// One composition, one Site: "x" + a + "y" is two unresolved
+			// '+' nodes, and the inner one's text is part of the outer one's.
+			// Every span still marks its fragments Partial.
+			nested := false
+			for _, sp := range partialSpans {
+				if expr.Pos() >= sp.lo && expr.End() <= sp.hi {
+					nested = true
+					break
+				}
+			}
 			partialSpans = append(partialSpans, span{lo: expr.Pos(), hi: expr.End()})
-			text, _ := reassemble(expr)
-			unresolved = append(unresolved, Site{
-				Path:   path,
-				Line:   fset.Position(expr.Pos()).Line,
-				Key:    key,
-				Reason: reason,
-				Text:   text,
-			})
+			if !nested {
+				text, _ := reassemble(expr)
+				unresolved = append(unresolved, Site{
+					Path:   path,
+					Line:   fset.Position(expr.Pos()).Line,
+					Key:    key,
+					Reason: reason,
+					Text:   text,
+				})
+			}
 			// keep descending: nested resolvable literals are still collected
 		}
 		return true
@@ -235,6 +247,10 @@ func stringValue(expr ast.Expr) (string, bool) {
 // fwExprPlaceholder is the synthetic identifier FromGoReassembled substitutes
 // for every non-literal part of a reassembled composition.
 const fwExprPlaceholder = "fw_expr"
+
+// Placeholder is fwExprPlaceholder for a consumer that reads a Site's Text:
+// each operand the extractor could not read stands as this word there.
+const Placeholder = fwExprPlaceholder
 
 // verbPattern matches one fmt verb: an optional explicit argument index
 // ([n]), optional flags (+ - space 0 #), an optional width and/or precision

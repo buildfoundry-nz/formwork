@@ -88,9 +88,12 @@ func (e *Envelope) LoadRules() (*Config, error) {
 		}
 	}
 	sort.Slice(cfg.Rules, func(i, j int) bool { return cfg.Rules[i].ID < cfg.Rules[j].ID })
-	if err := generation.validateProvenBy(cfg.Rules); err != nil {
-		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
-	}
+	// A proven_by that names no loaded rule is NOT refused here. Tools load
+	// pruned corpora beside the repository's formwork.yaml (one rule and its
+	// fixtures, a mutation-proof scratch tree), and a load error there made
+	// every such run unevaluable. Whether each proving rule exists is a fact
+	// about the whole corpus, so `formwork lint` (generated-definition) reports
+	// it over the whole corpus instead.
 	for _, r := range cfg.Rules {
 		r.generation = generation
 	}

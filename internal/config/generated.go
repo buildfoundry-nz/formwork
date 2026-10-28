@@ -109,26 +109,6 @@ func isCommentLine(t []byte) bool {
 	return false
 }
 
-// validateProvenBy refuses a marker whose proving rule is not in the corpus:
-// a header nothing proves is a self-granted exemption.
-func (g *Generation) validateProvenBy(rules []*Rule) error {
-	if g == nil {
-		return nil
-	}
-	ids := make(map[string]bool, len(rules))
-	for _, r := range rules {
-		ids[r.ID] = true
-	}
-	for _, m := range g.Markers {
-		for _, id := range m.ProvenBy {
-			if !ids[id] {
-				return fmt.Errorf("generated: marker %q: proven_by %q names no rule in the corpus", m.Marker, id)
-			}
-		}
-	}
-	return nil
-}
-
 // Generation returns the repository's definition of generated output, shared
 // by every rule loaded from it; nil for a rule built with New.
 func (r *Rule) Generation() *Generation { return r.generation }

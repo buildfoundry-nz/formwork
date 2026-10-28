@@ -12,6 +12,14 @@
   as before. On a 4,300-rule corpus, nine Go census detectors re-parsed about
   22,700 Go files on every Go commit, roughly 170 CPU-seconds, to judge the
   handful of files the commit changed.
+- **`dart/marked-single-home`: the Dart form of `go/marked-single-home`.** A
+  top-level declaration whose comment run carries `params.marker` is the one
+  declaration of its identity in scope; any second declaration of it is a
+  finding naming the home. Declarations are column-0 lines outside strings and
+  block comments, so members never count, and a library-private name is keyed
+  on its file. On a 4,300-rule corpus, 48 Dart `pattern-count` rules each
+  pinned one such name to `n: 1`, and each one's mutation proof planted a
+  second declaration.
 
 ## 0.15.1
 

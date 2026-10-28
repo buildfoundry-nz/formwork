@@ -39,7 +39,7 @@ grammar), and enumerating those exceptions would be a list that itself rots.
 Prose accuracy inside an entry is likewise not mechanically checkable; a
 handful of facts too easy to get wrong are pinned individually.
 
-Counts at the time of writing: **28 rule types, 15 preprocessors.** If your
+Counts at the time of writing: **29 rule types, 15 preprocessors.** If your
 binary reports different numbers, believe your binary and file an issue against
 this document.
 
@@ -244,7 +244,7 @@ are enumerated by the escape-hatch census with their reason.
 
 ## Rule types
 
-28 registered rule types. Parameters below are the strictly-decoded set — an unknown one is
+29 registered rule types. Parameters below are the strictly-decoded set — an unknown one is
 exit 2. Each entry gives what the type asserts, every parameter it decodes, and
 a worked example.
 
@@ -825,6 +825,30 @@ of the body.
   params:
     method: '^\s*void dispose\('
     must_call: 'super\.dispose\('
+```
+
+#### `dart/marked-single-home`
+The Dart form of `go/marked-single-home`. A top-level declaration whose
+`//` or `///` comment run, read upward past any annotations, carries `marker`
+is the one declaration of its identity across the scope. Any second
+declaration of it, marked or not, is a finding that names the home. A
+top-level declaration is a column-0 line outside every string and block
+comment, so members are never counted. Identity is the kind (type,
+function, getter, setter, variable) and the name; a library-private name
+(`_Body`) is also keyed on its file. A marker that reaches no top-level
+declaration is itself a finding.
+
+| param | meaning |
+|---|---|
+| `marker` | required: the literal the declaration's comment run carries |
+
+```yaml
+- id: dart-single-homes
+  type: dart/marked-single-home
+  scope:
+    include: ["lib/**/*.dart"]
+  params:
+    marker: 'formwork:single-home'
 ```
 
 #### `dart/ref-after-await`

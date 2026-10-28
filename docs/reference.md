@@ -891,7 +891,10 @@ statement.
 see queries composed in Go as well as `.sql` files. A Go string constant is read
 as its value wherever the module declares it — in the file, elsewhere in its
 package, or in an imported package of the module — so a query composed of
-literals and named constants is read whole.
+literals and named constants is read whole. A SQL template — a package-level
+function whose parameters and result are all `string` and whose body is one
+`return` — is read too: a call with constant arguments reads as what it builds,
+and the definition is judged once per argument set its callers pass.
 
 **`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
 that carries SQL (a statement, a clause, or a SQL-only token such as a cast or

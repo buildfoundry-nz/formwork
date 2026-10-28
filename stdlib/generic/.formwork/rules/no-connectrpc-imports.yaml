@@ -23,8 +23,6 @@ rules:
   scope:
     include:
     - '**/*.go'
-    exclude:
-    - '**/*_test.go'
   params:
     pattern: '"connectrpc\.com/connect[^"]*"'
   cure: Replace the Connect-go handler with a Chi handler + protojson encode/decode (BE-ARCH-3).

@@ -21,7 +21,7 @@ import (
 
 func TestLoadLibraryMergesGenericPack(t *testing.T) {
 	root := writeRepo(t, map[string]string{
-		".formwork/formwork.yaml": "version: 1\nlibrary: [generic]\n",
+		".formwork/formwork.yaml": "version: 1\nlibrary: [generic]\ntests: ['**/*_test.go', '**/*_test.dart']\n",
 		".formwork/rules/local.yaml": `rules:
   - id: local-only
     type: forbidden-pattern
@@ -50,7 +50,7 @@ func TestLoadLibraryMergesGenericPack(t *testing.T) {
 
 func TestLoadLibraryLocalWinsByID(t *testing.T) {
 	root := writeRepo(t, map[string]string{
-		".formwork/formwork.yaml": "version: 1\nlibrary: [generic]\n",
+		".formwork/formwork.yaml": "version: 1\nlibrary: [generic]\ntests: ['**/*_test.go', '**/*_test.dart']\n",
 		".formwork/rules/override.yaml": `rules:
   - id: dart-no-test-skip
     type: forbidden-pattern
@@ -100,6 +100,19 @@ func TestLoadUnknownLibraryNamesTheRoster(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "generic") {
 		t.Fatalf("err = %v, want it to list generic", err)
+	}
+}
+
+// The generic pack states three production subjects, so an adopter loading it
+// declares its test code once; without that the load names what is missing
+// rather than letting those rules read tests (formwork 0.15).
+func TestLoadGenericPackNeedsTheAdoptersTests(t *testing.T) {
+	root := writeRepo(t, map[string]string{
+		".formwork/formwork.yaml": "version: 1\nlibrary: [generic]\n",
+	})
+	_, err := config.Load(root)
+	if err == nil || !strings.Contains(err.Error(), "needs formwork.yaml `tests:`") {
+		t.Fatalf("Load = %v, want the production-subject rules to ask for tests:", err)
 	}
 }
 

@@ -38,6 +38,10 @@ func (e *Envelope) LoadRules() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
 	}
+	testCode, err := compileTests(e.root.Tests)
+	if err != nil {
+		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
+	}
 
 	ruleFiles, err := filepath.Glob(filepath.Join(e.dir, "rules", "*.yaml"))
 	if err != nil {
@@ -49,7 +53,7 @@ func (e *Envelope) LoadRules() (*Config, error) {
 		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
 	}
 
-	cfg := &Config{Version: e.Version, Engine: e.Engine, EngineConstraint: e.EngineConstraint, Lanes: lanes, Scope: scope, Ignore: ignore, Gitignore: gitignore, Library: append([]string(nil), e.root.Library...), RuleFiles: len(ruleFiles), Generation: generation}
+	cfg := &Config{Version: e.Version, Engine: e.Engine, EngineConstraint: e.EngineConstraint, Lanes: lanes, Scope: scope, Ignore: ignore, Gitignore: gitignore, Library: append([]string(nil), e.root.Library...), RuleFiles: len(ruleFiles), Generation: generation, Tests: testCode}
 	seen := map[string]string{} // rule id -> file it was defined in
 	index := map[string]int{}   // rule id -> slot in cfg.Rules
 
@@ -96,6 +100,12 @@ func (e *Envelope) LoadRules() (*Config, error) {
 	// it over the whole corpus instead.
 	for _, r := range cfg.Rules {
 		r.generation = generation
+		r.testCode = testCode
+		// A production subject with no definition of test code would read
+		// every test while claiming to read none.
+		if r.productionOnly && testCode == nil {
+			return nil, fmt.Errorf("config: rule %s: scope.subject: production needs formwork.yaml `tests:`, the one definition of test code it leaves out", r.ID)
+		}
 	}
 	return cfg, nil
 }

@@ -519,6 +519,10 @@ func exemptionHygiene(cfg *config.Config, fset *scan.FileSet) []string {
 		}
 		// scope.not_declaring's dead-entry hygiene; notdeclaring.go says why.
 		problems = append(problems, notDeclaringProblems(r, fset)...)
+		// require_absent credentials' dead-entry hygiene; credentials.go says why.
+		problems = append(problems, credentialProblems(r, fset)...)
+		// scope.subject: production's dead-entry hygiene; subject.go says why.
+		problems = append(problems, subjectProblems(r, fset)...)
 	}
 	return problems
 }

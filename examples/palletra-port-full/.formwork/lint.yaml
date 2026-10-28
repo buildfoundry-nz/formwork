@@ -26,9 +26,11 @@
 #
 # WHAT THIS CORPUS IS, measured, because both entries below hang on it: a
 # 704-rule corpus ported from a 13k-file tree, over NO SOURCE TREE AT ALL —
-# zero files, which is what the `grep -vc` line above reports and what
-# `formwork check -C examples/palletra-port-full` prints as
-# `scan: 0 file(s) scanned`.
+# zero source files, which is what the `grep -vc` line above reports.
+# `formwork check -C examples/palletra-port-full` prints
+# `scan: 618 file(s) scanned`, and every one is the corpus's own .formwork —
+# its rule YAML and config, which the walk reads since it stopped pruning
+# .formwork (only fixtures are pruned now) — so not one of them is source.
 #
 # This header used to describe the rules as checked against a small part of that
 # tree, and both entries below used to explain the quiet checks as what a

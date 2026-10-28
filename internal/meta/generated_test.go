@@ -45,3 +45,18 @@ func TestLintGeneratedDefinitionProblems(t *testing.T) {
 		}
 	}
 }
+
+// formwork 0.14.2: a proven_by that names no rule loads, so a pruned corpus
+// stays evaluable, and lint refuses it over the whole corpus.
+func TestLintGeneratedRefusesAProvingRuleNotInTheCorpus(t *testing.T) {
+	files := genLintRepo("")
+	files[".formwork/formwork.yaml"] = "version: 1\ngenerated:\n  - {marker: 'GENERATED-BY-TOOL', proven_by: [codegen-gone]}\n"
+	code, out := lint(t, files)
+	want := `generated: marker "GENERATED-BY-TOOL": proven_by "codegen-gone" names no rule in the corpus`
+	if !strings.Contains(out, want) {
+		t.Fatalf("missing %q in:\n%s", want, out)
+	}
+	if code == 0 {
+		t.Fatalf("lint exited 0 with a proving rule absent from the corpus:\n%s", out)
+	}
+}

@@ -492,7 +492,11 @@ func generatedProblems(cfg *config.Config, fset *scan.FileSet) []string {
 		for _, id := range m.ProvenBy {
 			// No lanes declared means `check` runs every rule; only a repo that
 			// declares lanes can leave a proving rule out of CI.
-			if r := byID[id]; r != nil && len(cfg.Lanes) > 0 && !selectedByCILane(cfg.Lanes, r) {
+			if byID[id] == nil {
+				problems = append(problems, fmt.Sprintf("generated: marker %q: proven_by %q names no rule in the corpus, so nothing proves a file carrying this header reproduces", m.Marker, id))
+				continue
+			}
+			if r := byID[id]; len(cfg.Lanes) > 0 && !selectedByCILane(cfg.Lanes, r) {
 				problems = append(problems, fmt.Sprintf("generated: marker %q: proving rule %s runs in no CI lane, so nothing proves a file carrying this header reproduces", m.Marker, id))
 			}
 		}

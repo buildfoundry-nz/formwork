@@ -13,6 +13,16 @@
   pinned one such name to `n: 1`, and each one's mutation proof planted a
   second declaration.
 
+### Fixed
+
+- **A pruned corpus loads beside a `generated:` definition.** 0.14.0 refused
+  to load a `formwork.yaml` whose `generated:` `proven_by` named a rule absent
+  from the loaded corpus. Tools that load one rule and its fixtures beside the
+  repository's `formwork.yaml` (a mutation-proof scratch tree, a benchmark
+  harness, a synthetic test) therefore could not evaluate anything. The check
+  now lives in `formwork lint`'s `generated-definition`, which reads the whole
+  corpus: a proven_by that names no rule is a lint failure, not a load error.
+
 ## 0.14.1
 
 ### Added

@@ -1293,11 +1293,13 @@ declares nothing. Generated files are outside every rule that does not declare
 `proven_by` is required and names the rules that prove a file carrying the
 header reproduces from its generator. That proof is what keeps the header from
 being a self-granted exemption: a hand-written file that copies it fails the
-freshness gate, because regenerating does not produce it. Each proven_by id
-must be a rule in the corpus (checked at load); `formwork lint`'s
-`generated-definition` check fails a proving rule no CI lane selects and a
-marker no scanned file carries, and the census counts each marker's files on
-every run.
+freshness gate, because regenerating does not produce it. `formwork lint`'s
+`generated-definition` check fails a proven_by id that names no rule in the
+corpus, a proving rule no CI lane selects, and a marker no scanned file
+carries, and the census counts each marker's files on every run. A missing
+proving rule is a lint finding rather than a load error so that a pruned corpus
+— one rule and its fixtures beside the repository's `formwork.yaml` — still
+loads.
 
 ---
 

@@ -308,10 +308,16 @@ func (c counted) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) {
 // declaration. A credential sanctions the declaration it opens, so a holder
 // the declaration does not account for is a declaration that sanctioned
 // itself.
+//
+// A count of ZERO is lint's, not the check's: a pruned or synthetic tree
+// holds none of the repository's homes, and a check cannot tell that from a
+// dead credential. `formwork lint` reports a credential no in-scope line
+// holds over the whole tree (DeadCredentials), so the dead case still fails
+// CI while a scratch tree carrying one rule still runs.
 func (c counted) Finalize() []rules.Match {
 	var out []rules.Match
 	for _, cr := range c.ex.credentials {
-		if got := cr.seen.Load(); got != cr.want {
+		if got := cr.seen.Load(); got != 0 && got != cr.want {
 			out = append(out, rules.Match{
 				Message: fmt.Sprintf("credential %q is held by %d line(s) across scope, declared holders %d: "+
 					"a credential sanctions the declaration it opens, so its holders are fixed", cr.src, got, cr.want),
@@ -319,6 +325,41 @@ func (c counted) Finalize() []rules.Match {
 		}
 	}
 	return out
+}
+
+// DeadCredentials returns the source of each credential that no line of
+// files holds. files are the rule's in-scope files, each already in the
+// variant the rule reads (its preprocess). A dead credential sanctions
+// nothing, so it is a hygiene problem `formwork lint` reports, the credential
+// counterpart of a not_declaring marker no file declares.
+func (c counted) DeadCredentials(files []*scan.File) ([]string, error) {
+	var dead []string
+	for _, cr := range c.ex.credentials {
+		held := false
+		for _, f := range files {
+			lines, err := f.Lines()
+			if err != nil {
+				return nil, err
+			}
+			for _, l := range lines {
+				ok, err := cr.m.MatchString(l)
+				if err != nil {
+					return nil, err
+				}
+				if ok {
+					held = true
+					break
+				}
+			}
+			if held {
+				break
+			}
+		}
+		if !held {
+			dead = append(dead, cr.src)
+		}
+	}
+	return dead, nil
 }
 
 // WholeTreeInvariant: the holder count is scope-wide, which a changeset scan

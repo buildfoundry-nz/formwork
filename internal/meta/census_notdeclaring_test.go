@@ -130,3 +130,31 @@ func TestCensusDoesNotCountAnUnreadableFileEitherWay(t *testing.T) {
 		t.Fatalf("an unreadable in-scope file makes every would-fire count a guess:\n%s", out)
 	}
 }
+
+// A credential no in-scope line holds sanctions nothing. The check leaves the
+// zero count alone (a pruned tree holds none of a repository's homes), so lint
+// reports it, beside a live credential it must not report.
+func TestLintReportsACredentialNoLineHolds(t *testing.T) {
+	_, out := lint(t, map[string]string{
+		".formwork/formwork.yaml": "version: 1\n",
+		".formwork/rules/r.yaml": "rules:\n" +
+			"  - id: no-ghost\n" +
+			"    type: forbidden-pattern\n" +
+			"    scope: {include: ['**/*.go']}\n" +
+			"    params:\n" +
+			"      pattern: 'Ghost'\n" +
+			"      require_absent:\n" +
+			"        - {credential: '^func LiveHome\\(', holders: 1}\n" +
+			"        - {credential: '^func DeadHome\\(', holders: 1}\n" +
+			"    cure: \"drop it\"\n",
+		".formwork/fixtures/no-ghost/fire-1/a.go": "package p // Ghost want: no-ghost\n",
+		".formwork/fixtures/no-ghost/pass-1/b.go": "package p\n",
+		"live.go": "package p\n\nfunc LiveHome() {\n\tGhost()\n}\n",
+	})
+	if !strings.Contains(out, `credential "^func DeadHome\\(" is held by no line this rule covers`) {
+		t.Fatalf("a credential nothing holds must be reported:\n%s", out)
+	}
+	if strings.Contains(out, `credential "^func LiveHome\\(" is held by no line`) {
+		t.Fatalf("a held credential was reported dead:\n%s", out)
+	}
+}

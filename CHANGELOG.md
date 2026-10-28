@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.14.3
+
+### Fixed
+
+- **A pruned tree runs beside a rule with homes.** A synthetic or scratch tree
+  that carries one rule beside only the files its own proof needs holds none
+  of the repository's not_declaring homes or credential holders. `formwork
+  check` reported each as a holder count of zero, so a synthetic test could
+  not run any rule that names a home outside its scratch tree. A count of zero
+  is now `formwork lint`'s: lint reports a not_declaring marker no file
+  declares (as before) and, new, a require_absent credential no in-scope line
+  holds. A count above zero that differs from the declaration is still a
+  `formwork check` finding.
+
 ## 0.14.2
 
 ### Fixed

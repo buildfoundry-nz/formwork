@@ -100,12 +100,24 @@ func TestCredentialCountedThroughThePrefilter(t *testing.T) {
 	}
 }
 
-// Losing the holder is a finding too: a credential nothing holds is stale.
-func TestCredentialMissingHolderIsAFinding(t *testing.T) {
-	c := mustChecker(t, "forbidden-pattern", credentialRule)
-	ms := runAll(t, c, map[string]string{"other/use.go": "package other\n"})
-	if len(ms) != 1 || !strings.Contains(ms[0].Message, "held by 0 line(s)") {
+// Losing a holder while another remains is a finding: the count is pinned.
+func TestCredentialLostHolderIsAFinding(t *testing.T) {
+	c := mustChecker(t, "forbidden-pattern", "pattern: '\"auto_policy\"'\n"+
+		"require_absent:\n  - {credential: '^const SourceAutoPolicy = \"auto_policy\"', holders: 2}\n")
+	ms := runAll(t, c, map[string]string{"a/owner.go": "package a\nconst SourceAutoPolicy = \"auto_policy\"\n"})
+	if len(ms) != 1 || !strings.Contains(ms[0].Message, "held by 1 line(s)") {
 		t.Fatalf("want a holder-count finding, got %+v", ms)
+	}
+}
+
+// A tree holding none of the credential's homes is not judged by the check:
+// a pruned or synthetic tree cannot be told from a dead credential, and
+// `formwork lint` reports the dead credential over the whole tree (meta
+// TestLintReportsACredentialNoLineHolds).
+func TestCredentialZeroHoldersIsLintsNotTheChecks(t *testing.T) {
+	c := mustChecker(t, "forbidden-pattern", credentialRule)
+	if ms := runAll(t, c, map[string]string{"other/use.go": "package other\n"}); len(ms) != 0 {
+		t.Fatalf("want no finding on a tree holding none of the homes, got %+v", ms)
 	}
 }
 
@@ -203,11 +215,14 @@ func TestEvidenceMultilinePerTrigger(t *testing.T) {
 	}
 }
 
-// The holder count is a live-tree fact: a fixture run does not judge it.
+// The holder count is a live-tree fact: a fixture run does not judge it. Two
+// holders against a declared one is the count a live run must report.
 func TestCredentialCountSkippedInFixtureRuns(t *testing.T) {
 	c := mustChecker(t, "forbidden-pattern", credentialRule)
-	if _, err := c.CheckFile(scan.NewMemFile("other/use.go", []byte("package other\n"))); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"a/owner.go", "b/copy.go"} {
+		if _, err := c.CheckFile(scan.NewMemFile(name, []byte("package p\nconst SourceAutoPolicy = \"auto_policy\"\n"))); err != nil {
+			t.Fatal(err)
+		}
 	}
 	ef := c.(rules.ErrFinalizer)
 	if ms, _ := ef.FinalizeErr(rules.FinalizeContext{Fixture: true}); len(ms) != 0 {

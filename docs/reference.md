@@ -190,7 +190,11 @@ the same extents a credential uses. The engine masks each home before the rule
 reads the file and judges every other line. `holders` is the exact number of
 places in scope that declare the marker; a different count is a finding,
 judged on the live tree only, and a rule declaring the key runs over the whole
-tree under `--staged`/`--range`. A bare-string entry is refused at load.
+tree under `--staged`/`--range`. A count of zero is `formwork lint`'s, not the
+check's (0.14.3): a pruned or synthetic tree carrying one rule holds none of
+the repository's homes, which a check cannot tell from a dead marker, and lint
+reports a marker no file declares over the whole tree. A bare-string entry is
+refused at load.
 
 `scope.generated: true` makes the rule judge files a declared generator wrote
 (see Generated output); every other rule never reads them.
@@ -283,7 +287,8 @@ A **credential** names an owner. It must be anchored at the start of a line
 exact number of lines in the rule's scope that match it. The count is taken
 over every in-scope file, prefiltered or not, and a run whose count differs is
 a finding: the set of owners is fixed, and changing it is a reviewed edit to a
-number.
+number. A count of zero is `formwork lint`'s (0.14.3), as for a not_declaring
+marker: lint reports a credential no in-scope line holds.
 
 **A credential sanctions the declaration its line opens, never the file
 (0.14).** The engine masks that declaration and judges every other line of the

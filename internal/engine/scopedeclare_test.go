@@ -9,6 +9,7 @@
 package engine_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,18 +102,19 @@ func TestRunWithoutNotDeclaringJudgesEveryUse(t *testing.T) {
 }
 
 // The holder count is pinned. A copy of the marker in another file is a
-// second home, and the run says so; so is a marker nothing declares any more.
+// second home, and the run says so; so is a home lost while another remains.
 func TestRunNotDeclaringHoldersArePinned(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		files map[string]string
-		want  string
+		name    string
+		holders int
+		files   map[string]string
+		want    string
 	}{
-		{"a copied marker", map[string]string{"owner.go": ownerBody, "copy.go": "package p\n\nfunc Owner() {}\n"}, "declared by 2 place(s)"},
-		{"a marker nothing declares", map[string]string{"hand.go": handBody}, "declared by 0 place(s)"},
+		{"a copied marker", 1, map[string]string{"owner.go": ownerBody, "copy.go": "package p\n\nfunc Owner() {}\n"}, "declared by 2 place(s)"},
+		{"a lost holder", 2, map[string]string{"owner.go": ownerBody}, "declared by 1 place(s)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			rs, fset := declTree(t, "      not_declaring: [{marker: 'func Owner(', holders: 1}]\n", tc.files)
+			rs, fset := declTree(t, fmt.Sprintf("      not_declaring: [{marker: 'func Owner(', holders: %d}]\n", tc.holders), tc.files)
 			got, err := engine.Run(rs, fset, 1)
 			if err != nil {
 				t.Fatal(err)
@@ -125,6 +127,24 @@ func TestRunNotDeclaringHoldersArePinned(t *testing.T) {
 				t.Fatalf("findings = %+v, want a scope-level %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// A tree that holds none of a marker's homes is not judged by the check: a
+// pruned or synthetic tree carrying one rule beside only its own proof's files
+// holds none of the repository's homes, and a check cannot tell that from a
+// dead marker. `formwork lint` reports the dead marker over the whole tree
+// (meta TestLintReportsADeadNotDeclaringMarkerBesideALiveSibling).
+func TestRunNotDeclaringZeroHoldersIsLintsNotTheChecks(t *testing.T) {
+	rs, fset := declTree(t, "      not_declaring: [{marker: 'func Owner(', holders: 1}]\n", map[string]string{"hand.go": handBody})
+	got, err := engine.Run(rs, fset, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range got {
+		if f.Path == "" && strings.Contains(f.Message, "declared by 0 place(s)") {
+			t.Fatalf("findings = %+v: a tree holding none of the homes must not be a holder-count finding", got)
+		}
 	}
 }
 

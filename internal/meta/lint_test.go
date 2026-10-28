@@ -433,7 +433,7 @@ func TestLintEnumeratesScanIgnoreWithMatchCounts(t *testing.T) {
 	// a pruned dir are deliberately never counted. zz-nothing/** matches
 	// nothing: the census must expose the dead glob, not hide it.
 	for _, want := range []string{
-		"engine: never scans directories named .formwork, .git (any depth)",
+		"engine: never scans directories named .git (any depth) and the root's .formwork/fixtures",
 		"scan.ignore: vendor/** — 1 dirs pruned (subtrees not scanned), 0 files ignored (vendored source)",
 		"scan.ignore: zz-nothing/** — 0 matches (reserved for future noise)",
 	} {

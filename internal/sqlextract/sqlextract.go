@@ -49,6 +49,7 @@ import (
 	"go/token"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -168,14 +169,13 @@ func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
-	folded := foldConstants(tree, path, file)
+	fo := foldConstants(tree, path, fset, file)
 	type rawCand struct {
 		text string
 		pos  token.Pos
 		line int
 		col  int
 	}
-	type span struct{ lo, hi token.Pos }
 	var raws []rawCand
 	var partialSpans []span
 
@@ -184,8 +184,11 @@ func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate
 		if !ok {
 			return true
 		}
-		if folded[expr] {
+		if fo.made[expr] {
 			return false // a constant's value: its declaration is the candidate
+		}
+		if fo.judgedBody(expr) {
+			return false // a judged template body: its instances are the candidates
 		}
 		if s, ok := stringValue(expr); ok {
 			raws = append(raws, rawCand{text: s, pos: expr.Pos(), line: fset.Position(expr.Pos()).Line, col: fset.Position(expr.Pos()).Column})
@@ -203,7 +206,9 @@ func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate
 				}
 			}
 			partialSpans = append(partialSpans, span{lo: expr.Pos(), hi: expr.End()})
-			if !nested {
+			// A template body the walk instantiates in full is judged per
+			// instance (template_index.go), not as a composition.
+			if !nested && !fo.judgedBody(expr) {
 				text, _ := reassemble(expr)
 				unresolved = append(unresolved, Site{
 					Path:   path,
@@ -228,6 +233,9 @@ func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate
 		}
 		resolved = append(resolved, Candidate{Text: rc.text, Line: rc.line, Col: rc.col, Partial: partial})
 	}
+	resolved = append(resolved, fo.instances...)
+	unresolved = append(unresolved, fo.unread...)
+	sort.SliceStable(unresolved, func(i, j int) bool { return unresolved[i].Line < unresolved[j].Line })
 	return resolved, unresolved, nil
 }
 
@@ -342,7 +350,7 @@ func FromGoReassembledIn(tree *scan.FileSet, path string, src []byte) ([]Candida
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
-	folded := foldConstants(tree, path, file)
+	fo := foldConstants(tree, path, fset, file)
 	sink := newSiteSink(path, fset, src)
 	sink.readPackageSeeds(file)
 	// ONE traversal doing both jobs (#45). It used to be two full walks over the
@@ -392,8 +400,11 @@ func FromGoReassembledIn(tree *scan.FileSet, path string, src []byte) ([]Candida
 		if !ok {
 			return true
 		}
-		if folded[expr] {
+		if fo.made[expr] {
 			return false // a constant's value: its declaration is the candidate
+		}
+		if fo.judgedBody(expr) {
+			return false // a judged template body: its instances are the candidates
 		}
 		if expr.Pos() < consumedEnd {
 			return true // inside a consumed expression: descend, but do not re-collect
@@ -408,7 +419,7 @@ func FromGoReassembledIn(tree *scan.FileSet, path string, src []byte) ([]Candida
 		}
 		return true
 	})
-	return append(exprCands, foldCands...), sink.collected(), nil
+	return append(append(exprCands, foldCands...), fo.instances...), sink.collected(), nil
 }
 
 // reassemble reports the best-effort complete reassembly of expr, when expr

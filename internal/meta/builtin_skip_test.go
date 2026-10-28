@@ -65,7 +65,7 @@ func TestEmptyScopeExplainsAScopeRootedUnderASkippedDirectory(t *testing.T) {
 	files[".formwork/rules/r.yaml"] = "rules:\n" +
 		"  - id: fixture-police\n" +
 		"    type: forbidden-pattern\n" +
-		"    scope: {include: ['.formwork/**']}\n" +
+		"    scope: {include: ['.formwork/fixtures/**']}\n" +
 		"    params: {pattern: 'Ghost'}\n" +
 		"    cure: \"drop it\"\n"
 	files[".formwork/fixtures/fixture-police/fire-1/a.go"] = "package p // Ghost want: fixture-police\n"

@@ -66,6 +66,9 @@ type constEnv struct {
 	pkgs  map[pkgKey]*pkgEntry
 	mods  map[string]*goMod // by module root dir
 	names map[string]string // package name by dir, "" when none
+
+	usesOnce sync.Once
+	uses     map[templateKey]*templateUse // template_index.go
 }
 
 type pkgKey struct {
@@ -87,6 +90,13 @@ type pkgTable struct {
 	// strTypes are the types declared as `type T string`, which a conversion
 	// at a use site may name.
 	strTypes map[string]bool
+	// templates are the package's SQL template functions (templates.go).
+	templates map[string]funcDef
+}
+
+type funcDef struct {
+	decl *ast.FuncDecl
+	file *constFile
 }
 
 type constDef struct {
@@ -147,7 +157,7 @@ func (e *constEnv) table(k pkgKey) *pkgTable {
 }
 
 func (e *constEnv) build(k pkgKey) *pkgTable {
-	t := &pkgTable{decls: map[string]int{}, consts: map[string]constDef{}, strTypes: map[string]bool{}}
+	t := &pkgTable{decls: map[string]int{}, consts: map[string]constDef{}, strTypes: map[string]bool{}, templates: map[string]funcDef{}}
 	for _, f := range e.tree.Dir(k.dir) {
 		p := f.Path()
 		if !strings.HasSuffix(p, ".go") || (!k.tests && strings.HasSuffix(p, "_test.go")) {
@@ -167,6 +177,9 @@ func (e *constEnv) build(k pkgKey) *pkgTable {
 			case *ast.FuncDecl:
 				if d.Recv == nil {
 					t.decls[d.Name.Name]++
+					if isTemplate(d) {
+						t.templates[d.Name.Name] = funcDef{decl: d, file: cf}
+					}
 				}
 			case *ast.GenDecl:
 				for _, sp := range d.Specs {
@@ -271,7 +284,7 @@ func (e *constEnv) packageName(dir string) string {
 // type. inConst is true while folding a constant's own declared value, where
 // a one-argument call can only be a conversion: Go admits no other call there
 // that yields a string.
-func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, depth int) (string, bool) {
+func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, env map[string]string, depth int) (string, bool) {
 	if depth > 64 {
 		return "", false
 	}
@@ -283,18 +296,25 @@ func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, depth int) (
 		s, err := strconv.Unquote(v.Value)
 		return s, err == nil
 	case *ast.ParenExpr:
-		return e.fold(v.X, cf, inConst, depth+1)
+		return e.fold(v.X, cf, inConst, env, depth+1)
 	case *ast.BinaryExpr:
 		if v.Op != token.ADD {
 			return "", false
 		}
-		l, ok := e.fold(v.X, cf, inConst, depth+1)
+		l, ok := e.fold(v.X, cf, inConst, env, depth+1)
 		if !ok {
 			return "", false
 		}
-		r, ok := e.fold(v.Y, cf, inConst, depth+1)
+		r, ok := e.fold(v.Y, cf, inConst, env, depth+1)
 		return l + r, ok
 	case *ast.Ident:
+		if v.Obj != nil && v.Obj.Kind == ast.Var {
+			if _, param := v.Obj.Decl.(*ast.Field); param {
+				// A template's parameter, bound by the call being evaluated.
+				val, ok := env[v.Name]
+				return val, ok
+			}
+		}
 		if v.Obj != nil {
 			if v.Obj.Kind != ast.Con {
 				return "", false
@@ -305,7 +325,7 @@ func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, depth int) (
 			}
 			for i, n := range sp.Names {
 				if n.Name == v.Name {
-					return e.fold(sp.Values[i], cf, true, depth+1)
+					return e.fold(sp.Values[i], cf, true, nil, depth+1)
 				}
 			}
 			return "", false
@@ -323,13 +343,16 @@ func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, depth int) (
 			return e.foldIn(t, v.Sel.Name, depth)
 		}
 	case *ast.CallExpr:
-		if len(v.Args) != 1 || v.Ellipsis != token.NoPos {
+		if v.Ellipsis != token.NoPos {
 			return "", false
 		}
-		if !inConst && !e.namesStringType(v.Fun, cf) {
+		if len(v.Args) == 1 && (inConst || e.namesStringType(v.Fun, cf)) {
+			return e.fold(v.Args[0], cf, inConst, env, depth+1)
+		}
+		if inConst {
 			return "", false
 		}
-		return e.fold(v.Args[0], cf, inConst, depth+1)
+		return e.callTemplate(v, cf, env, depth)
 	}
 	return "", false
 }
@@ -343,7 +366,7 @@ func (e *constEnv) foldIn(t *pkgTable, name string, depth int) (string, bool) {
 	if !ok || def.expr == nil {
 		return "", false
 	}
-	return e.fold(def.expr, def.file, true, depth+1)
+	return e.fold(def.expr, def.file, true, nil, depth+1)
 }
 
 // namesStringType reports whether fun, the callee of a one-argument call at a
@@ -381,50 +404,127 @@ func (e *constEnv) namesStringType(fun ast.Expr, cf *constFile) bool {
 	return false
 }
 
+// folded is what foldConstants did to a file: the literals it made, which
+// are not candidates of their own; the spans of the file's SQL templates'
+// bodies, whose compositions are judged at every call instead (templates.go);
+// and the template calls it could not evaluate, which are compositions the
+// extractor cannot read.
+type folded struct {
+	made map[ast.Expr]bool
+	// bodies are the file's SQL template bodies; a call inside one takes the
+	// template's parameters and is not reported on its own.
+	bodies []span
+	// judged are the bodies the walk instantiates in full: their compositions
+	// are not sites, and instances holds one candidate per argument set.
+	judged      []span
+	instances   []Candidate
+	unread      []Site
+	unreadSpans []span
+}
+
+type span struct{ lo, hi token.Pos }
+
+func (f folded) inTemplate(e ast.Expr) bool { return within(e, f.bodies) }
+
+// judgedBody reports whether e is inside a template body the walk
+// instantiates in full, whose compositions are judged per instance.
+func (f folded) judgedBody(e ast.Expr) bool { return within(e, f.judged) }
+
+// inUnread reports whether e is inside a template call already recorded as
+// unread: an argument of that call is part of its Site.
+func (f folded) inUnread(e ast.Expr) bool { return within(e, f.unreadSpans) }
+
+func within(e ast.Expr, spans []span) bool {
+	for _, s := range spans {
+		if e.Pos() >= s.lo && e.End() <= s.hi {
+			return true
+		}
+	}
+	return false
+}
+
 // foldConstants is the pass the extractors run before walking file: each
 // operand of a '+' and each argument of fmt.Sprint{,f,ln} that is a named
 // string constant, or a conversion of one, becomes a parenthesised literal
-// spanning the operand. It returns the literals it made, which are not
-// candidates of their own. tree may be nil.
-func foldConstants(tree *scan.FileSet, p string, file *ast.File) map[ast.Expr]bool {
+// spanning the operand, and so does every call of a SQL template whose
+// arguments are constants, wherever it stands (templates.go). tree may be nil.
+func foldConstants(tree *scan.FileSet, p string, fset *token.FileSet, file *ast.File) folded {
 	e := envFor(tree)
 	cf := newConstFile(p, file)
-	made := map[ast.Expr]bool{}
-	replace := func(x ast.Expr) ast.Expr {
-		switch x.(type) {
-		case *ast.Ident, *ast.SelectorExpr, *ast.CallExpr:
-		default:
-			return x
+	out := folded{made: map[ast.Expr]bool{}}
+	for _, d := range file.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok || !isTemplate(fd) {
+			continue
 		}
-		s, ok := e.fold(x, cf, false, 0)
-		if !ok {
-			return x
+		body := fd.Body.List[0].(*ast.ReturnStmt).Results[0]
+		sp := span{body.Pos(), body.End()}
+		out.bodies = append(out.bodies, sp)
+		u := e.useOf(fd, cf)
+		if u == nil || u.dynamic || len(u.argSets) == 0 {
+			// No walk to read; a call passing a non-constant; or no call at
+			// all, so nothing says what it builds. Its compositions are sites.
+			continue
 		}
+		var texts []string
+		complete := true
+		for _, set := range u.argSets {
+			text, ok := e.fold(body, cf, false, set, 0)
+			if !ok {
+				complete = false
+				break
+			}
+			texts = append(texts, text)
+		}
+		if !complete {
+			continue
+		}
+		// Called, and only ever with constants: judged once per instance.
+		out.judged = append(out.judged, sp)
+		pos := fset.Position(body.Pos())
+		for _, t := range texts {
+			out.instances = append(out.instances, Candidate{Text: t, Line: pos.Line, Col: pos.Column})
+		}
+	}
+	// literal stands s in for x. A constant's value is not a candidate of its
+	// own — its declaration already is — but a template call's is: the
+	// instance it builds is a statement made here.
+	literal := func(x ast.Expr, s string) ast.Expr {
 		lit := &ast.ParenExpr{
 			Lparen: x.Pos(),
 			X:      &ast.BasicLit{ValuePos: x.Pos(), Kind: token.STRING, Value: strconv.Quote(s)},
 			Rparen: x.End() - 1,
 		}
-		made[lit] = true
+		_, call := x.(*ast.CallExpr)
+		out.made[lit] = !call || e.isConversion(x.(*ast.CallExpr), cf)
 		return lit
 	}
-	ast.Inspect(file, func(n ast.Node) bool {
-		switch v := n.(type) {
-		case *ast.BinaryExpr:
-			if v.Op == token.ADD {
-				v.X = replace(v.X)
-				v.Y = replace(v.Y)
-			}
-		case *ast.CallExpr:
-			if isFmtSprint(v) {
-				for i, a := range v.Args {
-					v.Args[i] = replace(a)
-				}
-			}
+	// operand is a '+' operand or a fmt.Sprint* argument: a named constant
+	// there is read as its value. A bare constant is not — its declaration is
+	// already the candidate.
+	operand := func(x ast.Expr) ast.Expr {
+		switch x.(type) {
+		case *ast.Ident, *ast.SelectorExpr, *ast.CallExpr:
+		default:
+			return x
 		}
-		return true
+		if s, ok := e.fold(x, cf, false, nil, 0); ok {
+			return literal(x, s)
+		}
+		return anywhere(e, cf, fset, x, literal, &out, false)
+	}
+	rewriteExprs(file, func(x ast.Expr, composed bool) ast.Expr {
+		if composed {
+			return operand(x)
+		}
+		return anywhere(e, cf, fset, x, literal, &out, true)
 	})
-	return made
+	return out
+}
+
+// isConversion reports whether call converts one argument to a string type.
+func (e *constEnv) isConversion(call *ast.CallExpr, cf *constFile) bool {
+	return len(call.Args) == 1 && e.namesStringType(call.Fun, cf)
 }
 
 // isFmtSprint reports whether call is fmt.Sprint, fmt.Sprintf or fmt.Sprintln.

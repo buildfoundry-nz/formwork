@@ -16,6 +16,28 @@
 
 ### Changed
 
+- **The walk reads the repository's `.formwork`, except its fixtures.** The
+  root `.formwork` was pruned whole, so no rule could read `formwork.yaml`,
+  the rule YAML or the mutation specs, and every check over the corpus itself
+  had to shell out (`type: command`). Only the root's `.formwork/fixtures` is
+  pruned now — each fixture is its own rule's proof, judged by `formwork
+  test`. The rest is scanned, and reached only by an include glob rooted at
+  `.formwork/`: `**` does not descend into it, so a rule written for
+  application code never reads the definitions that spell its own token. A
+  root `.formwork` symlink (a shared rule set) is still skipped, and now
+  recorded as a link the walk declined to follow. A `scan.ignore` glob hiding
+  tracked rule YAML is reported like any other hidden tracked path.
+- **The SQL rules read SQL template functions.** A repository keeps a
+  predicate in one place as a function of the aliases and placeholders it is
+  spliced with — `VisibleWhere("p")`, `OverdueSQL("$1")` — and both its body
+  and every query calling it were compositions no rule could read. A
+  *template* — a package-level function whose parameters and result are all
+  `string` and whose body is one `return` — is now read: a call with constant
+  arguments reads as the instance it builds, at the call, and the definition
+  is judged once per distinct argument set the walk calls it with. Its body is
+  then not unread SQL. A template some call feeds a non-constant, or that
+  nothing calls, stays unread at the definition, and the non-constant call is
+  unread where it stands.
 - **`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
   carrying SQL that the extractor cannot read — an operand that is a variable,
   a call or a field — is a finding, `SQL could not be read (…), so this rule

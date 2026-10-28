@@ -184,6 +184,16 @@ reaches the engine as `converted call sites consume the accessor (audit-1`. The
 `include` and `exclude` are doublestar globs, matched against repo-relative
 paths. A file is in scope when it matches an `include` and no `exclude`.
 
+**The walk reads every file but two kinds:** `.git` directories, at any depth,
+and the root's `.formwork/fixtures` — each fixture is its own rule's proof,
+judged by `formwork test` and by no other rule. The rest of the root's
+`.formwork` — `formwork.yaml`, the rule YAML, the mutation specs — is scanned,
+and a rule reaches it **only through an include glob rooted at `.formwork/`**:
+`**` and `**/*.yaml` do not descend into it, because a rule written for
+application code was not written for the corpus that defines it, and would
+fire on every rule YAML that spells its forbidden token. A rule over the
+corpus names the corpus (`.formwork/rules/*.yaml`).
+
 `scope.not_declaring` lists `{marker, holders}` entries. Each place a marker
 (a literal) occurs opens a HOME: the declaration that begins on that line, with
 the same extents a credential uses. The engine masks each home before the rule
@@ -891,7 +901,10 @@ statement.
 see queries composed in Go as well as `.sql` files. A Go string constant is read
 as its value wherever the module declares it — in the file, elsewhere in its
 package, or in an imported package of the module — so a query composed of
-literals and named constants is read whole.
+literals and named constants is read whole. A SQL template — a package-level
+function whose parameters and result are all `string` and whose body is one
+`return` — is read too: a call with constant arguments reads as what it builds,
+and the definition is judged once per argument set its callers pass.
 
 **`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
 that carries SQL (a statement, a clause, or a SQL-only token such as a cast or

@@ -125,10 +125,13 @@ func TestGateJudgesAnInvariantByWhatTheWalkSees(t *testing.T) {
 }
 
 // A census detector reads the root itself, so a path its scope admits counts
-// even where the walk would not descend.
+// even where the walk would not descend — a .go file under a vendored clone's
+// .git, which `**/*.go` matches and the walk prunes at any depth. (A root
+// fixture is no longer the example: a `**` glob does not reach .formwork at all
+// since #24467 item 9; only a glob rooted at `.formwork/` does.)
 func TestGateRunsACensusOnAnAdmittedPathTheWalkSkips(t *testing.T) {
 	r := scopedRule(t, "census", "**/*.go", censusChecker{})
-	if run, _ := gateOnChangeset([]*config.Rule{r}, []string{".formwork/fixtures/census/fire-1/a.go"}); len(run) != 1 {
+	if run, _ := gateOnChangeset([]*config.Rule{r}, []string{"vendor/dep/.git/hooks/a.go"}); len(run) != 1 {
 		t.Fatalf("an admitted path must run a census, ran %v", ranIDs(run))
 	}
 }

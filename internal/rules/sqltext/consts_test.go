@@ -71,3 +71,22 @@ func TestSQLTheRuleCannotReadIsAFinding(t *testing.T) {
 			"message nor the composition of constants: %+v", ms)
 	}
 }
+
+// A rule scoped to the package that writes a template judges what the template
+// builds, though every call is elsewhere: the definition is read once per
+// argument set its callers pass. The instance from the store's own caller is
+// judged at the definition line; a rule there sees no unread SQL.
+func TestARuleScopedToATemplatesPackageJudgesItsInstances(t *testing.T) {
+	files := map[string]string{
+		"go.mod": "module example.com/m\n\ngo 1.22\n",
+		"store/frag.go": "package store\n\n" +
+			"func DeleteFrom(table string) string {\n\treturn \"DELETE FROM \" + table + \" WHERE true\"\n}\n",
+		"routes/r.go": "package routes\n\nimport \"example.com/m/store\"\n\n" +
+			"func Q() string { return store.DeleteFrom(\"takeoffqs.boqs\") }\n",
+	}
+	c := mustChecker(t, "table: 'takeoffqs\\.boqs'\nforbid:\n  - 'WHERE true'\n")
+	ms := check(t, c, walked(t, "store/frag.go", files))
+	if len(ms) != 1 || ms[0].Line != 4 || strings.Contains(ms[0].Message, "could not be read") {
+		t.Fatalf("want the instance judged at the definition (line 4): %+v", ms)
+	}
+}

@@ -16,6 +16,60 @@
 
 ### Changed
 
+- **The walk reads the repository's `.formwork`, except its fixtures.** The
+  root `.formwork` was pruned whole, so no rule could read `formwork.yaml`,
+  the rule YAML or the mutation specs, and every check over the corpus itself
+  had to shell out (`type: command`). Only the root's `.formwork/fixtures` is
+  pruned now — each fixture is its own rule's proof, judged by `formwork
+  test`. The rest is scanned, and reached only by an include glob rooted at
+  `.formwork/`: `**` does not descend into it, so a rule written for
+  application code never reads the definitions that spell its own token. A
+  root `.formwork` symlink (a shared rule set) is still skipped, and now
+  recorded as a link the walk declined to follow. A `scan.ignore` glob hiding
+  tracked rule YAML is reported like any other hidden tracked path.
+- **The SQL rules read SQL template functions.** A repository keeps a
+  predicate in one place as a function of the aliases and placeholders it is
+  spliced with — `VisibleWhere("p")`, `OverdueSQL("$1")` — and both its body
+  and every query calling it were compositions no rule could read. A
+  *template* — a package-level function whose parameters and result are all
+  `string` and whose body is one `return` — is now read: a call with constant
+  arguments reads as the instance it builds, at the call, and the definition
+  is judged once per distinct argument set the walk calls it with. Its body is
+  then not unread SQL. A template some call feeds a non-constant, or that
+  nothing calls, stays unread at the definition, and the non-constant call is
+  unread where it stands.
+- **`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
+  carrying SQL that the extractor cannot read — an operand that is a variable,
+  a call or a field — is a finding, `SQL could not be read (…), so this rule
+  cannot judge it`, where it was a census line and a pass. For
+  `sql/statement-predicate` it is a finding whatever the `table` pattern says,
+  since the unread operand may be the table. The escape-hatch census no longer
+  lists these two types. **Migration:** compose such statements from Go
+  constants and bind what varies as a parameter; `formwork lint` on the
+  previous release lists every site.
+- **The SQL rules read Go string constants.** A query composed from a named
+  constant — `"SELECT " + cols + " FROM t"`, `scanvault.Cols + " WHERE …"`,
+  `fmt.Sprintf("… %s …", cte)` — was a composition no SQL rule could read,
+  so it was judged as fragments or not at all. Both extractors now read a Go
+  constant expression of string type whole: literals, constants declared in
+  the file, elsewhere in its package, or in an imported package of the module
+  (located by `go.mod`, its module path and its directory `replace`s), `+`,
+  conversions to a string type, and `fmt.Sprint*` calls of constants with
+  plain `%s`/`%v` verbs. A name declared more than once in a package is not
+  read. On one corpus this took the census from 1,909 unreadable SQL
+  compositions to 1,025, and its SQL rules found 22 violations the fragments
+  had hidden. A rule now reads a sibling file on a `--staged`/`--range` run
+  even when only the composing file changed.
+- **The escape-hatch census lists only SQL it could not read.** For
+  `sql/parses` and `sql/statement-predicate` it listed every `+` chain and
+  `fmt.Sprint*` call it could not fold as "SQL … could not be read", whatever
+  the string held. One corpus's SQL rules were each told this about 22,693
+  lines, 2,040 of which carried SQL; the rest were log messages, paths,
+  regular expressions and e-mail text. A composition is now listed when its
+  text carries a statement, a clause or a SQL-only token (a cast, a positional
+  parameter, `IS NULL`); `internal/rules/sqlparse/sqlbearing.go` states the
+  test and what it misses. A composition nested in another is listed once, as
+  the whole.
 - **The `generic` pack carries no generated, vendored, build or test
   excludes.** Its rules read every file the adopting repository does not
   declare as generated (`generated:`), test code for a production subject

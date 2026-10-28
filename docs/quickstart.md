@@ -115,9 +115,14 @@ the repo you are building, which has no rules yet:
 ```sh
 formwork check
 # ...
-# scan: 6 file(s) scanned
+# scan: 12 file(s) scanned
 # formwork: 5/5 rules passed, 0 finding(s)
 ```
+
+The count includes `.formwork/` itself — `formwork.yaml` and the rule files —
+which the walk reads like any other directory; only `.formwork/fixtures` is
+skipped. A rule reaches those files only when its `include` names `.formwork/`,
+so `**` in a rule below never reads its own definition.
 
 That line is there on a clean run too, and it is meant to be. `5/5 rules passed`
 over `0 file(s) scanned` is not a clean repo — it is a repo nobody looked at,
@@ -474,7 +479,7 @@ suite dies:
 [empty-scope] OK
 [exemption-hygiene] FAIL — 1 problem(s)
   no-print-debugging: scope.exclude "**/*_test.go" matches no files and has no justification comment
-engine: never scans directories named .formwork, .git (any depth) — not an operator choice, and declarable in no rule's scope.exclude
+engine: never scans directories named .git (any depth) and the root's .formwork/fixtures — not an operator choice, and declarable in no rule's scope.exclude
 escape hatches:
   no-print-debugging: scope.exclude: **/*_test.go
 formwork lint: 5/7 checks passed

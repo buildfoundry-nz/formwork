@@ -191,6 +191,8 @@ func FromGo(path string, src []byte) (resolved []Candidate, unresolved []Site, e
 - *Emitting* unresolved sites as findings is an **opt-in** that **no rule in
   this increment enables** — the consumer's `--inventory` census is out of
   scope, and a fleet-wide behavior change must not ride across on a refactor.
+  **[§12]** Since 2026-10-29 `sql/parses` and `sql/statement-predicate` emit
+  them, as findings; see §12.
 
 A `.go` parse failure remains a returned error (engine → exit 2), never a silent
 pass — unchanged.
@@ -482,3 +484,60 @@ fails toward the census, which lists the composition, never toward a pass.
 **Effect on §4.** `Candidate` now also covers a chain of literals and named
 constants; R4's line-handling and R9's `Partial` are unchanged. The `Site` set
 shrinks by every composition that was constant all along.
+
+## 12. Revision 2026-10-29: the FromGo rules fail closed
+
+§4 kept unresolved sites out of every rule's findings, so "a fleet-wide
+behavior change must not ride across on a refactor", and #75 later listed them
+in the lint census instead. A census line is not a verdict. A statement the
+rule could not read passed `formwork check` unjudged, and a `require` held only
+for SQL that happened to be written readably — on TakeoffQS
+(buildfoundry-nz/TakeoffQS#24467), 1,025 compositions in the files its 71 SQL
+rules govern after §11.
+
+**Decision.** `sql/parses` and `sql/statement-predicate`, which read only what
+they can fold, report each unresolved site whose text carries SQL
+(`sqlparse.SQLBearingSites`) as a finding. For `sql/statement-predicate` that
+holds whatever the `table` pattern says: the unread operand may be the table.
+The census no longer lists these two types, since nothing they leave unread is
+unenforced (`sqlparse.FailsClosed`).
+
+**Why now and not at §4.** Before §11 the unread set held every composition
+built from a named constant, and failing on it would have failed ordinary,
+readable-in-principle SQL. With constants read, what is left has text decided at
+run time, which the rule cannot vouch for and the author can rewrite: compose
+the statement from constants and bind what varies as a parameter.
+
+**Not changed.** The locking pair reads a composition through placeholder
+reassembly by design (§5.3) and declines only the shapes the fold cannot follow;
+the census lists those for it as before.
+
+## 13. Revision 2026-10-29: SQL templates are read at both ends
+
+§11 read named constants; it left the shape repositories use to keep a
+predicate in one place — a function of the aliases and placeholders it is
+spliced with (`VisibleWhere("p")`, `OverdueSQL("$1")`). Its body is a
+composition of literals and parameters, and every query calling it a
+composition with a call for an operand, so §12 would fail both. Spelling each
+instantiation as a constant is no cure: rules guard these homes with a
+credential on the function, so the predicate may be written in that one
+declaration only.
+
+**Decision.** A *template* — package-level, `string` parameters and result,
+body a single `return` (templates.go) — is evaluated with constant arguments.
+At a call, the instance reads as a literal wherever the call stands. At the
+definition, the body is judged once per distinct argument set the walk calls
+it with, from a walk-wide index of template calls built once per run
+(template_index.go); a call inside another template's body is instantiated
+from that template's instances. The body's compositions are not sites when
+every instantiation is known; a template some call feeds a non-constant, or
+that nothing calls, keeps them, because nothing then says what it builds — the
+fail-closed reading. A non-constant call is a site where it stands, or part of
+its composition's site when it is a `+` operand.
+
+**Why both ends.** A rule scoped to the package that writes a predicate
+expects to judge it, and judging only at calls would let a store-package rule
+miss every instance built from a route. Measured on TakeoffQS: 41 fewer unread
+compositions, no new findings, and the index costs one parse of the walk's Go
+files per run.
+

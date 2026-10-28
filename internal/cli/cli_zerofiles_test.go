@@ -71,7 +71,9 @@ func TestZeroFilesControlViolationIsStillFound(t *testing.T) {
 
 // Rows 1-2: a root holding only .formwork/ — a sparse or partial checkout, a
 // stale worktree, or simply the wrong directory that happens to carry config.
-// Zero files scanned must not read like a clean tree.
+// A scan that reached no source must not read like a clean tree. The two files
+// it does count are the corpus itself, which the walk reads since #24467
+// item 9.
 func TestCheckZeroFilesScannedIsDisclosed(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
@@ -81,15 +83,16 @@ func TestCheckZeroFilesScannedIsDisclosed(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0 — an empty tree stays a pass; it must stop being a SILENT one\n%s", code, out)
 	}
-	if !strings.Contains(out, "scan: 0 file(s) scanned") {
-		t.Errorf("check must say it looked at nothing:\n%s", out)
+	if !strings.Contains(out, "scan: 2 file(s) scanned") {
+		t.Errorf("check must say it looked at the corpus alone:\n%s", out)
 	}
 	if !strings.Contains(out, "no-widget: scope matched no files") {
 		t.Errorf("the rule that could not fire must be named:\n%s", out)
 	}
 }
 
-// Row 8, the commonest real cause: an include-glob typo. TWO files are scanned
+// Row 8, the commonest real cause: an include-glob typo. FOUR files are scanned
+// (two sources and the corpus's two)
 // and the prune census is EMPTY, so this row is the one that falsifies both
 // mechanisms the issue proposes. The rule is vacuous and nothing says so.
 func TestCheckIncludeGlobTypoIsNamed(t *testing.T) {
@@ -99,7 +102,7 @@ func TestCheckIncludeGlobTypoIsNamed(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0 (report-only)\n%s", code, out)
 	}
-	if !strings.Contains(out, "scan: 2 file(s) scanned") {
+	if !strings.Contains(out, "scan: 4 file(s) scanned") {
 		t.Errorf("the FileSet is not empty here — the summary must say so:\n%s", out)
 	}
 	if !strings.Contains(out, "no-widget: scope matched no files") {
@@ -201,8 +204,8 @@ func TestCheckScanSummaryReachesJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &rep); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
 	}
-	if rep.Scan.FilesScanned != 1 {
-		t.Errorf("files_scanned = %d, want 1\n%s", rep.Scan.FilesScanned, out)
+	if rep.Scan.FilesScanned != 3 { // src/bad.go and the corpus's two files
+		t.Errorf("files_scanned = %d, want 3\n%s", rep.Scan.FilesScanned, out)
 	}
 	if len(rep.Scan.RulesMatchingNoFiles) != 1 || rep.Scan.RulesMatchingNoFiles[0] != "no-widget" {
 		t.Errorf("rules_matching_no_files = %v, want [no-widget]\n%s", rep.Scan.RulesMatchingNoFiles, out)
@@ -222,7 +225,7 @@ func TestCheckScanSummaryReachesGitHub(t *testing.T) {
 	if strings.TrimSpace(out) == "" {
 		t.Fatalf("github format wrote nothing at all for a run that checked nothing")
 	}
-	for _, want := range []string{"::notice::", "1 file(s) scanned", "no-widget: scope matched no files"} {
+	for _, want := range []string{"::notice::", "3 file(s) scanned", "no-widget: scope matched no files"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("github output missing %q:\n%s", want, out)
 		}
@@ -571,25 +574,25 @@ func TestCheckStagedInsideAGlobStillOnDiskReportsTheChannel(t *testing.T) {
 }
 
 // PathsRequested counts paths that COULD have been scanned. A path beneath a
-// built-in skip DIRECTORY (.git, .formwork) never could, so counting it
-// manufactures a requested-vs-scanned gap on the most ordinary commit there is —
-// editing a rule file. A signal that fires on every config-only commit is one
-// readers learn to skip, which is the failure this whole block is meant to
-// avoid.
+// built-in skip DIRECTORY (.git, the root's .formwork/fixtures) never could, so
+// counting it manufactures a requested-vs-scanned gap on the most ordinary
+// commit there is — adding a fixture. A signal that fires on every
+// fixture-only commit is one readers learn to skip, which is the failure this
+// whole block is meant to avoid. A rule file is scanned since #24467 item 9,
+// and counted, and scanned: no gap either way.
 //
 // DIRECTORY is the operative word, and the count got it wrong until review: the
 // walk consults its skip set only for directories, so a regular file NAMED
 // .formwork is scanned like any other and must be counted. scannablePaths uses
 // scan.UnderBuiltinSkipDir for exactly that reason —
-// TestCheckStagedFormworkAncestorIsStillExcused pins this direction and
+// TestCheckStagedFixtureAncestorIsStillExcused pins this direction and
 // TestCheckStagedRegularFileNamedFormworkIsRefused pins the other.
 func TestCheckStagedConfigOnlyCommitReportsNoPhantomGap(t *testing.T) {
 	root := zeroFilesRepo(t, "version: 1\n", "{include: ['**/*.go']}")
 	gitInit(t, root)
 	gitRun(t, root, "add", "-A")
 	gitRun(t, root, "commit", "-qm", "init")
-	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r2.yaml"),
-		"rules:\n  - id: no-banana\n    type: forbidden-pattern\n    scope: {include: ['**/*.go']}\n    params: {pattern: BANANA}\n")
+	mustWrite(t, filepath.Join(root, ".formwork", "fixtures", "zz", "fire-1", "a.go"), "package a // BANANA\n")
 	gitRun(t, root, "add", "-A")
 
 	code, out, _ := runCLI(t, "check", "-C", root, "--staged")

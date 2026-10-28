@@ -19,13 +19,14 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
-func TestWalkReturnsSortedRelativePathsSkippingGitAndFormwork(t *testing.T) {
+func TestWalkReturnsSortedRelativePathsSkippingGitAndRootFixtures(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "src", "b.go"), "package b\n")
 	writeFile(t, filepath.Join(root, "src", "a.go"), "package a\n")
 	writeFile(t, filepath.Join(root, "README.md"), "# hi\n")
 	writeFile(t, filepath.Join(root, ".git", "config"), "x\n")
 	writeFile(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
+	writeFile(t, filepath.Join(root, ".formwork", "fixtures", "r", "fire-1", "bad.go"), "package bad\n")
 
 	fset, err := scan.Walk(root)
 	if err != nil {
@@ -35,7 +36,8 @@ func TestWalkReturnsSortedRelativePathsSkippingGitAndFormwork(t *testing.T) {
 	for _, f := range fset.Files {
 		got = append(got, f.Path())
 	}
-	want := []string{"README.md", "src/a.go", "src/b.go"}
+	// The root's governance is walked (#24467 item 9); its fixtures are not.
+	want := []string{".formwork/formwork.yaml", "README.md", "src/a.go", "src/b.go"}
 	if len(got) != len(want) {
 		t.Fatalf("paths: got %v want %v", got, want)
 	}
@@ -150,7 +152,8 @@ func TestWalkSkipsNonSourceSymlinks(t *testing.T) {
 // does enumerate is not excused from that check.
 func TestUnderBuiltinSkip(t *testing.T) {
 	for path, want := range map[string]bool{
-		".formwork/rules/r.yaml":     true,
+		".formwork/rules/r.yaml":     false, // the governance: walked since #24467 item 9
+		".formwork/fixtures/r/a.go":  true,
 		".git/config":                true,
 		"a/b/.git/hooks/pre-commit":  true,
 		"a/.formwork/x":              false, // a nested project's own config: scanned

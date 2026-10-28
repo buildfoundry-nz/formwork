@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"github.com/buildfoundry-nz/formwork/internal/sqlextract"
 )
@@ -80,8 +81,11 @@ func UnreadableSites(tree *scan.FileSet, path string, content []byte) ([]sqlextr
 	return out, nil
 }
 
-// sqlBearingSites keeps the sites whose text carries SQL (sqlBearing).
-func sqlBearingSites(sites []sqlextract.Site) []sqlextract.Site {
+// SQLBearingSites keeps the sites whose text carries SQL (sqlBearing): the
+// FromGo compositions a rule sourcing through FromGo fails closed on, and the
+// census lists. Exported for sql/statement-predicate, which sources through
+// FromGo in its own package and must fail on exactly the set the census names.
+func SQLBearingSites(sites []sqlextract.Site) []sqlextract.Site {
 	var out []sqlextract.Site
 	for _, s := range sites {
 		if sqlBearing(s.Text) {
@@ -165,7 +169,7 @@ func CensusSites(tree *scan.FileSet, ruleType, path string, content []byte) ([]s
 	if err != nil {
 		return nil, true, err
 	}
-	return sqlBearingSites(sites), true, nil
+	return SQLBearingSites(sites), true, nil
 }
 
 // AccountedForByTheCensus reports whether ruleType is one whose extractor
@@ -176,4 +180,22 @@ func CensusSites(tree *scan.FileSet, ruleType, path string, content []byte) ([]s
 // handed FromGo's answer.
 func AccountedForByTheCensus(ruleType string) bool {
 	return reassembledTypes[ruleType] || fromGoTypes[ruleType]
+}
+
+// FailsClosed reports whether ruleType reports SQL it could not read as a
+// finding: the types sourcing through FromGo, which read only what they can
+// fold. The census lists unread SQL for the others alone — the locking pair,
+// which reads a composition through placeholder reassembly and declines only
+// the shapes the fold cannot follow.
+func FailsClosed(ruleType string) bool { return fromGoTypes[ruleType] }
+
+// UnreadableMatch is the finding a SQL rule reports for SQL in its scope that
+// its extractor could not read: the rule cannot judge that statement, so it
+// fails rather than passing it unjudged.
+func UnreadableMatch(s sqlextract.Site) rules.Match {
+	return rules.Match{
+		Line: s.Line,
+		Message: fmt.Sprintf("SQL could not be read (%s), so this rule cannot judge it — "+
+			"compose the statement from Go constants and bind what varies as a parameter", s.Reason),
+	}
 }

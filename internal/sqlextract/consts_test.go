@@ -180,8 +180,8 @@ func TestNonConstantOperandsStayUnread(t *testing.T) {
 		{"sprintf-argument-index", map[string]string{"go.mod": mod,
 			"db/q.go": "package db\n\nimport \"fmt\"\n\nconst cols = \"id, name\"\n\n" +
 				"func Q() string { return fmt.Sprintf(\"SELECT %[1]s FROM t WHERE org_id = $1\", cols) }\n"}},
-		{"call-of-a-function", map[string]string{"go.mod": mod,
-			"db/q.go": "package db\n\nfunc colsOf() string { return \"id, name\" }\n\n" +
+		{"call-of-a-function-that-is-not-a-template", map[string]string{"go.mod": mod,
+			"db/q.go": "package db\n\nfunc colsOf() string {\n\tc := \"id, name\"\n\treturn c\n}\n\n" +
 				"func Q() string { return \"SELECT \" + colsOf() + \" FROM t WHERE org_id = $1\" }\n"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

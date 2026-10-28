@@ -34,5 +34,13 @@ checksum:
 # private-repo peers pull with an authenticated `gh release download`, and the
 # planned open-sourcing makes the same releases publicly consumable (spec
 # amendment 2026-08-05; supersedes the GCP Artifact Registry design).
+#
+# The repository is named, not read from the git remote: a runner that fetches
+# through a git mirror rewrites the remote (url.<mirror>.insteadOf), and
+# GoReleaser then derives owner "github.com" from the mirror's path and cannot
+# publish (v0.14.3 and v0.15.0 failed that way).
 release:
+  github:
+    owner: buildfoundry-nz
+    name: formwork
   prerelease: auto # a -rc/-beta tag is marked pre-release, a plain tag is not

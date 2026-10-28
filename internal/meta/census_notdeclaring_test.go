@@ -158,3 +158,28 @@ func TestLintReportsACredentialNoLineHolds(t *testing.T) {
 		t.Fatalf("a held credential was reported dead:\n%s", out)
 	}
 }
+
+// A production subject is counted in the census by the test files it leaves
+// out, and lint refuses one that leaves out nothing.
+func TestLintCountsAProductionSubjectAndRefusesADeadOne(t *testing.T) {
+	rules := "rules:\n" +
+		"  - id: live-prod\n    type: forbidden-pattern\n    scope: {include: ['**/*.go'], subject: production}\n    params: {pattern: 'Ghost'}\n    cure: \"drop it\"\n" +
+		"  - id: dead-prod\n    type: forbidden-pattern\n    scope: {include: ['cmd/**/*.go'], subject: production}\n    params: {pattern: 'Ghost'}\n    cure: \"drop it\"\n"
+	_, out := lint(t, map[string]string{
+		".formwork/formwork.yaml":                      "version: 1\ntests: ['**/*_test.go']\n",
+		".formwork/rules/r.yaml":                       rules,
+		".formwork/fixtures/live-prod/fire-1/a.go":     "package p // Ghost want: live-prod\n",
+		".formwork/fixtures/live-prod/pass-1/b.go":     "package p\n",
+		".formwork/fixtures/dead-prod/fire-1/cmd/a.go": "package p // Ghost want: dead-prod\n",
+		".formwork/fixtures/dead-prod/pass-1/cmd/b.go": "package p\n",
+		"src.go":      "package p\n",
+		"src_test.go": "package p\n",
+		"cmd/main.go": "package main\n",
+	})
+	if !strings.Contains(out, "live-prod: scope.subject: production: 1 test file(s) left out") {
+		t.Fatalf("the census must count what a production subject leaves out:\n%s", out)
+	}
+	if !strings.Contains(out, "dead-prod: scope.subject: production leaves out no file") {
+		t.Fatalf("a production subject that leaves out nothing must be refused:\n%s", out)
+	}
+}

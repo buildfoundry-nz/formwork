@@ -196,6 +196,10 @@ the repository's homes, which a check cannot tell from a dead marker, and lint
 reports a marker no file declares over the whole tree. A bare-string entry is
 refused at load.
 
+`scope.subject: production` makes the rule read no file the repository's
+`tests:` names (see Test code and production subjects); the default, `all`,
+reads tests.
+
 `scope.generated: true` makes the rule judge files a declared generator wrote
 (see Generated output); every other rule never reads them.
 
@@ -1281,6 +1285,34 @@ carries, and the census counts each marker's files on every run. A missing
 proving rule is a lint finding rather than a load error so that a pruned corpus
 — one rule and its fixtures beside the repository's `formwork.yaml` — still
 loads.
+
+### Test code and production subjects (0.15)
+
+```yaml
+tests:
+  - '**/*_test.go'
+  - 'packages/*/test/**'
+```
+
+Every rule reads tests by default: a test is code. `tests:` declares the
+repository's test code once, by path, the way its toolchains define it (`go
+build` leaves `*_test.go` out). A rule whose subject only production code can
+have — a production import of a testing package, reflection in shipped code, a
+request message no production handler consumes — says so:
+
+```yaml
+scope:
+  include: ['**/*.go']
+  subject: production
+```
+
+A production subject reads no file `tests:` names; `subject: all` (the
+default) reads everything its include reaches. This replaces a per-rule
+`scope.exclude` of test globs, which could not be told from an exclude that
+forgives a violation. The census prints, for each production-subject rule, how
+many test files its subject leaves out, and `formwork lint` refuses a
+production subject that leaves out none. A production subject with no `tests:`
+definition is refused at load.
 
 ---
 

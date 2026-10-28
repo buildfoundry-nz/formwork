@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.15.0
+
+### Added
+
+- **`tests:` and `scope.subject: production`.** A repository declares its test
+  code once in `formwork.yaml` (`tests:`, path globs). A rule whose subject only
+  production code can have says `scope.subject: production` and reads no file
+  `tests:` names; every other rule reads tests. This replaces a per-rule
+  `scope.exclude` of test globs, which could not be told from an exclude that
+  forgives a violation. The escape-hatch census counts the test files each
+  production subject leaves out, `formwork lint` refuses one that leaves out
+  none, and a production subject with no `tests:` definition is refused at
+  load.
+
 ## 0.14.3
 
 ### Fixed

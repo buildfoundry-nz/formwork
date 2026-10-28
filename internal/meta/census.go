@@ -213,6 +213,11 @@ func enumerateEscapeHatches(cfg *config.Config, root string, fset *scan.FileSet,
 		for _, g := range r.Exclude() {
 			lines = append(lines, fmt.Sprintf("  %s: scope.exclude: %s", r.ID, g))
 		}
+		// scope.subject: production leaves the repository's test code out;
+		// subject.go counts what it leaves out.
+		if line, ok := subjectCensusLine(r, fset); ok {
+			lines = append(lines, line)
+		}
 		// scope.not_declaring reports what each marker REMOVED, not what the
 		// rule declares (#138's measure). Each place that declares a marker
 		// opens a home declaration the engine masks before the rule reads the

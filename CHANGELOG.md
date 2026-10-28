@@ -16,6 +16,17 @@
 
 ### Changed
 
+- **The walk reads the repository's `.formwork`, except its fixtures.** The
+  root `.formwork` was pruned whole, so no rule could read `formwork.yaml`,
+  the rule YAML or the mutation specs, and every check over the corpus itself
+  had to shell out (`type: command`). Only the root's `.formwork/fixtures` is
+  pruned now — each fixture is its own rule's proof, judged by `formwork
+  test`. The rest is scanned, and reached only by an include glob rooted at
+  `.formwork/`: `**` does not descend into it, so a rule written for
+  application code never reads the definitions that spell its own token. A
+  root `.formwork` symlink (a shared rule set) is still skipped, and now
+  recorded as a link the walk declined to follow. A `scan.ignore` glob hiding
+  tracked rule YAML is reported like any other hidden tracked path.
 - **The SQL rules read SQL template functions.** A repository keeps a
   predicate in one place as a function of the aliases and placeholders it is
   spliced with — `VisibleWhere("p")`, `OverdueSQL("$1")` — and both its body

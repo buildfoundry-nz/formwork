@@ -682,6 +682,15 @@ func WalkWith(root string, opts Opts) (*FileSet, error) {
 				// walk would otherwise have enumerated, so the rationale above
 				// stops applying to it exactly where the prune does, and it
 				// gets the ordinary refusal.
+				// A root `.formwork` linked in from a shared rule set is the
+				// same case one level up: config loading reads through the
+				// link, the walk never follows one, and refusing it would fail
+				// every repository sharing its corpus that way. It is recorded,
+				// so the census says that governance went unwalked.
+				if rel == ".formwork" {
+					fset.Ignored = append(fset.Ignored, Ignored{Path: rel, Dir: true, By: SourceSymlink})
+					return nil
+				}
 				if !builtinSkipDir(rel) && hidesASubtree(p, walkRoot) {
 					return fmt.Errorf("scan: committed directory symlink %s (formwork does not follow symlinks, so nothing under it is scanned; remove it or replace it with a real directory)", rel)
 				}

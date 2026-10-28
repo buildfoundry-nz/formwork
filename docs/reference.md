@@ -184,6 +184,16 @@ reaches the engine as `converted call sites consume the accessor (audit-1`. The
 `include` and `exclude` are doublestar globs, matched against repo-relative
 paths. A file is in scope when it matches an `include` and no `exclude`.
 
+**The walk reads every file but two kinds:** `.git` directories, at any depth,
+and the root's `.formwork/fixtures` — each fixture is its own rule's proof,
+judged by `formwork test` and by no other rule. The rest of the root's
+`.formwork` — `formwork.yaml`, the rule YAML, the mutation specs — is scanned,
+and a rule reaches it **only through an include glob rooted at `.formwork/`**:
+`**` and `**/*.yaml` do not descend into it, because a rule written for
+application code was not written for the corpus that defines it, and would
+fire on every rule YAML that spells its forbidden token. A rule over the
+corpus names the corpus (`.formwork/rules/*.yaml`).
+
 `scope.not_declaring` lists `{marker, holders}` entries. Each place a marker
 (a literal) occurs opens a HOME: the declaration that begins on that line, with
 the same extents a credential uses. The engine masks each home before the rule

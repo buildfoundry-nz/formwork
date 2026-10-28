@@ -143,8 +143,8 @@ func enumerateEscapeHatches(cfg *config.Config, root string, fset *scan.FileSet,
 	// Named from scan.BuiltinSkipDirs rather than restated in prose: the old
 	// line hardcoded ".git, .formwork" and would have drifted silently the
 	// moment the set changed.
-	engineSkips := fmt.Sprintf("engine: never scans directories named %s (any depth) — not an operator choice, and declarable in no rule's scope.exclude",
-		strings.Join(scan.BuiltinSkipDirs(), ", "))
+	engineSkips := fmt.Sprintf("engine: never scans %s — not an operator choice, and declarable in no rule's scope.exclude",
+		scan.BuiltinSkipSummary())
 	// scan.gitignore is the second channel that hides paths from EVERY rule at
 	// once, and unlike scan.ignore its declaration lives OUTSIDE .formwork/ —
 	// in .gitignore, which no governance scope covers. That is the strongest

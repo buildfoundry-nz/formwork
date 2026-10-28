@@ -38,10 +38,12 @@ func TestBuiltinSkipPrunesFormworkAtTheWalkRootOnly(t *testing.T) {
 		underAny bool // UnderBuiltinSkip: any component, leaf included
 		underDir bool // UnderBuiltinSkipDir: ancestors only
 	}{
-		// The engine's own — first segment, still invisible.
-		{".formwork/rules/r.yaml", true, true},
+		// The engine's own: the governance is read since #24467 item 9, and
+		// only the fixtures under it stay invisible.
+		{".formwork/rules/r.yaml", false, false},
 		{".formwork/fixtures/no-ghost/fire-1/a.go", true, true},
-		{".formwork", true, false},
+		{".formwork/fixtures", true, false},
+		{".formwork", false, false},
 
 		// A corpus's own — ordinary content now.
 		{"examples/palletra-port-full/.formwork/rules/r.yaml", false, false},
@@ -72,10 +74,10 @@ func TestBuiltinSkipPrunesFormworkAtTheWalkRootOnly(t *testing.T) {
 }
 
 // The walk is the authority the predicates above only describe, so it gets its
-// own row: a nested .formwork tree must be ENUMERATED, and the root one must
-// still not be. Both halves in one tree, so neither can be satisfied by a
-// change that simply stops pruning.
-func TestWalkEnumeratesANestedFormworkButNotTheRootOne(t *testing.T) {
+// own row: a nested .formwork tree is ENUMERATED whole, the root one is
+// enumerated but for its fixtures. All three in one tree, so none can be
+// satisfied by a change that simply stops pruning.
+func TestWalkEnumeratesANestedFormworkAndTheRootOneButItsFixtures(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, ".formwork", "rules", "own.yaml"), "rules: []\n")
 	writeFile(t, filepath.Join(root, ".formwork", "fixtures", "r", "fire-1", "bad.go"), "package p\n")
@@ -90,6 +92,7 @@ func TestWalkEnumeratesANestedFormworkButNotTheRootOne(t *testing.T) {
 		t.Fatalf("walk: %v", err)
 	}
 	want := []string{
+		".formwork/rules/own.yaml",
 		"examples/corpus/.formwork/fixtures/r/fire-1/bad.go",
 		"examples/corpus/.formwork/rules/ported.yaml",
 		"examples/corpus/src/a.go",
@@ -108,8 +111,11 @@ func TestNotScannedByFollowsTheSameDepthRule(t *testing.T) {
 	if v := scan.NotScannedBy("examples/corpus/.formwork/rules/r.yaml", scan.Opts{}); v.Hidden() {
 		t.Errorf("a corpus's own .formwork is scanned content: %+v", v)
 	}
-	if v := scan.NotScannedBy(".formwork/rules/r.yaml", scan.Opts{}); !v.Hidden() || !v.Builtin {
-		t.Errorf("the engine's own .formwork must stay builtin-hidden: %+v", v)
+	if v := scan.NotScannedBy(".formwork/rules/r.yaml", scan.Opts{}); v.Hidden() {
+		t.Errorf("the engine's own governance is scanned content since #24467 item 9: %+v", v)
+	}
+	if v := scan.NotScannedBy(".formwork/fixtures/r/fire-1/a.go", scan.Opts{}); !v.Hidden() || !v.Builtin {
+		t.Errorf("the engine's own fixtures must stay builtin-hidden: %+v", v)
 	}
 	if v := scan.NotScannedBy("vendor/dep/.git/config", scan.Opts{}); !v.Hidden() || !v.Builtin {
 		t.Errorf(".git stays builtin-hidden at any depth: %+v", v)
@@ -151,7 +157,9 @@ func TestNestedFormworkSymlinkHidingASubtreeIsRefused(t *testing.T) {
 }
 
 // The other half, kept adjacent so the pair cannot drift apart: the ROOT
-// spelling stays skipped, at exit 0, with the real tree still enumerated.
+// spelling stays skipped, at exit 0, with the real tree still enumerated —
+// and recorded as a link the walk declined to follow, since the governance it
+// names now is content the walk reads when it is a real directory.
 func TestRootFormworkSymlinkIsStillSkipped(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
@@ -167,5 +175,8 @@ func TestRootFormworkSymlinkIsStillSkipped(t *testing.T) {
 	}
 	if got := paths(fset); !reflect.DeepEqual(got, []string{"main.go"}) {
 		t.Fatalf("paths = %v, want [main.go]", got)
+	}
+	if len(fset.Ignored) != 1 || fset.Ignored[0].Path != ".formwork" || fset.Ignored[0].By != scan.SourceSymlink {
+		t.Fatalf("the unfollowed root link is recorded: %+v", fset.Ignored)
 	}
 }

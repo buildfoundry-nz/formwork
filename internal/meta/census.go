@@ -265,7 +265,15 @@ func enumerateEscapeHatches(cfg *config.Config, root string, fset *scan.FileSet,
 		// and stayed silent about compositions the rule really cannot read.
 		// CensusSites keys on a table of registered types, so a sql/* type in
 		// neither table is refused rather than handed FromGo's answer.
+		//
+		// A rule that FAILS CLOSED is skipped. sql/parses and
+		// sql/statement-predicate report each SQL composition they cannot read
+		// as a finding, so nothing unread is left unenforced and a line here
+		// would call "not analysed" the composition `check` just failed on.
 		for _, f := range fset.Files {
+			if sqlparse.FailsClosed(r.Type) {
+				break
+			}
 			if !strings.HasSuffix(f.Path(), ".go") || !r.Applies(f.Path()) {
 				continue
 			}

@@ -888,12 +888,24 @@ no naive `;` split, so a semicolon inside a string literal does not truncate a
 statement.
 
 `internal/sqlextract` reassembles SQL from Go string literals, so these rules
-see queries composed in Go as well as `.sql` files.
+see queries composed in Go as well as `.sql` files. A Go string constant is read
+as its value wherever the module declares it — in the file, elsewhere in its
+package, or in an imported package of the module — so a query composed of
+literals and named constants is read whole.
+
+**`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
+that carries SQL (a statement, a clause, or a SQL-only token such as a cast or
+`$1`) and has an operand that is not a constant — a variable, a call, a field —
+is a finding: `SQL could not be read (…), so this rule cannot judge it`. The
+rule cannot vouch for text decided at run time. The cure is to compose the
+statement from constants and bind what varies as a parameter. A composition
+that is not SQL — a log line, a path — is not one.
 
 #### `sql/parses`
 Takes **no parameters**. Flags SQL that fails to parse. For `.sql` every
 failure is reported; for `.go` only SQL-shaped candidates are, so an ordinary
-string literal never fires.
+string literal never fires. A `.go` composition it cannot read is a finding
+(see above).
 
 ```yaml
 - id: sql-parses
@@ -920,7 +932,9 @@ A locking `SELECT` without a deterministic `ORDER BY` is a deadlock shape.
 
 #### `sql/statement-predicate`
 Per-statement assertions scoped to a table. `require` and `forbid` are lists of
-regexes over the statement, and at least one of them is required.
+regexes over the statement, and at least one of them is required. A `.go`
+composition it cannot read is a finding whatever its text names: the part it
+cannot read may be the table (see above).
 
 `table` is an unanchored RE2 regex matched against the whole
 **statement text**, so it selects statements rather than naming a relation: a

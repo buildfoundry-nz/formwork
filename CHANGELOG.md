@@ -16,6 +16,15 @@
 
 ### Changed
 
+- **`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
+  carrying SQL that the extractor cannot read — an operand that is a variable,
+  a call or a field — is a finding, `SQL could not be read (…), so this rule
+  cannot judge it`, where it was a census line and a pass. For
+  `sql/statement-predicate` it is a finding whatever the `table` pattern says,
+  since the unread operand may be the table. The escape-hatch census no longer
+  lists these two types. **Migration:** compose such statements from Go
+  constants and bind what varies as a parameter; `formwork lint` on the
+  previous release lists every site.
 - **The SQL rules read Go string constants.** A query composed from a named
   constant — `"SELECT " + cols + " FROM t"`, `scanvault.Cols + " WHERE …"`,
   `fmt.Sprintf("… %s …", cte)` — was a composition no SQL rule could read,

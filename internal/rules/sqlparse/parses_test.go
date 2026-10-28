@@ -2,6 +2,7 @@ package sqlparse_test
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/buildfoundry-nz/formwork/internal/rules"
@@ -135,11 +136,14 @@ func TestParsesStillIgnoresConcatenatedGoQuery(t *testing.T) {
 	// Fix #12 regression guard: sql/parses must stay on statements() (strict,
 	// Partial-skipped) — a concatenated query is still an unresolved
 	// composition here, unaffected by sql/locking-select-order's new
-	// best-effort reassembly path.
+	// best-effort reassembly path. Its fragments are not parsed, so neither
+	// is reported as a parse failure; the composition itself is the one
+	// finding, as SQL the rule could not read.
 	src := "package db\n\nfunc q(tbl string) string {\n\treturn \"SELECT * FROM \" + tbl + \" WHERE status='x' FOR UPDATE\"\n}\n"
 	c := checker(t, "sql/parses", "")
-	if ms := matches(t, c, file("q.go", src)); len(ms) != 0 {
-		t.Fatalf("a concatenated query must still be Partial-skipped by sql/parses: %+v", ms)
+	ms := matches(t, c, file("q.go", src))
+	if len(ms) != 1 || !strings.Contains(ms[0].Message, "could not be read") {
+		t.Fatalf("want the composition reported unread and no fragment parsed: %+v", ms)
 	}
 }
 

@@ -55,6 +55,7 @@ import (
 
 	"github.com/buildfoundry-nz/formwork/internal/preprocess"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
+	"github.com/buildfoundry-nz/formwork/internal/rules/sqlparse"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"github.com/buildfoundry-nz/formwork/internal/sqlextract"
 	"gopkg.in/yaml.v3"
@@ -121,6 +122,7 @@ type statement struct {
 
 func (c *predicate) CheckFile(f *scan.File) ([]rules.Match, error) {
 	var stmts []statement
+	var unread []sqlextract.Site
 	switch sqlextract.FileKind(f.Path()) {
 	case "sql":
 		content, err := f.Content()
@@ -134,7 +136,7 @@ func (c *predicate) CheckFile(f *scan.File) ([]rules.Match, error) {
 		if err != nil {
 			return nil, err
 		}
-		stmts, err = goStatements(f.Tree(), f.Path(), content)
+		stmts, unread, err = goStatements(f.Tree(), f.Path(), content)
 		if err != nil {
 			return nil, err
 		}
@@ -144,6 +146,12 @@ func (c *predicate) CheckFile(f *scan.File) ([]rules.Match, error) {
 	}
 
 	var matches []rules.Match
+	// SQL the extractor could not read is a finding whatever table it names:
+	// the part it could not read may be the table, so no `table` pattern can
+	// clear it, and a statement the rule cannot select is one it cannot judge.
+	for _, s := range unread {
+		matches = append(matches, sqlparse.UnreadableMatch(s))
+	}
 	for _, s := range stmts {
 		if !c.table.MatchString(s.text) {
 			continue
@@ -425,20 +433,19 @@ func sqlIdentStartByte(c byte) bool {
 // loses reliable interior line positions, so every statement derived from one
 // candidate reports the line of the string expression it came from. A Go parse
 // failure is returned as an error.
-func goStatements(tree *scan.FileSet, path string, src []byte) ([]statement, error) {
-	// The unresolved Sites are discarded HERE, deliberately (#75). They are no
-	// longer unread: lint's escape-hatch census asks FromGo the same question
-	// over the files this rule governs and enumerates every composition the
-	// extractor could not read, with its reason.
-	//
-	// Reported by lint rather than by this rule because an unreadable query is
-	// not a VIOLATION — it is a gap in coverage, and a check that failed on one
-	// would fail on ordinary dynamic SQL the corpus never intended to police.
-	// The cost of that split is that `check` alone still shows no trace; run
-	// `formwork lint` to see what was not analysed.
-	cands, _, err := sqlextract.FromGoIn(tree, path, src)
+//
+// It also returns the compositions carrying SQL that the extractor could not
+// read, which CheckFile fails on (sqlparse.SQLBearingSites, the set the census
+// lists). They were discarded here (#75), on the reasoning that a check
+// failing on them would fail on ordinary dynamic SQL nobody meant to police;
+// the census listed them instead. A census line is not a verdict, though: the
+// statement passed `check` unjudged, and a `require` or `forbid` held only for
+// SQL that happened to be written readably. The extractor reads every Go
+// constant (consts.go), so what is left unread has text decided at run time.
+func goStatements(tree *scan.FileSet, path string, src []byte) ([]statement, []sqlextract.Site, error) {
+	cands, sites, err := sqlextract.FromGoIn(tree, path, src)
 	if err != nil {
-		return nil, fmt.Errorf("sql/statement-predicate: %w", err)
+		return nil, nil, fmt.Errorf("sql/statement-predicate: %w", err)
 	}
 	var out []statement
 	for _, cand := range cands {
@@ -451,7 +458,7 @@ func goStatements(tree *scan.FileSet, path string, src []byte) ([]statement, err
 			out = append(out, statement{text: s.text, line: cand.Line})
 		}
 	}
-	return out, nil
+	return out, sqlparse.SQLBearingSites(sites), nil
 }
 
 // snippet renders a compact, whitespace-collapsed preview of a statement.

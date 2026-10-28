@@ -14,6 +14,17 @@
   holds. A count above zero that differs from the declaration is still a
   `formwork check` finding.
 
+### Performance
+
+- **A credential's holder count skips files that cannot hold it.** 0.14
+  counts every credential over every in-scope file, ahead of any prefilter,
+  and the line scan was about a third of a credential rule's CPU. Each
+  credential now carries the literal gate `autoPrefilter` already derives for
+  a pattern: a file holding none of the credential's guaranteed literals holds
+  none of its lines, so it is skipped without changing the count. On
+  TakeoffQS's 243 home-carrying rules over the whole tree, CPU went from 128 s
+  to 82 s.
+
 ## 0.14.2
 
 ### Fixed

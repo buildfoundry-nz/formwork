@@ -85,6 +85,11 @@ type credential struct {
 	src  string
 	want int64
 	seen *atomic.Int64
+	// lits gates the line scan: literals at least one of which every line
+	// the credential matches contains (autoPrefilter). A file holding none of
+	// them holds no line of this credential, so its count is unchanged by
+	// skipping it. Nil when the regex names no such set; the scan then runs.
+	lits []string
 }
 
 type evidence struct {
@@ -125,7 +130,13 @@ func compileExcusals(key string, specs []excusalSpec, syntax string) (excusals, 
 			if err != nil {
 				return out, err
 			}
-			out.credentials = append(out.credentials, &credential{m: m, src: s.Credential, want: int64(*s.Holders), seen: &atomic.Int64{}})
+			// The gate is derived as RE2 whatever the rule's syntax:
+			// compileExcusal runs the credential as RE2 whenever it parses as
+			// one, and autoPrefilter names no literals for one that does not.
+			out.credentials = append(out.credentials, &credential{
+				m: m, src: s.Credential, want: int64(*s.Holders), seen: &atomic.Int64{},
+				lits: autoPrefilter(s.Credential, ""),
+			})
 		case isEv:
 			if s.Evidence == "" {
 				return out, fmt.Errorf("%s: evidence is required", where)
@@ -179,7 +190,21 @@ func (x excusals) homes(f *scan.File) (*scan.File, error) {
 	}
 	var spans []declspan.Span
 	var raw []byte
+	var text string
+	textRead := false
 	for _, cr := range x.credentials {
+		if len(cr.lits) > 0 {
+			if !textRead {
+				content, err := f.Content()
+				if err != nil {
+					return nil, err
+				}
+				text, textRead = string(content), true
+			}
+			if !containsAny(text, cr.lits) {
+				continue
+			}
+		}
 		var n int64
 		for i, line := range lines {
 			ok, err := cr.m.MatchString(line)

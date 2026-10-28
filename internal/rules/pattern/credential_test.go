@@ -246,3 +246,19 @@ func TestCredentialOwnersFileOwnsItsImports(t *testing.T) {
 		t.Fatalf("want only the non-owner's import (screen.dart:1), got %+v", ms)
 	}
 }
+
+// The literal gate skips a file that cannot hold a credential, and only such a
+// file: an indented holder behind a character class still counts, and a file
+// with the literal elsewhere than a holder line counts nothing.
+func TestCredentialLiteralGateKeepsTheCount(t *testing.T) {
+	c := mustChecker(t, "forbidden-pattern", "pattern: 'rawQuery\\('\n"+
+		"require_absent:\n  - {credential: '^[ \\t]*func offerFor\\(', holders: 1}\n")
+	ms := runAll(t, c, map[string]string{
+		"a/owner.go":   "package a\n\n\tfunc offerFor() {\n\trawQuery()\n}\n",
+		"b/mention.go": "package b\n\n// see func offerFor(\nvar x = 1\n",
+		"c/plain.go":   "package c\n\nfunc other() {}\n",
+	})
+	if len(ms) != 0 {
+		t.Fatalf("want the indented holder counted once and nothing else, got %+v", ms)
+	}
+}

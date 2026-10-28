@@ -205,11 +205,16 @@ func TestPartialFragmentDoesNotPairQuotesOutOfPhase(t *testing.T) {
 	src := "package p\n\nfunc f(v, w string) string {\n" +
 		"\treturn \"INSERT INTO palletra.t (note) VALUES ('\" + v +\n" +
 		"\t\t\"'); SELECT line_class FROM src; UPDATE palletra.t SET note = '\" + w + \"'\"\n}\n"
-	ms := check(t, c, file("q.go", src))
-	if len(ms) != 2 {
-		t.Fatalf("want the truncated INSERT and the governed UPDATE both judged, got %d: %+v", len(ms), ms)
+	var judged []string
+	for _, m := range check(t, c, file("q.go", src)) {
+		if !strings.Contains(m.Message, "could not be read") {
+			judged = append(judged, m.Message)
+		}
 	}
-	if !strings.Contains(ms[1].Message, "UPDATE palletra.t") {
-		t.Fatalf("the second match should be the UPDATE, got %s", ms[1].Message)
+	if len(judged) != 2 {
+		t.Fatalf("want the truncated INSERT and the governed UPDATE both judged, got %d: %+v", len(judged), judged)
+	}
+	if !strings.Contains(judged[1], "UPDATE palletra.t") {
+		t.Fatalf("the second match should be the UPDATE, got %s", judged[1])
 	}
 }

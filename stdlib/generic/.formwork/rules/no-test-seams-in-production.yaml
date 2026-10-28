@@ -5,8 +5,7 @@ rules:
     scope:
       include:
         - "**/*.go"
-      exclude:
-        - "**/*_test.go"
+      subject: production
     params:
       obligation: countable
       trigger: '^var\s+[A-Za-z_][A-Za-z0-9_]*(\s+func\(|\s*=\s*&?[A-Za-z_][A-Za-z0-9_]*\s*(//.*)?$)'

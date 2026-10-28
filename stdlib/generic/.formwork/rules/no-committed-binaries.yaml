@@ -8,10 +8,6 @@ rules:
     scope:
       include:
         - "**"
-      exclude:
-        - ".formwork/**"
-        - "**/node_modules/**"
-        - "**/.git/**"
     params:
       forbid_binary: true
     cure: >-

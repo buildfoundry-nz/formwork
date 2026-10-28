@@ -8,12 +8,6 @@ rules:
     scope:
       include:
         - "**/*.go"
-      exclude:
-        - ".formwork/**"
-        - "**/vendor/**"
-        - "**/generated/**"
-        - "**/*.pb.go"
-        - "**/*_test.go"
     params:
       pattern: (func\s+([A-Za-z_][A-Za-z0-9_]*\s*)?\([^)]*\s(\.\.\.)?(any|interface\{\s*\})\b)|(\bchan\s+(any|interface\{\s*\})\b)|(\[[A-Z][A-Za-z0-9_]*\s+interface\{\s*\}[],\s])|(^\s*type\s+[A-Z][A-Za-z0-9_]*\s*=\s*(any|interface\{\s*\})\b)|(^\s*type\s+[A-Z][A-Za-z0-9_]*\s+interface\s*\{\s*\})
     cure: >-

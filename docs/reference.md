@@ -39,7 +39,7 @@ grammar), and enumerating those exceptions would be a list that itself rots.
 Prose accuracy inside an entry is likewise not mechanically checkable; a
 handful of facts too easy to get wrong are pinned individually.
 
-Counts at the time of writing: **27 rule types, 15 preprocessors.** If your
+Counts at the time of writing: **28 rule types, 15 preprocessors.** If your
 binary reports different numbers, believe your binary and file an issue against
 this document.
 
@@ -215,7 +215,7 @@ are enumerated by the escape-hatch census with their reason.
 
 ## Rule types
 
-27 registered rule types. Parameters below are the strictly-decoded set — an unknown one is
+28 registered rule types. Parameters below are the strictly-decoded set — an unknown one is
 exit 2. Each entry gives what the type asserts, every parameter it decodes, and
 a worked example.
 
@@ -738,6 +738,32 @@ tallies.
     funcs: '^(?:Check|Finalize)'
     require_symbol: both
     require_used: right
+```
+
+#### `go/marked-single-home`
+Holds every top-level declaration whose doc comment carries `marker` to one
+declaration across the scope. The marker declares the home; any second func,
+method, type, const or var of the same identity in scope is a finding, marked
+or not. Identity is the kind and name, plus the receiver type for a method, so
+a var named like a marked func is a different declaration. A grouped `const` or
+`var` block's own doc covers none of its specs; mark the spec. A marker that
+documents no top-level declaration is itself a finding. Unmarked duplicates are
+not judged.
+
+It replaces a `pattern-count` rule per name (`'^func offerFor\('`, `n: 1`): a
+new home is one comment at its declaration.
+
+| param | meaning |
+|---|---|
+| `marker` | required: the literal a declaration's doc comment carries |
+
+```yaml
+- id: go-single-homes
+  type: go/marked-single-home
+  scope:
+    include: ["internal/**/*.go"]
+  params:
+    marker: 'formwork:single-home'
 ```
 
 ### Dart analyzers (`internal/rules/dartscan`)

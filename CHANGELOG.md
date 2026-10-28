@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.13.3
+
+### Added
+
+- **`go/marked-single-home`: a home is declared at the declaration.** A
+  top-level func, method, type, const or var whose doc comment carries
+  `params.marker` is the one declaration of its identity in scope: a second
+  declaration of the same kind and name (and receiver type, for a method),
+  marked or not, is a finding that names the home. A marker that documents no
+  top-level declaration is a finding too. It is the abstract form of the
+  `pattern-count` rule-per-name family (`'^func offerFor\('`, `n: 1`): on a
+  4,300-rule corpus, 67 of the 125 Go rules in that family have mutation
+  proofs that plant exactly the second declaration this one rule catches.
+  Released on the 0.13 line so a corpus can adopt it before 0.14's schema
+  change; 0.14.1 carries the same type.
+
 ## 0.13.2
 
 ### Changed

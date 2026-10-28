@@ -34,7 +34,7 @@ func TestEveryBuiltinRuleTypeIsRegistered(t *testing.T) {
 		"dart/numeric-field-validated", "dart/ref-after-await",
 		"go/call-confined-to-func-name", "go/call-order-in-func",
 		"go/func-line-budget", "go/guard-precedes-call",
-		"go/per-func-count-relation",
+		"go/marked-single-home", "go/per-func-count-relation",
 		"sql/locking-select-order", "sql/locking-target", "sql/parses",
 		"sql/statement-predicate",
 	} {

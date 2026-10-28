@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.15.2
+
+### Added
+
+- **`FORMWORK_FILES`: a changeset run tells a detector which files changed.**
+  Under `--staged` and `--range`, a command or census detector runs with
+  `FORMWORK_FILES` naming a listing of the changed files its rule's scope
+  admits. A detector that judges each file on its own can read that and parse
+  nothing else. A whole-tree run sets nothing, so the detector judges the root
+  as before. On a 4,300-rule corpus, nine Go census detectors re-parsed about
+  22,700 Go files on every Go commit, roughly 170 CPU-seconds, to judge the
+  handful of files the commit changed.
+
 ## 0.15.1
 
 ### Fixed

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.15.1
+
+### Fixed
+
+- **A release names its repository.** v0.14.3 and v0.15.0 were tagged but
+  never published: the release runner fetched through a git mirror, whose URL
+  rewrite (`url.<mirror>.insteadOf`) is what `git remote get-url` reports, and
+  GoReleaser read the repository from that URL — owner `github.com` — so every
+  GitHub API call 404'd. `.goreleaser.yaml` now names
+  `buildfoundry-nz/formwork`. 0.15.1 is 0.15.0 (and so 0.14.3) published.
+
 ## 0.15.0
 
 ### Added

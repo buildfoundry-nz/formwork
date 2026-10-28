@@ -12,8 +12,10 @@
   (a func or method through its body, a const/var/type spec through its value;
   a `package` clause is the whole file), in Dart and proto the declaration
   through its first top-level block or semicolon, in non-code files the
-  document. A credential on a comment line sanctions only that line. Holders
-  are counted as before. Migration: an owner file that also uses the pattern
+  document. A credential on a comment line sanctions only that line. A file
+  that holds a home also owns its import directives (Go `import`; Dart
+  `import`/`export`/`part`/`library`), which serve every declaration in it and
+  cannot sit inside one. Holders are counted as before. Migration: an owner file that also uses the pattern
   outside the owner declaration now fires there; move that use into the owner,
   or give it its own credential and raise `holders`.
 - **`scope.not_declaring` entries are `{marker, holders}` and name a home

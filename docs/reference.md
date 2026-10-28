@@ -294,7 +294,10 @@ value), with a `package` clause covering the whole file; in Dart and proto, the
 declaration through the close of its first top-level block or a top-level
 semicolon, with comments and strings blanked. A credential on a comment line
 sanctions only that line. A non-code file (Markdown, YAML, SQL) has no
-declaration structure, so its credential line declares the document. The count is judged on the live tree only: a fixture proves
+declaration structure, so its credential line declares the document. A file's
+import directives (Go `import`; Dart `import`, `export`, `part`, `library`)
+serve every declaration in it and cannot sit inside one, so a file that holds
+a home owns its directives with it. The count is judged on the live tree only: a fixture proves
 the trigger and the excusal, and cannot honestly hold the repository's number,
 so prove the count on the real tree (a mutation that duplicates a holder line). A rule carrying a credential is evaluated over the whole tree
 even under `--staged`/`--range`. A library rule cannot carry one: its holder

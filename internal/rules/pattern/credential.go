@@ -204,6 +204,9 @@ func (x excusals) homes(f *scan.File) (*scan.File, error) {
 	if len(spans) == 0 {
 		return f, nil
 	}
+	// The file's imports serve its owner declaration and cannot sit inside it,
+	// so a file that holds a home owns its directives with it.
+	spans = append(spans, declspan.Directives(f.Path(), raw)...)
 	content, err := f.Content()
 	if err != nil {
 		return nil, err

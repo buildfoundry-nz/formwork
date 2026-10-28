@@ -250,6 +250,10 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 									cs[h.Entry].Add(1)
 									homes = append(homes, h.Span)
 								}
+								if len(homes) > 0 {
+									// A home's imports cannot sit inside it.
+									homes = append(homes, declspan.Directives(f.Path(), content)...)
+								}
 							}
 						}
 						t0 := time.Now()

@@ -217,3 +217,17 @@ func TestCredentialCountSkippedInFixtureRuns(t *testing.T) {
 		t.Fatalf("a live run must judge the count, got %+v", ms)
 	}
 }
+
+// An import serves its whole file and no declaration can enclose it, so the
+// owner's file owns its imports; a file with no owner does not.
+func TestCredentialOwnersFileOwnsItsImports(t *testing.T) {
+	c := mustChecker(t, "forbidden-pattern", "pattern: 'package:dio/'\n"+
+		"require_absent:\n  - {credential: '^class WireDio', holders: 1}\n")
+	ms := runAll(t, c, map[string]string{
+		"lib/wire_dio.dart": "import 'package:dio/dio.dart';\n\nclass WireDio {\n  final Dio d;\n}\n",
+		"lib/screen.dart":   "import 'package:dio/dio.dart';\n\nclass Screen {}\n",
+	})
+	if len(ms) != 1 || ms[0].Line != 1 {
+		t.Fatalf("want only the non-owner's import (screen.dart:1), got %+v", ms)
+	}
+}

@@ -64,6 +64,100 @@ func Extent(path string, src []byte, line int) Span {
 	}
 }
 
+// Directives returns the file-scoped directives of the file at path: Go
+// import declarations, and Dart import/export/part/library directives. An
+// import serves every declaration in its file, so no declaration can enclose
+// it; a file that holds a home owns its directives with it. Other languages
+// have none this package bounds.
+func Directives(path string, src []byte) []Span {
+	switch lang(path) {
+	case "go":
+		return goDirectives(src)
+	case "dart":
+		return dartDirectives(preprocess.CodeOnlyDart(src))
+	}
+	return nil
+}
+
+func goDirectives(src []byte) []Span {
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
+	var s scanner.Scanner
+	s.Init(file, src, func(token.Position, string) {}, 0)
+	var out []Span
+	depth, inImport, start := 0, false, 0
+	for {
+		pos, tok, _ := s.Scan()
+		if tok == token.EOF {
+			return out
+		}
+		switch tok {
+		case token.IMPORT:
+			if depth == 0 && !inImport {
+				inImport, start = true, file.Line(pos)
+			}
+		case token.LPAREN, token.LBRACK, token.LBRACE:
+			depth++
+		case token.RPAREN, token.RBRACK, token.RBRACE:
+			if depth > 0 {
+				depth--
+			}
+		case token.FUNC, token.TYPE, token.VAR, token.CONST:
+			if depth == 0 {
+				// Imports precede every other declaration in a Go file.
+				return out
+			}
+		case token.SEMICOLON:
+			if depth == 0 && inImport {
+				out = append(out, Span{start, file.Line(pos)})
+				inImport = false
+			}
+		}
+	}
+}
+
+// dartDirectives scans code (comments and string contents blanked) for
+// top-level directives: a line whose first word at depth zero is import,
+// export, part or library, through its terminating semicolon.
+func dartDirectives(code []byte) []Span {
+	var out []Span
+	depth, line, inDir, start := 0, 1, false, 0
+	atLineStart := true
+	for i := 0; i < len(code); i++ {
+		c := code[i]
+		if c == '\n' {
+			line++
+			atLineStart = true
+			continue
+		}
+		if atLineStart && c != ' ' && c != '\t' {
+			atLineStart = false
+			if depth == 0 && !inDir {
+				for _, kw := range []string{"import ", "export ", "part ", "library "} {
+					if bytes.HasPrefix(code[i:], []byte(kw)) {
+						inDir, start = true, line
+						break
+					}
+				}
+			}
+		}
+		switch c {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			if depth > 0 {
+				depth--
+			}
+		case ';':
+			if depth == 0 && inDir {
+				out = append(out, Span{start, line})
+				inDir = false
+			}
+		}
+	}
+	return out
+}
+
 // Whole reports whether a span covers every line of src.
 func Whole(src []byte, s Span) bool { return s.Start <= 1 && s.End >= lineCount(src) }
 

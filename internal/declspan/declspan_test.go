@@ -103,3 +103,19 @@ func TestMaskBlanksOnlyTheSpanAndKeepsLines(t *testing.T) {
 		t.Fatalf("Mask = %q", got)
 	}
 }
+
+func TestDirectivesAreTheFilesImports(t *testing.T) {
+	goSrc := []byte("package p\n\nimport \"fmt\"\n\nimport (\n\t\"os\"\n\t\"strings\"\n)\n\nfunc F() {}\n")
+	got := Directives("a.go", goSrc)
+	if len(got) != 2 || got[0] != (Span{3, 3}) || got[1] != (Span{5, 8}) {
+		t.Fatalf("Go directives = %+v, want {3 3} and {5 8}", got)
+	}
+	dartSrc := []byte("library x;\n\nimport 'package:dio/dio.dart';\nexport 'a.dart'\n    show A;\n\nclass C {\n  // import 'not.dart';\n}\n")
+	got = Directives("w.dart", dartSrc)
+	if len(got) != 3 || got[0] != (Span{1, 1}) || got[1] != (Span{3, 3}) || got[2] != (Span{4, 5}) {
+		t.Fatalf("Dart directives = %+v, want {1 1} {3 3} {4 5}", got)
+	}
+	if got := Directives("x.sql", []byte("import x;\n")); got != nil {
+		t.Fatalf("a non-Go, non-Dart file has no directives, got %+v", got)
+	}
+}

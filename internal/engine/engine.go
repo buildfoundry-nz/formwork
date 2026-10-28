@@ -578,7 +578,7 @@ func evalFile(r *config.Rule, f *scan.File, homes []declspan.Span) ([]finding.Fi
 		if err != nil {
 			return nil, fmt.Errorf("rule %s: %s: %w", r.ID, f.Path(), err)
 		}
-		work = scan.NewMemFile(f.Path(), declspan.Mask(content, homes))
+		work = work.WithContent(declspan.Mask(content, homes))
 	}
 	matches, err := checkFile(r, work)
 	if err != nil {

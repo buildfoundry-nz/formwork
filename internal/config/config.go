@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/bmatcuk/doublestar/v4"
@@ -103,13 +104,37 @@ func (r *Rule) Applies(relPath string) bool {
 	if r.productionOnly && r.testCode.Contains(relPath) {
 		return false
 	}
-	return matchStored(r.include, relPath) && !matchStored(r.exclude, relPath)
+	return r.InPathScope(relPath)
 }
 
 // InPathScope reports whether relPath matches the rule's include and not its
 // exclude, before scope.subject: the path scope a production subject narrows.
 func (r *Rule) InPathScope(relPath string) bool {
-	return matchStored(r.include, relPath) && !matchStored(r.exclude, relPath)
+	return matchIncludes(r.include, relPath) && !matchStored(r.exclude, relPath)
+}
+
+// governanceDir is the walk root's .formwork: formwork.yaml, the rule YAML and
+// the mutation specs the walk reads since #24467 item 9 (its fixtures it
+// still prunes, scan.BuiltinSkipDirs).
+const governanceDir = ".formwork/"
+
+// matchIncludes is matchStored for include globs, with one rule: a path in
+// the governance directory is reached only by a glob WRITTEN for it — one
+// rooted at a literal `.formwork/`. A rule about application code scoped `**`
+// was never written for the corpus that defines it, and reaching it would fire
+// every forbidden token on the rule YAML that spells it; a rule over the
+// corpus names the corpus.
+func matchIncludes(patterns []string, path string) bool {
+	governance := strings.HasPrefix(path, governanceDir)
+	for _, p := range patterns {
+		if governance && !strings.HasPrefix(p, governanceDir) {
+			continue
+		}
+		if doublestar.MatchUnvalidated(p, path) {
+			return true
+		}
+	}
+	return false
 }
 
 // Exclude returns this rule's scope.exclude globs (read-only; do not mutate).

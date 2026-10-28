@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/buildfoundry-nz/formwork/internal/rules"
+	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"github.com/buildfoundry-nz/formwork/internal/sqlextract"
 )
 
@@ -62,11 +64,11 @@ var ErrExtractorUnknown = errors.New("formwork: the census does not know which e
 //
 // A file that is not .go has no Go compositions and returns nothing. err is a
 // Go AST parse failure only, which is the rule's to report, not the census's.
-func UnreadableSites(path string, content []byte) ([]sqlextract.Site, error) {
+func UnreadableSites(tree *scan.FileSet, path string, content []byte) ([]sqlextract.Site, error) {
 	if sqlextract.FileKind(path) != "go" {
 		return nil, nil
 	}
-	_, sites, err := sqlextract.FromGoReassembled(path, content)
+	_, sites, err := sqlextract.FromGoReassembledIn(tree, path, content)
 	if err != nil {
 		return nil, err
 	}
@@ -79,8 +81,11 @@ func UnreadableSites(path string, content []byte) ([]sqlextract.Site, error) {
 	return out, nil
 }
 
-// sqlBearingSites keeps the sites whose text carries SQL (sqlBearing).
-func sqlBearingSites(sites []sqlextract.Site) []sqlextract.Site {
+// SQLBearingSites keeps the sites whose text carries SQL (sqlBearing): the
+// FromGo compositions a rule sourcing through FromGo fails closed on, and the
+// census lists. Exported for sql/statement-predicate, which sources through
+// FromGo in its own package and must fail on exactly the set the census names.
+func SQLBearingSites(sites []sqlextract.Site) []sqlextract.Site {
 	var out []sqlextract.Site
 	for _, s := range sites {
 		if sqlBearing(s.Text) {
@@ -146,12 +151,12 @@ var fromGoTypes = map[string]bool{
 // — it is a SQL rule, and the caller asked the right question — so the refusal
 // reaches the caller as the census's own gap, which it owes a line, and not as
 // "not a SQL rule", which it owes nothing.
-func CensusSites(ruleType, path string, content []byte) ([]sqlextract.Site, bool, error) {
+func CensusSites(tree *scan.FileSet, ruleType, path string, content []byte) ([]sqlextract.Site, bool, error) {
 	if !strings.HasPrefix(ruleType, "sql/") {
 		return nil, false, nil
 	}
 	if reassembledTypes[ruleType] {
-		sites, err := UnreadableSites(path, content)
+		sites, err := UnreadableSites(tree, path, content)
 		return sites, true, err
 	}
 	if !fromGoTypes[ruleType] {
@@ -160,11 +165,11 @@ func CensusSites(ruleType, path string, content []byte) ([]sqlextract.Site, bool
 	if sqlextract.FileKind(path) != "go" {
 		return nil, true, nil
 	}
-	_, sites, err := sqlextract.FromGo(path, content)
+	_, sites, err := sqlextract.FromGoIn(tree, path, content)
 	if err != nil {
 		return nil, true, err
 	}
-	return sqlBearingSites(sites), true, nil
+	return SQLBearingSites(sites), true, nil
 }
 
 // AccountedForByTheCensus reports whether ruleType is one whose extractor
@@ -175,4 +180,22 @@ func CensusSites(ruleType, path string, content []byte) ([]sqlextract.Site, bool
 // handed FromGo's answer.
 func AccountedForByTheCensus(ruleType string) bool {
 	return reassembledTypes[ruleType] || fromGoTypes[ruleType]
+}
+
+// FailsClosed reports whether ruleType reports SQL it could not read as a
+// finding: the types sourcing through FromGo, which read only what they can
+// fold. The census lists unread SQL for the others alone — the locking pair,
+// which reads a composition through placeholder reassembly and declines only
+// the shapes the fold cannot follow.
+func FailsClosed(ruleType string) bool { return fromGoTypes[ruleType] }
+
+// UnreadableMatch is the finding a SQL rule reports for SQL in its scope that
+// its extractor could not read: the rule cannot judge that statement, so it
+// fails rather than passing it unjudged.
+func UnreadableMatch(s sqlextract.Site) rules.Match {
+	return rules.Match{
+		Line: s.Line,
+		Message: fmt.Sprintf("SQL could not be read (%s), so this rule cannot judge it — "+
+			"compose the statement from Go constants and bind what varies as a parameter", s.Reason),
+	}
 }

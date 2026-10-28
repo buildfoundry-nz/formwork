@@ -236,7 +236,7 @@ func (x excusals) homes(f *scan.File) (*scan.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return scan.NewMemFile(f.Path(), declspan.Mask(content, spans)), nil
+	return f.WithContent(declspan.Mask(content, spans)), nil
 }
 
 // evidenceIndex holds, per evidence entry, the 1-based lines where a match

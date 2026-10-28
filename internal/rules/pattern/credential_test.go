@@ -55,25 +55,45 @@ func TestCredentialCopiedMidLineDoesNotExcuse(t *testing.T) {
 }
 
 // The GROWTH forgery: a second file carrying the credential at the start of a
-// line. It excuses itself, and the holder count catches it.
+// line. The holder count catches it, and the credential sanctions only the
+// declaration it opens, so the forger's other use of the literal is a finding
+// of its own.
 func TestCredentialSecondHolderIsCounted(t *testing.T) {
 	c := mustChecker(t, "forbidden-pattern", credentialRule)
 	ms := runAll(t, c, map[string]string{
 		"audit/mapping.go": "package audit\nconst SourceAutoPolicy = \"auto_policy\"\n",
 		"forge/forge.go":   "package forge\nconst SourceAutoPolicy = \"auto_policy\"\nvar s = \"auto_policy\"\n",
 	})
-	if len(ms) != 1 || !strings.Contains(ms[0].Message, "held by 2 line(s)") {
-		t.Fatalf("want one holder-count finding, got %+v", ms)
+	var count, line bool
+	for _, m := range ms {
+		count = count || strings.Contains(m.Message, "held by 2 line(s)")
+		line = line || m.Line == 3 // forge.go:3; only forge.go has a third line
+	}
+	if len(ms) != 2 || !count || !line {
+		t.Fatalf("want the holder-count finding and forge.go:3, got %+v", ms)
+	}
+}
+
+// A credential sanctions the declaration its line opens, not the file that
+// holds it: a second use beside the owner, in the same file, is judged.
+func TestCredentialSanctionsOnlyTheDeclarationItOpens(t *testing.T) {
+	c := mustChecker(t, "forbidden-pattern", "pattern: 'rawQuery'\n"+
+		"require_absent:\n  - {credential: '^func owner\\(', holders: 1}\n")
+	ms := runAll(t, c, map[string]string{
+		"a.go": "package a\n\nfunc owner() {\n\trawQuery()\n}\n\nfunc sibling() {\n\trawQuery()\n}\n",
+	})
+	if len(ms) != 1 || ms[0].Line != 8 {
+		t.Fatalf("want only the sibling's use (a.go:8), got %+v", ms)
 	}
 }
 
 // A holder in a file the prefilter skips is still counted.
 func TestCredentialCountedThroughThePrefilter(t *testing.T) {
 	c := mustChecker(t, "forbidden-pattern", "pattern: 'rawQuery'\nprefilter: rawQuery\n"+
-		"require_absent:\n  - {credential: '^// OWNER', holders: 1}\n")
+		"require_absent:\n  - {credential: '^func owner\\(', holders: 1}\n")
 	ms := runAll(t, c, map[string]string{
-		"a.go": "// OWNER\nrawQuery()\n",
-		"b.go": "// OWNER\nnothing here\n",
+		"a.go": "package a\nfunc owner() {\n\trawQuery()\n}\n",
+		"b.go": "package b\nfunc owner() {}\n",
 	})
 	if len(ms) != 1 || !strings.Contains(ms[0].Message, "held by 2 line(s)") {
 		t.Fatalf("want the prefiltered holder counted, got %+v", ms)
@@ -195,5 +215,19 @@ func TestCredentialCountSkippedInFixtureRuns(t *testing.T) {
 	}
 	if ms, _ := ef.FinalizeErr(rules.FinalizeContext{}); len(ms) != 1 {
 		t.Fatalf("a live run must judge the count, got %+v", ms)
+	}
+}
+
+// An import serves its whole file and no declaration can enclose it, so the
+// owner's file owns its imports; a file with no owner does not.
+func TestCredentialOwnersFileOwnsItsImports(t *testing.T) {
+	c := mustChecker(t, "forbidden-pattern", "pattern: 'package:dio/'\n"+
+		"require_absent:\n  - {credential: '^class WireDio', holders: 1}\n")
+	ms := runAll(t, c, map[string]string{
+		"lib/wire_dio.dart": "import 'package:dio/dio.dart';\n\nclass WireDio {\n  final Dio d;\n}\n",
+		"lib/screen.dart":   "import 'package:dio/dio.dart';\n\nclass Screen {}\n",
+	})
+	if len(ms) != 1 || ms[0].Line != 1 {
+		t.Fatalf("want only the non-owner's import (screen.dart:1), got %+v", ms)
 	}
 }

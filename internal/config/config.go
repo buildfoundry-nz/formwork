@@ -54,7 +54,11 @@ type Rule struct {
 	// notDeclaring is scope.not_declaring: literal markers a file may declare
 	// to remove itself from this rule. Content-keyed, unlike every other scope
 	// field — see scopedeclare.go for why a declaration is not a path.
-	notDeclaring []string
+	notDeclaring []DeclaringEntry
+	// generation is the config's definition of generated output, shared by
+	// every rule Load builds; judgesGenerated is scope.generated: true.
+	generation      *Generation
+	judgesGenerated bool
 	// excludeComments is parallel to exclude: the YAML head/line comment on
 	// each scope.exclude entry (trimmed, without the leading '#'), empty when
 	// the entry had no comment. Lint uses it to require a justification on
@@ -187,7 +191,9 @@ func (r *Rule) Cost() rules.Cost {
 // pattern(exists) / set-relation / pattern-count / baseline rule false-fails it
 // when the file bearing its token is not in the change range (#4).
 func (r *Rule) WholeTreeInvariant() bool {
-	return rules.IsWholeTreeInvariant(r.Checker)
+	// A scope.not_declaring rule pins how many places declare each marker, a
+	// count over the whole scope that a changeset scan cannot see.
+	return rules.IsWholeTreeInvariant(r.Checker) || len(r.notDeclaring) > 0
 }
 
 // Fresh returns a copy of the rule with a newly constructed checker.
@@ -304,6 +310,9 @@ type Config struct {
 	// bad merge or a templating error produces), and "add a rule file" is
 	// useless advice to someone staring at the rule file they just wrote.
 	RuleFiles int
+	// Generation is the formwork.yaml `generated:` definition, nil when the
+	// key is absent. Every rule loaded with this config carries it.
+	Generation *Generation
 }
 
 // ScopeConfig classifies a changeset (spec §8): which paths are docs,
@@ -385,6 +394,8 @@ type rootSpec struct {
 	Lanes   map[string]laneSpec `yaml:"lanes"`
 	Scope   scopeConfigSpec     `yaml:"scope"`
 	Scan    scanSpec            `yaml:"scan"`
+	// Generated is the one definition of generated output (generated.go).
+	Generated []generatedSpec `yaml:"generated"`
 }
 
 type laneSpec struct {
@@ -439,6 +450,9 @@ type scopeSpec struct {
 	// human and decodes to a scalar), and so an empty marker — which matches
 	// every file — is an error rather than a rule scoped to nothing.
 	NotDeclaring yaml.Node `yaml:"not_declaring"`
+	// Generated: true makes the rule judge files a declared generator wrote,
+	// which every other rule never reads (generated.go).
+	Generated bool `yaml:"generated"`
 }
 
 var idRE = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -632,6 +646,7 @@ func compile(spec ruleSpec) (*Rule, error) {
 	}
 	rule.excludeComments = excludeComments
 	rule.notDeclaring = notDeclaring
+	rule.judgesGenerated = spec.Scope.Generated
 	rule.Origin = spec.Origin
 	rule.Tags = spec.Tags
 	if rule.FixtureExempt, err = fixtureExemptReason(spec.ID, spec.FixtureExempt); err != nil {

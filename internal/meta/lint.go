@@ -331,6 +331,10 @@ func lintTree(cfg *config.Config, root string, w io.Writer, fset *scan.FileSet, 
 	// check lives here rather than at load so a corpus written before the
 	// tokens stays READABLE by the tools that read history — see
 	// parentsegment.go for why that mattered enough to move it.
+	if cfg.Generation != nil && !pol.skipping(w, "generated-definition") {
+		*failed += emit(w, "generated-definition", generatedProblems(cfg, fset))
+		*total++
+	}
 	if anyCommandArgv(cfg.Rules) && !pol.skipping(w, "command-argv-no-parent-segment") {
 		*failed += emit(w, "command-argv-no-parent-segment", commandArgvProblems(cfg.Rules))
 		*total++

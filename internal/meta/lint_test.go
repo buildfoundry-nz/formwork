@@ -174,7 +174,7 @@ func TestLintEnumeratesEscapeHatches(t *testing.T) {
 	failed, out := lint(t, map[string]string{
 		".formwork/formwork.yaml": "version: 1\n",
 		".formwork/rules/r.yaml": "rules:\n  - id: no-banana\n    type: forbidden-pattern\n" +
-			"    scope: {include: ['**/*.txt'], not_declaring: ['GENERATED']}\n    params: {pattern: banana}\n",
+			"    scope: {include: ['**/*.txt'], not_declaring: [{marker: GENERATED, holders: 1}]}\n    params: {pattern: banana}\n",
 		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
 		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
 		"gen.txt": "GENERATED banana\n",
@@ -188,7 +188,7 @@ func TestLintEnumeratesEscapeHatches(t *testing.T) {
 		// line would satisfy a check for the marker alone. `gen.txt` declares
 		// the marker and holds a banana, so the marker removed one file the
 		// rule would have fired on.
-		`  no-banana: scope.not_declaring: "GENERATED": 1 file(s) removed from this rule's evaluation, 1 would fire`,
+		`  no-banana: scope.not_declaring: "GENERATED": 1 declaration(s) removed from this rule's evaluation, 1 would fire`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)

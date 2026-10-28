@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.14.0
+
+### Changed (breaking)
+
+- **A credential sanctions the declaration it opens, never the file.** A
+  forbidden-pattern `require_absent`/`none_of` credential used to excuse the
+  whole file that held it, so a second violation anywhere else in an owner's
+  file was invisible. The engine now masks only the declaration the credential
+  line opens (`internal/declspan`): in Go, the statement its first token begins
+  (a func or method through its body, a const/var/type spec through its value;
+  a `package` clause is the whole file), in Dart and proto the declaration
+  through its first top-level block or semicolon, in non-code files the
+  document. A credential on a comment line sanctions only that line. A file
+  that holds a home also owns its import directives (Go `import`; Dart
+  `import`/`export`/`part`/`library`), which serve every declaration in it and
+  cannot sit inside one. Holders are counted as before. Migration: an owner file that also uses the pattern
+  outside the owner declaration now fires there; move that use into the owner,
+  or give it its own credential and raise `holders`.
+- **`scope.not_declaring` entries are `{marker, holders}` and name a home
+  declaration.** A bare-string entry is refused at load. Each place a marker
+  occurs opens a home, the declaration that begins on that line (the same
+  extents a credential uses); the engine masks it and judges the rest of the
+  file, where it used to skip the whole file. `holders` pins the number of
+  places in scope that declare the marker, judged on the live tree, and a rule
+  declaring the key is a whole-tree invariant, so it runs over the tracked tree
+  under `--staged`/`--range`. The census reports declarations removed rather
+  than files.
+
+### Added
+
+- **One definition of generated output.** `formwork.yaml` `generated:` lists
+  `{marker, proven_by}` entries. A file whose leading comment block carries a
+  declared marker is outside every rule that does not declare
+  `scope.generated: true`, replacing per-rule lists of generator output globs.
+  `proven_by` is required and must name corpus rules: the freshness gates that
+  prove a file carrying the header reproduces from its generator. `formwork
+  lint`'s `generated-definition` check fails a proving rule no CI lane selects
+  and a marker no scanned file carries, and the escape-hatch census counts each
+  marker's files.
+- `scan.File.Raw()` returns the source a preprocessor variant was computed
+  from.
+
 ## 0.13.2
 
 ### Changed

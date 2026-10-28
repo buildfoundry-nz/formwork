@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
+	"github.com/buildfoundry-nz/formwork/internal/declspan"
 	"github.com/buildfoundry-nz/formwork/internal/finding"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
@@ -155,6 +157,49 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 	if workers <= 0 {
 		workers = runtime.GOMAXPROCS(0)
 	}
+	// homeCount[r][i] counts the places that declare r's i-th not_declaring
+	// marker. Built before any worker starts, so the map is read-only while
+	// they run and only the counters move.
+	homeCount := map[*config.Rule][]*atomic.Int64{}
+	for _, r := range rls {
+		if n := len(r.NotDeclaringEntries()); n > 0 {
+			cs := make([]*atomic.Int64, n)
+			for i := range cs {
+				cs[i] = &atomic.Int64{}
+			}
+			homeCount[r] = cs
+		}
+	}
+	// Generated output (formwork.yaml generated:) is decided once per file and
+	// shared by every rule: the rules loaded from one config carry one
+	// definition, and a rule built with config.New carries none.
+	var gen *config.Generation
+	for _, r := range rls {
+		if g := r.Generation(); g != nil {
+			gen = g
+			break
+		}
+	}
+	genState := make([]atomic.Int32, len(fset.Files)) // 0 unknown, 1 authored, 2 generated
+	generated := func(fi int) bool {
+		switch genState[fi].Load() {
+		case 1:
+			return false
+		case 2:
+			return true
+		}
+		// An unreadable file is not called generated: that would drop it from
+		// every rule, the fail-open direction. evalFile reports the read error.
+		content, err := fset.Files[fi].Content()
+		_, ok := gen.Declares(content)
+		ok = ok && err == nil
+		if ok {
+			genState[fi].Store(2)
+		} else {
+			genState[fi].Store(1)
+		}
+		return ok
+	}
 	var (
 		mu       sync.Mutex
 		findings []finding.Finding
@@ -188,22 +233,31 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 						if !pr.rule.Applies(f.Path()) {
 							continue
 						}
+						if gen != nil && !pr.rule.JudgesGenerated() && generated(fi) {
+							continue
+						}
 						// scope.not_declaring is the one scope test a path
 						// cannot answer, so it is asked here where the bytes
-						// are. A read error is NOT treated as "declares
-						// nothing": that would silently evaluate a file whose
-						// declaration could not be seen, which is the
-						// fail-open direction. evalFile re-reads and reports
-						// the error through the ordinary path instead.
-						if len(pr.rule.NotDeclaring()) > 0 {
+						// are: each marker occurrence opens a home
+						// declaration, which is counted and masked out, and
+						// the rest of the file is judged. A read error is
+						// left to evalFile, which reports it through the
+						// ordinary path.
+						var homes []declspan.Span
+						if cs := homeCount[pr.rule]; cs != nil {
 							if content, cerr := f.Content(); cerr == nil {
-								if _, declined := pr.rule.DeclinedBy(content); declined {
-									continue
+								for _, h := range pr.rule.Homes(f.Path(), content) {
+									cs[h.Entry].Add(1)
+									homes = append(homes, h.Span)
+								}
+								if len(homes) > 0 {
+									// A home's imports cannot sit inside it.
+									homes = append(homes, declspan.Directives(f.Path(), content)...)
 								}
 							}
 						}
 						t0 := time.Now()
-						fds, err := evalFile(pr.rule, f)
+						fds, err := evalFile(pr.rule, f, homes)
 						mu.Lock()
 						timing[pr.rule.ID] += time.Since(t0)
 						if err != nil {
@@ -449,6 +503,20 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 		return nil, timing, finErr
 	}
 
+	// The not_declaring holder counts, judged on a live tree only: a fixture
+	// tree proves the marker and the home, and cannot honestly hold the
+	// repository's number (the same reason a credential's count is live-only).
+	if !fset.Fixture {
+		for _, r := range rls {
+			for i, e := range r.NotDeclaringEntries() {
+				if got := homeCount[r][i].Load(); got != int64(e.Holders) {
+					findings = append(findings, toFinding(r, "", rules.Match{Message: fmt.Sprintf(
+						"scope.not_declaring %q is declared by %d place(s) across scope, declared holders %d: "+
+							"a marker sanctions the declaration it opens, so its holders are fixed", e.Marker, got, e.Holders)}))
+				}
+			}
+		}
+	}
 	finding.Sort(findings)
 	return findings, timing, nil
 }
@@ -492,10 +560,17 @@ func toFinding(r *config.Rule, fallbackPath string, m rules.Match) finding.Findi
 
 // evalFile runs one rule over one file: picks the rule's preprocess variant and
 // checks it.
-func evalFile(r *config.Rule, f *scan.File) ([]finding.Finding, error) {
+func evalFile(r *config.Rule, f *scan.File, homes []declspan.Span) ([]finding.Finding, error) {
 	work, err := f.Variant(r.Preprocess)
 	if err != nil {
 		return nil, fmt.Errorf("rule %s: %s: %w", r.ID, f.Path(), err)
+	}
+	if len(homes) > 0 {
+		content, err := work.Content()
+		if err != nil {
+			return nil, fmt.Errorf("rule %s: %s: %w", r.ID, f.Path(), err)
+		}
+		work = scan.NewMemFile(f.Path(), declspan.Mask(content, homes))
 	}
 	matches, err := checkFile(r, work)
 	if err != nil {

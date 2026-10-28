@@ -1,12 +1,12 @@
 // census_notdeclaring_test.go — scope.not_declaring in the escape-hatch census.
 //
-// A file that declares one of a rule's not_declaring markers leaves that rule's
-// evaluation whole: the rule never runs on it, so no finding exists to count.
-// It is the one exemption channel left that removes code from a rule, and the
-// census printed nothing for it at all, although scopedeclare.go promised it
-// was "reported with live match counts rather than silently". Each marker now
-// reports the in-scope files it removed and how many of those the rule would
-// have fired on, which is what separates an exemption doing work from a fossil.
+// Each place that declares one of a rule's not_declaring markers opens a home
+// declaration the engine masks before the rule reads the file, so no finding
+// exists inside it to count. The census printed nothing for the key at all,
+// although scopedeclare.go promised it was "reported with live match counts
+// rather than silently". Each marker now reports the home declarations it
+// removed and how many of those the rule would have fired inside, which is
+// what separates a sanctioned site doing work from a fossil.
 package meta_test
 
 import (
@@ -20,8 +20,8 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/meta"
 )
 
-// Two live markers on one rule — one removing a file the rule fires on, one
-// removing a file it does not — plus a marker no file declares.
+// Two live markers on one rule — one opening a home the rule fires inside, one
+// opening a home it does not — plus a marker nothing declares.
 func notDeclaringRepo() map[string]string {
 	return map[string]string{
 		".formwork/formwork.yaml": "version: 1\n",
@@ -30,18 +30,18 @@ func notDeclaringRepo() map[string]string {
 			"    type: forbidden-pattern\n" +
 			"    scope:\n" +
 			"      include: ['**/*.go']\n" +
-			"      not_declaring: ['LIVE-HOME', 'FOSSIL-HOME', 'DEAD-HOME']\n" +
+			"      not_declaring: [{marker: 'func LiveHome(', holders: 1}, {marker: 'func FossilHome(', holders: 1}, {marker: 'func DeadHome(', holders: 1}]\n" +
 			"    params: {pattern: 'Ghost'}\n" +
 			"    cure: \"drop it\"\n",
 		".formwork/fixtures/no-ghost/fire-1/a.go": "package p // Ghost want: no-ghost\n",
 		".formwork/fixtures/no-ghost/pass-1/b.go": "package p\n",
 		"src.go": "package p\n",
-		// Declares a marker AND would fire: the marker is load-bearing.
-		"live.go": "package p // LIVE-HOME\nvar Ghost = 1\n",
-		// Declares a marker and would NOT fire: the marker protects nothing.
-		"fossil.go": "package p // FOSSIL-HOME\n",
+		// Opens a home the rule would fire inside: the marker is load-bearing.
+		"live.go": "package p\n\nfunc LiveHome() {\n\tGhost()\n}\n",
+		// Opens a home the rule would NOT fire inside: the marker protects nothing.
+		"fossil.go": "package p\n\nfunc FossilHome() {}\n",
 		// Declares a marker but sits outside the rule's scope: not removed by it.
-		"notes.md": "LIVE-HOME\n",
+		"notes.md": "func LiveHome(\n",
 	}
 }
 
@@ -58,16 +58,16 @@ func censusLine(t *testing.T, out, marker string) string {
 
 func TestCensusReportsWhatEachNotDeclaringMarkerRemoved(t *testing.T) {
 	_, out := lint(t, notDeclaringRepo())
-	live := censusLine(t, out, "LIVE-HOME")
-	if !strings.Contains(live, "1 file(s) removed") || !strings.Contains(live, "1 would fire") {
+	live := censusLine(t, out, "func LiveHome(")
+	if !strings.Contains(live, "1 declaration(s) removed") || !strings.Contains(live, "1 would fire") {
 		t.Errorf("the live marker removes one in-scope file the rule fires on (notes.md is out of scope):\n  %s", live)
 	}
-	fossil := censusLine(t, out, "FOSSIL-HOME")
-	if !strings.Contains(fossil, "1 file(s) removed") || !strings.Contains(fossil, "0 would fire") {
+	fossil := censusLine(t, out, "func FossilHome(")
+	if !strings.Contains(fossil, "1 declaration(s) removed") || !strings.Contains(fossil, "0 would fire") {
 		t.Errorf("the fossil marker removes a file the rule would not fire on and must read 0:\n  %s", fossil)
 	}
-	dead := censusLine(t, out, "DEAD-HOME")
-	if !strings.Contains(dead, "0 file(s) removed") {
+	dead := censusLine(t, out, "func DeadHome(")
+	if !strings.Contains(dead, "0 declaration(s) removed") {
 		t.Errorf("a marker no file declares removes nothing and must say 0:\n  %s", dead)
 	}
 }
@@ -76,10 +76,10 @@ func TestCensusReportsWhatEachNotDeclaringMarkerRemoved(t *testing.T) {
 // rule's markers matched, so DEAD-HOME read as live because LIVE-HOME was.
 func TestLintReportsADeadNotDeclaringMarkerBesideALiveSibling(t *testing.T) {
 	_, out := lint(t, notDeclaringRepo())
-	if !strings.Contains(out, `scope.not_declaring "DEAD-HOME" is declared by no file`) {
+	if !strings.Contains(out, `scope.not_declaring "func DeadHome(" is declared by no file`) {
 		t.Fatalf("a dead marker must be reported even when a sibling marker is live:\n%s", out)
 	}
-	if strings.Contains(out, `scope.not_declaring "LIVE-HOME" is declared by no file`) {
+	if strings.Contains(out, `scope.not_declaring "func LiveHome(" is declared by no file`) {
 		t.Fatalf("a declared marker was reported dead:\n%s", out)
 	}
 }
@@ -94,7 +94,7 @@ func TestCensusDoesNotInventAWouldFireCountForAFinalizerRule(t *testing.T) {
 			"    type: required-pattern\n" +
 			"    scope:\n" +
 			"      include: ['**/*.go']\n" +
-			"      not_declaring: ['GENERATED']\n" +
+			"      not_declaring: [{marker: GENERATED, holders: 1}]\n" +
 			"    params: {pattern: 'LICENSE'}\n" +
 			"    cure: \"add it\"\n",
 		".formwork/fixtures/needs-header/fire-1/a.go": "package p\n",
@@ -125,7 +125,7 @@ func TestCensusDoesNotCountAnUnreadableFileEitherWay(t *testing.T) {
 	var sb strings.Builder
 	_, _ = meta.Lint(cfg, root, &sb, false, false)
 	out := sb.String()
-	censusLine(t, out, "FOSSIL-HOME") // the census ran; a silent one would pass below
+	censusLine(t, out, "func FossilHome(") // the census ran; a silent one would pass below
 	if strings.Contains(out, "1 would fire") || strings.Contains(out, "0 would fire") {
 		t.Fatalf("an unreadable in-scope file makes every would-fire count a guess:\n%s", out)
 	}

@@ -14,6 +14,20 @@
   none, and a production subject with no `tests:` definition is refused at
   load.
 
+### Changed
+
+- **The `generic` pack carries no generated, vendored, build or test
+  excludes.** Its rules read every file the adopting repository does not
+  declare as generated (`generated:`), test code for a production subject
+  (`tests:`), or ignored (`scan.ignore`, `scan.gitignore`). The per-rule
+  globs that stood in for those facts are gone, with the paths one adopter
+  had pinned into a portable pack (`gcs/`, `blobstore/`, `internal/vendorjson/`,
+  `internal/lockdowntests/`, `tools/formwork/`). Three pack rules state
+  `scope.subject: production`, so an adopter loading `library: [generic]`
+  declares `tests:`; without it the load names what is missing. The one
+  exclude left is typed: markdown under `.husky/` is documentation, not a
+  hook script.
+
 ## 0.14.3
 
 ### Fixed

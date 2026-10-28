@@ -54,7 +54,7 @@ func TestLintExemptsExternalToolRulesFromFixturesAndScope(t *testing.T) {
 
 func TestLintSkipsFixtureCoverageForLibraryRules(t *testing.T) {
 	failed, out := lint(t, map[string]string{
-		".formwork/formwork.yaml":                   "version: 1\nlibrary: [generic]\n",
+		".formwork/formwork.yaml":                   "version: 1\nlibrary: [generic]\ntests: ['**/*_test.go', '**/*_test.dart']\n",
 		".formwork/rules/r.yaml":                    lintRule,
 		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
 		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",

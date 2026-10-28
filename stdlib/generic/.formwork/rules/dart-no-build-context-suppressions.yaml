@@ -6,11 +6,6 @@ rules:
     scope:
       include:
         - "**/*.dart"
-      exclude:
-        - ".formwork/**"
-        - "**/*.g.dart"
-        - "**/*.freezed.dart"
-        - "**/*.pb.dart"
     params:
       pattern: '//[[:space:]]*ignore(_for_file)?:[^/\n]*use_build_context_synchronously'
     cure: >-

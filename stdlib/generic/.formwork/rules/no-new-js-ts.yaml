@@ -8,10 +8,6 @@ rules:
     scope:
       include:
         - "**"
-      exclude:
-        - ".formwork/**"
-        - "**/node_modules/**"  # preventative: gitignored install tree, may be absent
-        - "**/.dart_tool/**"    # preventative: gitignored pub tool tree, may be absent
     params:
       forbid_ext:
         - .js

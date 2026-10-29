@@ -10,7 +10,6 @@ import (
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/engine"
-	"github.com/buildfoundry-nz/formwork/internal/finding"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"gopkg.in/yaml.v3"
@@ -40,7 +39,7 @@ var classTitle = map[string]string{
 // gating is retained as a field, and is now true on every verdict the census
 // can emit (#12178). It used to separate "this rule cannot fail" from "this
 // rule is insensitive", and six classes lived on the second side: dead
-// scope.exclude and except.paths globs, comment-plane-satisfiable rules,
+// scope.exclude globs, comment-plane-satisfiable rules,
 // diffuse evidence, absence-only fixtures and rules with no fixture at all —
 // ~970 instances that the closing "OK: every rule can fail" was computed
 // without. A detected class that does not gate is credited as coverage while
@@ -261,18 +260,10 @@ func isRelationObligation(r *config.Rule) bool {
 // symbol-anchor probes need it to tell a DELETED subject from one that is merely
 // uncalled right now, and the summary needs the same set to count the anchors
 // this instrument cannot decide (symbol.go).
-func classify(cfg *config.Config, root string, fset *scan.FileSet, scopes map[string][]*scan.File, meta map[string]ruleMeta, gm *globMeasure, declared map[string]bool) ([]row, error) {
+func classify(cfg *config.Config, root string, scopes map[string][]*scan.File, meta map[string]ruleMeta, gm *globMeasure, declared map[string]bool) ([]row, error) {
 	synths, err := lockdownSynthWitnesses(root)
 	if err != nil {
 		return nil, err
-	}
-	// Path index over the engine's OWN walk. except.paths globs are counted
-	// against walkIncludingBuiltinSkip (perglob.go), so a live count alone does
-	// not prove the engine ever reads the file; this is what distinguishes the
-	// two (exceptInertVerdicts).
-	byPath := make(map[string]*scan.File, len(fset.Files))
-	for _, f := range fset.Files {
-		byPath[f.Path()] = f
 	}
 	rows := make([]row, 0, len(cfg.Rules))
 	for _, r := range cfg.Rules {
@@ -295,12 +286,6 @@ func classify(cfg *config.Config, root string, fset *scan.FileSet, scopes map[st
 		// diff-scoped mutation-proof runner is the only other instrument that
 		// asks this question, and an untouched rule never reaches it.
 		rw.verdicts = append(rw.verdicts, selfProofVerdicts(r, root, scopes[r.ID])...)
-
-		iv, err := exceptInertVerdicts(r, root, gm, byPath)
-		if err != nil {
-			return nil, err
-		}
-		rw.verdicts = append(rw.verdicts, iv...)
 
 		m := meta[r.ID]
 		rw.existenceObligation = isExistenceObligation(r, m)
@@ -328,7 +313,7 @@ func classify(cfg *config.Config, root string, fset *scan.FileSet, scopes map[st
 			rw.verdicts = append(rw.verdicts, symbolAnchorVerdicts(r, root, scopes[r.ID], declared)...)
 		}
 
-		fv, err := fixtureVerdicts(r, root, &rw, gm)
+		fv, err := fixtureVerdicts(r, root, &rw)
 		if err != nil {
 			return nil, err
 		}
@@ -486,7 +471,7 @@ func cureNote(path string) string {
 
 // fixtureVerdicts evaluates the rule's fire/pass fixture trees with the real
 // engine and reports a pair that has stopped discriminating.
-func fixtureVerdicts(r *config.Rule, root string, rw *row, gm *globMeasure) ([]verdict, error) {
+func fixtureVerdicts(r *config.Rule, root string, rw *row) ([]verdict, error) {
 	dir := filepath.Join(root, ".formwork", "fixtures", r.ID)
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
@@ -528,7 +513,6 @@ func fixtureVerdicts(r *config.Rule, root string, rw *row, gm *globMeasure) ([]v
 		if err != nil {
 			return nil, fmt.Errorf("rule %s fixture %s: %w", r.ID, e.Name(), err)
 		}
-		live := finding.Unsuppressed(fds)
 		if isFire {
 			rw.fireCount++
 			for _, ff := range ffs.Files {
@@ -536,7 +520,7 @@ func fixtureVerdicts(r *config.Rule, root string, rw *row, gm *globMeasure) ([]v
 					rw.fireInScope++
 				}
 			}
-			if len(live) == 0 {
+			if len(fds) == 0 {
 				out = append(out, verdict{
 					class: class3, code: "FIRE-FIXTURE-PASSES", gating: true,
 					why:      "the violation fixture no longer trips the rule — the pair has stopped discriminating",
@@ -546,7 +530,7 @@ func fixtureVerdicts(r *config.Rule, root string, rw *row, gm *globMeasure) ([]v
 			continue
 		}
 		rw.passCount++
-		if len(live) > 0 {
+		if len(fds) > 0 {
 			out = append(out, verdict{
 				class: class3, code: "PASS-FIXTURE-FIRES", gating: true,
 				why:      "the clean fixture trips the rule — the pair has stopped discriminating",
@@ -554,7 +538,7 @@ func fixtureVerdicts(r *config.Rule, root string, rw *row, gm *globMeasure) ([]v
 			})
 			continue
 		}
-		pv, err := passVacuousVerdict(r, e.Name(), ffs, gm)
+		pv, err := passVacuousVerdict(r, e.Name(), ffs)
 		if err != nil {
 			return nil, err
 		}

@@ -6,3 +6,9 @@ lanes:
   ci:
     all: true
     ci: true
+
+# Test code, for the rules whose subject is production code
+# (scope.subject: production). Every other rule reads tests.
+tests:
+  - "**/*_test.go"
+  - "**/*_test.dart"

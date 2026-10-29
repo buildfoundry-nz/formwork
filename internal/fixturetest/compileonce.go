@@ -408,10 +408,7 @@ func buildDetectorOnce(arm string, shape goRunShape, outBin string) error {
 func runArmsCold(r *config.Rule, arms []armEntry, repo string, workers int) ([]ArmResult, error) {
 	var results []ArmResult
 	for _, a := range arms {
-		// nil inert: only a command rule reaches runArmsCold (Results gates it on
-		// ruleCommandCmd), and vacuity.Judge returns not-judged for it before the
-		// declared-inert excuse is consulted.
-		ps, v, err := runFixture(r, a.path, a.src, a.isFire, repo, workers, nil)
+		ps, v, err := runFixture(r, a.path, a.src, a.isFire, repo, workers)
 		if err != nil {
 			return nil, err
 		}
@@ -492,7 +489,7 @@ func runFixtureCompiled(r *config.Rule, dir, src string, isFire bool, repo strin
 	}
 	rewritten, ok := command.WithCompiledBinary(fresh.Checker, binary, progArgs, workDir)
 	if !ok {
-		return runFixture(r, dir, src, isFire, repo, workers, nil)
+		return runFixture(r, dir, src, isFire, repo, workers)
 	}
 	fresh = fresh.CloneWithChecker(rewritten)
 	findings, fset, err := EvalIn(fresh, dir, repo, workers)

@@ -61,11 +61,11 @@ func Render(format string, w io.Writer, rls []*config.Rule, findings []finding.F
 	return nil
 }
 
-// rulesPassed counts rules with no error-severity live findings (warn-only and
+// rulesPassed counts rules with no error-severity findings (warn-only and
 // clean rules both pass), matching the human summary.
-func rulesPassed(rls []*config.Rule, live []finding.Finding) int {
+func rulesPassed(rls []*config.Rule, findings []finding.Finding) int {
 	byRule := map[string][]finding.Finding{}
-	for _, f := range live {
+	for _, f := range findings {
 		byRule[f.RuleID] = append(byRule[f.RuleID], f)
 	}
 	passed := 0
@@ -99,30 +99,16 @@ func curesByRule(rls []*config.Rule) map[string]string {
 	return cures
 }
 
-// jsonSuppressed names one suppressed finding (#91): what was exempted and
-// through which channel ("marker"), so the
-// exemption surface is auditable from check output, not just countable.
-type jsonSuppressed struct {
-	Rule         string `json:"rule"`
-	Severity     string `json:"severity"`
-	Path         string `json:"path,omitempty"`
-	Line         int    `json:"line,omitempty"`
-	Message      string `json:"message"`
-	SuppressedBy string `json:"suppressed_by"`
-}
-
 type jsonSummary struct {
 	RulesTotal  int `json:"rules_total"`
 	RulesPassed int `json:"rules_passed"`
 	Findings    int `json:"findings"`
-	Suppressed  int `json:"suppressed"`
 }
 
 type jsonReport struct {
-	Findings   []jsonFinding    `json:"findings"`
-	Suppressed []jsonSuppressed `json:"suppressed"`
-	Scan       jsonScan         `json:"scan"`
-	Summary    jsonSummary      `json:"summary"`
+	Findings []jsonFinding `json:"findings"`
+	Scan     jsonScan      `json:"scan"`
+	Summary  jsonSummary   `json:"summary"`
 	// Durations is per-rule total evaluation wall time in milliseconds (phase 1
 	// summed over files plus the phase-2 finalizer), collected by
 	// engine.RunTimed. It is observability for the slowest-rule question and
@@ -131,38 +117,22 @@ type jsonReport struct {
 	Durations map[string]int64 `json:"durations,omitempty"`
 }
 
-// JSON emits a stable machine-readable report: the live (unsuppressed)
-// findings, the suppressed findings enumerated, and a summary whose
-// suppressed count is the length of that enumeration — derived, not asserted
-// alongside, so the two cannot drift (#91). Findings arrive engine-sorted, so
-// output is deterministic.
+// JSON emits a stable machine-readable report: the findings and a summary.
+// Findings arrive engine-sorted, so output is deterministic.
 //
 // rls must be the complete loaded rule set the findings were produced from:
-// each live finding's cure joins from it by rule id (#107), so a nil or
+// each finding's cure joins from it by rule id (#107), so a nil or
 // filtered rls silently drops declared cures (and skews rules_total/passed).
 //
 // timing (may be nil) renders as the report's durations map; Go marshals map
 // keys sorted, so the output stays deterministic run to run.
 func JSON(w io.Writer, rls []*config.Rule, findings []finding.Finding, scan ScanSummary, timing map[string]time.Duration) {
-	live := finding.Unsuppressed(findings)
-	rep := jsonReport{
-		Findings:   make([]jsonFinding, 0, len(live)),
-		Suppressed: make([]jsonSuppressed, 0, len(findings)-len(live)), // non-nil: empty encodes []
-	}
+	rep := jsonReport{Findings: make([]jsonFinding, 0, len(findings))} // non-nil: empty encodes []
 	cures := curesByRule(rls)
-	for _, f := range live {
+	for _, f := range findings {
 		rep.Findings = append(rep.Findings, jsonFinding{
 			Rule: f.RuleID, Severity: string(f.Severity), Path: f.Path, Line: f.Line,
 			Message: f.Message, Cure: cures[f.RuleID],
-		})
-	}
-	for _, f := range findings {
-		if !f.Suppressed {
-			continue
-		}
-		rep.Suppressed = append(rep.Suppressed, jsonSuppressed{
-			Rule: f.RuleID, Severity: string(f.Severity), Path: f.Path, Line: f.Line,
-			Message: f.Message, SuppressedBy: f.SuppressedBy,
 		})
 	}
 	if len(timing) > 0 {
@@ -174,32 +144,26 @@ func JSON(w io.Writer, rls []*config.Rule, findings []finding.Finding, scan Scan
 	rep.Scan = scan.toJSON()
 	rep.Summary = jsonSummary{
 		RulesTotal:  len(rls),
-		RulesPassed: rulesPassed(rls, live),
+		RulesPassed: rulesPassed(rls, findings),
 		Findings:    len(rep.Findings),
-		Suppressed:  len(rep.Suppressed),
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(rep) // io.Writer errors surface to the caller's writer
 }
 
-// GitHub emits one workflow-command annotation per live finding
-// (`::error file=…,line=…::message`), so violations show inline on a PR —
-// then one `::notice` per suppressed finding (#91), naming what was exempted
-// and through which channel, after the live annotations because reviewers
-// read failures first. Notice level can never read as a failure and never
-// affects the exit code (renderers are post-verdict). A live annotation whose
-// rule declares cure: carries it appended to the message (#107) — workflow
-// commands have no extra structured field, so the cure travels as message
-// data, escaped like the rest of it; suppressed notices don't carry cure,
-// because an exempted finding is not asking to be remediated.
+// GitHub emits one workflow-command annotation per finding
+// (`::error file=…,line=…::message`), so violations show inline on a PR. An
+// annotation whose rule declares cure: carries it appended to the message
+// (#107) — workflow commands have no extra structured field, so the cure
+// travels as message data, escaped like the rest of it.
 //
 // rls must be the complete loaded rule set the findings were produced from
 // (it was ignored before #107): each annotation's cure joins from it by rule
 // id, so a nil or filtered rls silently drops declared cures.
 func GitHub(w io.Writer, rls []*config.Rule, findings []finding.Finding, scan ScanSummary) {
 	cures := curesByRule(rls)
-	for _, f := range finding.Unsuppressed(findings) {
+	for _, f := range findings {
 		level := "error"
 		if f.Severity == finding.SeverityWarn {
 			level = "warning"
@@ -210,12 +174,6 @@ func GitHub(w io.Writer, rls []*config.Rule, findings []finding.Finding, scan Sc
 			msg = ghAppendCure(len(prefix), msg, f.RuleID, cure)
 		}
 		fmt.Fprintf(w, "%s%s\n", prefix, msg)
-	}
-	for _, f := range findings {
-		if !f.Suppressed {
-			continue
-		}
-		annotate(w, "notice", f, "suppressed: "+ghEscapeData(f.Message)+" ("+f.RuleID+"; "+f.SuppressedBy+")")
 	}
 	// The scan summary, last: reviewers read failures first, and this block is
 	// context for them rather than a competitor. It carries no file= prop —

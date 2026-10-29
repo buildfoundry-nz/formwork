@@ -25,10 +25,13 @@ package command
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"unicode/utf8"
 
@@ -92,6 +95,12 @@ type command struct {
 	located bool
 
 	sawTrigger atomic.Bool
+
+	// given is every file the engine handed CheckFile: the in-scope files of a
+	// whole-tree run, the changed in-scope files under --staged or --range, the
+	// arm under test. FinalizeErr lists it in FORMWORK_FILES.
+	givenMu sync.Mutex
+	given   map[string]bool
 	// skipped records that FinalizeErr took the when: early return. It is a
 	// record of what happened, not a re-derivation from whenGlobs/sawTrigger:
 	// those two also read "would skip" before the finalizer has run at all, and
@@ -289,6 +298,12 @@ func (c *command) ProcessBound() bool {
 // changeset, it answers "did a trigger path change?". It never emits per-file
 // findings.
 func (c *command) CheckFile(f *scan.File) ([]rules.Match, error) {
+	c.givenMu.Lock()
+	if c.given == nil {
+		c.given = map[string]bool{}
+	}
+	c.given[f.Path()] = true
+	c.givenMu.Unlock()
 	if len(c.whenGlobs) == 0 {
 		return nil, nil
 	}
@@ -330,14 +345,27 @@ func (c *command) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) 
 	argv := substituteRoots(c.cmd, ctx.Root, ctx.Repo)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = ctx.Root
+	// ADDED, never removed: the contract above is that this package takes
+	// nothing out of the tool's environment, and these take nothing out.
+	cmd.Env = cmd.Environ()
+	if ctx.Changeset {
+		// FORMWORK_FILES lists the changed in-scope files this rule was handed,
+		// so a detector that judges one file at a time can read those and parse
+		// nothing else. A whole-tree run sets nothing: the detector judges the
+		// root, which is the backstop every changeset skip names.
+		listing, err := c.writeGiven()
+		if err != nil {
+			return nil, fmt.Errorf("command %v: %w", c.cmd, err)
+		}
+		defer os.Remove(listing)
+		cmd.Env = append(cmd.Env, "FORMWORK_FILES="+listing)
+	}
 	if ctx.Fixture {
-		// ADDED, never removed: the contract above is that this package takes
-		// nothing out of the tool's environment, and this takes nothing out.
 		// It states which plane the tool is in, because the tool cannot tell
 		// an isolated fixture from the live repository by looking — both are
 		// real git repositories — and the difference decides whether a
 		// commit-range plane can run at all (#28).
-		cmd.Env = append(cmd.Environ(), "FORMWORK_FIXTURE=1")
+		cmd.Env = append(cmd.Env, "FORMWORK_FIXTURE=1")
 	}
 	if c.workDir != "" {
 		cmd.Dir = c.workDir
@@ -614,4 +642,32 @@ func WithCompiledBinary(c rules.Checker, binary string, progArgs []string, workD
 
 func init() {
 	rules.Register("command", newCommand)
+}
+
+// writeGiven writes the files CheckFile was handed, sorted, one root-relative
+// path per line, to a temporary file and returns its path. An empty set is an
+// empty file, never an unset variable, so a detector can tell "judge nothing"
+// from "not run by the engine".
+func (c *command) writeGiven() (string, error) {
+	c.givenMu.Lock()
+	paths := make([]string, 0, len(c.given))
+	for p := range c.given {
+		paths = append(paths, p)
+	}
+	c.givenMu.Unlock()
+	sort.Strings(paths)
+	f, err := os.CreateTemp("", "formwork-files-*.txt")
+	if err != nil {
+		return "", err
+	}
+	body := strings.Join(paths, "\n")
+	if body != "" {
+		body += "\n"
+	}
+	if _, err := f.WriteString(body); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), f.Close()
 }

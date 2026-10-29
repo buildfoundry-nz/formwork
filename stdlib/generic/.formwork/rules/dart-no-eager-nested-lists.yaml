@@ -29,15 +29,6 @@ rules:
     - frontend/lib/**/*.dart
     - frontend/admin_app/lib/**/*.dart
     - packages/*/lib/**/*.dart
-    exclude:
-    - '**/generated/**'
-    - '**/.dart_tool/**'  # preventative: .dart_tool is gitignored and may be absent
-    - '**/*.g.dart'
-    - '**/*.freezed.dart'
-    - '**/*.pb.dart'
-    - '**/*.pbenum.dart'
-    - '**/*.pbjson.dart'  # preventative: generated protobuf dart variants may be absent for some packages
-    - '**/*.gr.dart'  # preventative: generated router files may be absent
   params:
     syntax: regexp2
     multiline: true

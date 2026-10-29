@@ -225,13 +225,6 @@ func Results(cfg *config.Config, allRuleIDs []string, root string, workers int) 
 	}
 	sort.Strings(orphans)
 
-	// Read once per run: the except-declaration marker lives only in the rule
-	// files' comments, and the census reads the same files.
-	inert, err := vacuity.ReadDeclaredInert(root)
-	if err != nil {
-		return nil, err
-	}
-
 	for _, r := range cfg.Rules {
 		ruleDir := filepath.Join(fixturesRoot, r.ID)
 		entries, err := os.ReadDir(ruleDir)
@@ -287,7 +280,7 @@ func Results(cfg *config.Config, allRuleIDs []string, root string, workers int) 
 		}
 		if len(armResults) == 0 {
 			for _, a := range arms {
-				ps, v, err := runFixture(r, a.path, a.src, a.isFire, root, workers, inert)
+				ps, v, err := runFixture(r, a.path, a.src, a.isFire, root, workers)
 				if err != nil {
 					releaseArms()
 					return nil, err
@@ -333,12 +326,10 @@ func Results(cfg *config.Config, allRuleIDs []string, root string, workers int) 
 }
 
 // EvalIn evaluates one rule over the fixture tree rooted at dir, returning its
-// findings PRE-suppression together with the walked FileSet. The caller passes
+// findings together with the walked FileSet. The caller passes
 // a rule whose checker is already the one it wants exercised (see runFixture's
 // Fresh below); EvalIn owns only what a fixture run must not inherit from the
 // repo, so that policy lives in exactly one place rather than once per caller.
-//
-// Markers stay active — fixtures legitimately exercise marker suppression.
 //
 // scan.ignore is repo-scoped: its globs are repo-root-relative, but this
 // walk's root is the fixture dir, an unrelated path namespace. Applying them
@@ -378,7 +369,7 @@ func EvalIn(r *config.Rule, dir, repo string, workers int) ([]finding.Finding, *
 // runFixture evaluates one fixture tree with a fresh checker and returns
 // the fixture's problems (empty = fixture behaved as declared) and, for a pass
 // arm that behaved, its vacuity verdict over the tree EvalIn already walked.
-func runFixture(r *config.Rule, dir, src string, isFire bool, repo string, workers int, inert vacuity.DeclaredInert) ([]string, vacuity.Verdict, error) {
+func runFixture(r *config.Rule, dir, src string, isFire bool, repo string, workers int) ([]string, vacuity.Verdict, error) {
 	fresh, err := r.Fresh()
 	if err != nil {
 		return nil, vacuity.Verdict{}, fmt.Errorf("fixture %s: %w", src, err)
@@ -394,7 +385,7 @@ func runFixture(r *config.Rule, dir, src string, isFire bool, repo string, worke
 	if isFire || len(ps) > 0 {
 		return ps, vacuity.Verdict{}, nil
 	}
-	v, err := judgeVacuity(r, fset, inert)
+	v, err := judgeVacuity(r, fset)
 	if err != nil {
 		return nil, vacuity.Verdict{}, fmt.Errorf("fixture %s: vacuity probe: %w", src, err)
 	}
@@ -403,7 +394,6 @@ func runFixture(r *config.Rule, dir, src string, isFire bool, repo string, worke
 
 // judgeFixture compares findings against the fixture's declared expectations.
 func judgeFixture(r *config.Rule, dir, src string, isFire bool, findings []finding.Finding, fset *scan.FileSet) ([]string, error) {
-	findings = finding.Unsuppressed(findings)
 	expected, err := collectExpectations(fset, dir, src, r.ID)
 	if err != nil {
 		return nil, err

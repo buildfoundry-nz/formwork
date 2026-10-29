@@ -81,7 +81,7 @@ func TestLoadRejectsBadScopeMinFiles(t *testing.T) {
 // only way in, and it refuses the value compile refuses. A caller that could
 // bypass the check would be a second, unvalidated door onto the same invariant.
 func TestSetMinFilesRefusesNegative(t *testing.T) {
-	r, err := config.New("r", "forbidden-pattern", "error", "", []string{"**/*.go"}, nil, nil, nil)
+	r, err := config.New("r", "forbidden-pattern", "error", "", []string{"**/*.go"}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -225,12 +225,13 @@ func TestForbiddenGuardedPatternFiresOnceOnFirstMatch(t *testing.T) {
 	}
 }
 
-// require_absent is the negative guard: the trigger fires only in a file that
-// contains NONE of the require_absent patterns. Linear-RE2 replacement for a
-// negative lookahead like (?![\s\S]*allowed).
-func TestForbiddenRequireAbsentGatesOnFileCooccurrence(t *testing.T) {
+// require_absent is the negative guard: a trigger inside the declaration a
+// credential opens is the owner's, and a trigger anywhere else fires. A
+// credential on a COMMENT line opens no declaration, so it sanctions only
+// itself: a marker comment does not make its file an owner.
+func TestForbiddenRequireAbsentGatesOnTheOwnerDeclaration(t *testing.T) {
 	c := mustChecker(t, "forbidden-pattern",
-		"pattern: 'rawQuery'\nrequire_absent:\n  - {credential: '^// GENERATED-OK', holders: 1}\n")
+		"pattern: 'rawQuery'\nrequire_absent:\n  - {credential: '^func owner\\(', holders: 1}\n")
 	fire := scan.NewMemFile("a.go", []byte("x\nrawQuery(sql)\n"))
 	ms, err := c.CheckFile(fire)
 	if err != nil {
@@ -239,13 +240,22 @@ func TestForbiddenRequireAbsentGatesOnFileCooccurrence(t *testing.T) {
 	if len(ms) != 1 || ms[0].Line != 2 {
 		t.Fatalf("expected finding on line 2, got %+v", ms)
 	}
-	exempt := scan.NewMemFile("b.go", []byte("// GENERATED-OK\nrawQuery(sql)\n"))
-	ms, err = c.CheckFile(exempt)
+	owner := scan.NewMemFile("b.go", []byte("package b\nfunc owner() {\n\trawQuery(sql)\n}\n"))
+	ms, err = c.CheckFile(owner)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(ms) != 0 {
-		t.Fatalf("expected no finding when require_absent token present, got %+v", ms)
+		t.Fatalf("expected no finding inside the owner declaration, got %+v", ms)
+	}
+	comment := mustChecker(t, "forbidden-pattern",
+		"pattern: 'rawQuery'\nrequire_absent:\n  - {credential: '^// GENERATED-OK', holders: 1}\n")
+	ms, err = comment.CheckFile(scan.NewMemFile("c.go", []byte("// GENERATED-OK\nrawQuery(sql)\n")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ms) != 1 || ms[0].Line != 2 {
+		t.Fatalf("a comment-line credential must not excuse its file; want c.go:2, got %+v", ms)
 	}
 }
 

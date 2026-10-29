@@ -26,12 +26,7 @@ rules:
       include:
         - "frontend/lib/**/*.dart"
         - "packages/*/lib/**/*.dart"
-      exclude:
-        - "**/*_test.dart"
-        - "**/*.g.dart"
-        - "**/*.freezed.dart"
-        - "**/*.pb*.dart"
-        - "**/generated/**"
+      subject: production
     preprocess: decomment-go
     params:
       # The eager `children: <Widget>[ for …]` comprehension is the trigger; the

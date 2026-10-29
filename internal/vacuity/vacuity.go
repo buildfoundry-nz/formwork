@@ -21,7 +21,6 @@ import (
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/engine"
-	"github.com/buildfoundry-nz/formwork/internal/finding"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"gopkg.in/yaml.v3"
@@ -69,18 +68,15 @@ func IsEscape(r *config.Rule) bool {
 // An escape rule is not-judged. Otherwise vacuous is checked first, then blind;
 // a rule that is neither is judged. A probe that cannot run is an error — the
 // caller must exit 2, never read it as a pass.
-//
-// inert carries the except.paths entries their authors declared inert (see
-// DeclaredInert); a fixture standing at one is not vacuous. nil excuses nothing.
-func Judge(r *config.Rule, fs *scan.FileSet, inert DeclaredInert) (Verdict, error) {
-	return judgeWith(r, fs, inert, AnchorParams)
+func Judge(r *config.Rule, fs *scan.FileSet) (Verdict, error) {
+	return judgeWith(r, fs, AnchorParams)
 }
 
-func judgeWith(r *config.Rule, fs *scan.FileSet, inert DeclaredInert, anchor func(*config.Rule) (AnchorParamSet, error)) (Verdict, error) {
+func judgeWith(r *config.Rule, fs *scan.FileSet, anchor func(*config.Rule) (AnchorParamSet, error)) (Verdict, error) {
 	if IsEscape(r) {
 		return NotJudgedEscape(r), nil
 	}
-	vac, err := Vacuous(r, fs, func(fs *scan.FileSet) bool { return inert.Excuses(r.ID, fs) })
+	vac, err := Vacuous(r, fs)
 	if err != nil {
 		return Verdict{}, err
 	}
@@ -102,19 +98,13 @@ func judgeWith(r *config.Rule, fs *scan.FileSet, inert DeclaredInert, anchor fun
 // universal-scope twin, which gets polarity right (a ban is violated by a match,
 // a required-pattern by an absence) without re-implementing any matcher.
 //
-// declaredInert, when non-nil, lets the caller excuse a fixture standing at a
-// path its author declared inert (Judge passes DeclaredInert.Excuses).
-//
 // Heavy rules are out of class: their tool runs at the tree root and never
 // consults scope for its verdict.
-func Vacuous(r *config.Rule, fs *scan.FileSet, declaredInert func(*scan.FileSet) bool) (bool, error) {
+func Vacuous(r *config.Rule, fs *scan.FileSet) (bool, error) {
 	if rules.CostOf(r.Checker) == rules.CostHeavy {
 		return false, nil
 	}
 	if reachesAnyFile(r, fs) {
-		return false, nil
-	}
-	if declaredInert != nil && declaredInert(fs) {
 		return false, nil
 	}
 	judged, err := judgesAnything(r, fs)
@@ -135,24 +125,23 @@ func reachesAnyFile(r *config.Rule, fs *scan.FileSet) bool {
 
 // judgesAnything reports whether r finds anything to say about fs once its
 // scope subtracts nothing. A Fresh checker, because a rule carries per-run
-// state (required-pattern exists mode accumulates across files). Preprocess and
-// Marker are carried across because they change what the checker SEES.
+// state (required-pattern exists mode accumulates across files). Preprocess is
+// carried across because it changes what the checker SEES.
 func judgesAnything(r *config.Rule, fs *scan.FileSet) (bool, error) {
 	fresh, err := r.Fresh()
 	if err != nil {
 		return false, err
 	}
-	probe, err := config.New(r.ID, r.Type, r.Severity, r.Cure, []string{"**"}, nil, nil, fresh.Checker)
+	probe, err := config.New(r.ID, r.Type, r.Severity, r.Cure, []string{"**"}, nil, fresh.Checker)
 	if err != nil {
 		return false, err
 	}
 	probe.Preprocess = r.Preprocess
-	probe.Marker = r.Marker
 	fds, err := engine.Run([]*config.Rule{probe}, fs, 1)
 	if err != nil {
 		return false, err
 	}
-	return len(finding.Unsuppressed(fds)) > 0, nil
+	return len(fds) > 0, nil
 }
 
 // NeverMatches compiles and can never match: end-of-text followed by
@@ -169,10 +158,7 @@ const probeIdent = "SomeFuncName"
 // subject r is anchored on. Only go/call-confined-to-func-name and
 // go/guard-precedes-call are name-anchored this way; any other type is judged.
 //
-// Two quirks are kept deliberately, as ported:
-//   - vacuous counts only UNSUPPRESSED findings (judgesAnything), while blind's
-//     AnchorHits counts suppressed ones too — a marker-suppressed symbol proves
-//     the anchor still sees its subject.
+// One quirk is kept deliberately, as ported:
 //   - a guard-precedes-call rule with `funcs` set runs a SECOND probe with the
 //     funcs filter defeated as well, because a pass fixture can legitimately
 //     assert that the filter excludes an unguarded sink.
@@ -272,7 +258,7 @@ func totalBanConfinement(allowedFunc string) bool {
 }
 
 // AnchorHits recompiles r with override applied to its params and returns how
-// many findings — suppressed ones included — the real engine produces over fs.
+// many findings the real engine produces over fs.
 // scope.exclude and except.paths are left as written: a symbol surviving only
 // in a path the rule excludes is invisible TO THE RULE.
 func AnchorHits(r *config.Rule, fs *scan.FileSet, override map[string]string) (int, error) {

@@ -81,6 +81,7 @@ func TestLintFailsClosedOnUnreadableInScopeFileWhicheverChecksRun(t *testing.T) 
 				".formwork/rules/r.yaml":                    tc.rules,
 				".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
 				".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
+
 				"secret.txt": "banana\n",
 			}, "secret.txt")
 

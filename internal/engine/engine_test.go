@@ -37,7 +37,7 @@ func (c *fakeFinalizer) Finalize() []rules.Match { return c.final }
 
 func mustRule(t *testing.T, id string, sev finding.Severity, include []string, c rules.Checker) *config.Rule {
 	t.Helper()
-	r, err := config.New(id, "fake", sev, "fix it", include, nil, nil, c)
+	r, err := config.New(id, "fake", sev, "fix it", include, nil, c)
 	if err != nil {
 		t.Fatal(err)
 	}

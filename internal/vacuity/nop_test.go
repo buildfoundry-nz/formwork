@@ -18,7 +18,7 @@ func (heavyChecker) Cost() rules.Cost { return rules.CostHeavy }
 
 func loadHeavy(t *testing.T) *config.Rule {
 	t.Helper()
-	r, err := config.New("h", "command", "error", "", []string{"src/**"}, nil, nil, heavyChecker{})
+	r, err := config.New("h", "command", "error", "", []string{"src/**"}, nil, heavyChecker{})
 	if err != nil {
 		t.Fatal(err)
 	}

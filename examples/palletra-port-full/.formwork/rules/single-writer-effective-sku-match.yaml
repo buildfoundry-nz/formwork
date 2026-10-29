@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-single-writer-effective-sku-match.sh
 # (#1125), RULE A. The sku -> priced-item EFFECTIVE MATCH has ONE production
 # caller: skusidebar.ResolvedMatch / ComputeEffectiveMatch. The two
@@ -25,11 +28,6 @@ rules:
         - "freightworks/**/*.go"
       exclude:
         - "**/*_test.go"
-    except:
-      paths:
-        - "**/services/core-api/internal/ratecardmatch/**"
-        - "freightworks/services/core-api/internal/skusidebar/match.go"
-        - "**/services/core-api/cmd/extraction-eval/**"
     preprocess: decomment-go
     params:
       pattern: 'ratecardmatch\.Match(WithVector)?\('

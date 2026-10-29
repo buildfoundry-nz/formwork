@@ -61,7 +61,7 @@ func walk(t *testing.T, files map[string]string) *scan.FileSet {
 
 func judge(t *testing.T, ruleYAML string, files map[string]string) vacuity.Verdict {
 	t.Helper()
-	v, err := vacuity.Judge(loadRule(t, ruleYAML), walk(t, files), nil)
+	v, err := vacuity.Judge(loadRule(t, ruleYAML), walk(t, files))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,19 +119,6 @@ func TestNotVacuousWhenOutOfScopeFileLacksARequiredPattern(t *testing.T) {
 func TestNotVacuousWhenTheRuleReachesAFile(t *testing.T) {
 	v := judge(t, banScoped, map[string]string{"src/a.go": "package a\n\nvar y = fine\n"})
 	wantVerdict(t, v, vacuity.KindJudged, "")
-}
-
-func TestVacuousHonoursDeclaredInert(t *testing.T) {
-	r := loadRule(t, banScoped)
-	fs := walk(t, map[string]string{"src/generated/g.go": "package generated\n"})
-	got, err := vacuity.Vacuous(r, fs, func(*scan.FileSet) bool { return true })
-	if err != nil || got {
-		t.Fatalf("Vacuous with a declared-inert fixture = %v, %v; want false, nil", got, err)
-	}
-	got, err = vacuity.Vacuous(r, fs, func(*scan.FileSet) bool { return false })
-	if err != nil || !got {
-		t.Fatalf("Vacuous with nothing declared = %v, %v; want true, nil", got, err)
-	}
 }
 
 // --- PASS-FIXTURE-BLIND (ported from the downstream census's passblind_test.go) ---
@@ -246,10 +233,9 @@ func TestGuardPrecedesWithFuncsAndNoSinkIsStillBlind(t *testing.T) {
 	wantVerdict(t, v, vacuity.KindBlind, vacuity.CodeBlind)
 }
 
-// Known quirk, kept on purpose: blind's anchor probe counts SUPPRESSED findings,
-// so a sink that is present but marker-suppressed is a hit and the fixture is
-// judged — whereas the vacuous probe counts only unsuppressed ones.
-func TestBlindCountsSuppressedAnchorHits(t *testing.T) {
+// A sink beside a leftover `formwork:allow` comment is still a hit: nothing can
+// be exempted, so the comment changes nothing and the fixture is judged.
+func TestBlindCountsAnchorHitsBesideAStaleAllowComment(t *testing.T) {
 	v := judge(t, fmt.Sprintf(confinement, "suppressed-anchor"), map[string]string{
 		"src/a.go": "package a\n\nfunc encodePayload() {\n\t// formwork:allow suppressed-anchor -- test\n\tjson.Marshal(m)\n\tmarshalJob()\n}\n",
 	})
@@ -274,11 +260,11 @@ func TestEscapeRuleIsNotJudged(t *testing.T) {
 // A rule built without params has an unreadable (empty) anchor pattern: a config
 // defect, so Judge errors (exit 2) rather than calling the fixture judged.
 func TestEmptyAnchorPatternIsAnError(t *testing.T) {
-	r, err := config.New("empty-anchor", "go/guard-precedes-call", finding.SeverityError, "", []string{"**"}, nil, nil, stubChecker{})
+	r, err := config.New("empty-anchor", "go/guard-precedes-call", finding.SeverityError, "", []string{"**"}, nil, stubChecker{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := vacuity.Judge(r, walk(t, map[string]string{"a.go": "package a\n"}), nil); err == nil {
+	if _, err := vacuity.Judge(r, walk(t, map[string]string{"a.go": "package a\n"})); err == nil {
 		t.Fatal("empty anchor pattern judged without error")
 	}
 }

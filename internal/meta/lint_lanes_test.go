@@ -68,36 +68,6 @@ func skipUnlessChmodEnforced(t *testing.T) {
 	}
 }
 
-func TestLintEnumeratesSuppressedFindings(t *testing.T) {
-	// G1a: a marker-suppressed finding is listed in the escape-hatch
-	// enumeration after that rule's other lines
-	// — an exemption quietly doing its job must be as visible as one that
-	// is merely configured.
-	failed, out := lint(t, map[string]string{
-		".formwork/formwork.yaml":                   "version: 1\n",
-		".formwork/rules/r.yaml":                    exemptLintRule,
-		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
-		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
-		"hit.txt":    "banana\n",
-		"marker.txt": "banana // formwork:allow no-banana known issue\n",
-	})
-	if failed != 0 {
-		t.Fatalf("failed=%d\n%s", failed, out)
-	}
-	for _, want := range []string{
-		"  no-banana: suppressed marker.txt:1 (marker)",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in:\n%s", want, out)
-		}
-	}
-	// hit.txt carries no marker: its finding is a failure, never listed as
-	// suppressed.
-	if strings.Contains(out, "suppressed hit.txt") {
-		t.Fatalf("unmarked finding listed as suppressed:\n%s", out)
-	}
-}
-
 func TestLintEnumerationUnchangedOnCleanRepo(t *testing.T) {
 	// G1a: a repo with no in-force suppressions must render exactly as
 	// before — no stray "suppressed" lines.
@@ -124,8 +94,9 @@ func TestLintSurvivesEngineErrorAndStillPrintsEscapeHatches(t *testing.T) {
 	skipUnlessChmodEnforced(t)
 
 	root := writeRepo(t, map[string]string{
-		".formwork/formwork.yaml":                   "version: 1\n",
-		".formwork/rules/r.yaml":                    exemptLintRule,
+		".formwork/formwork.yaml": "version: 1\n",
+		".formwork/rules/r.yaml": "rules:\n  - id: no-banana\n    type: forbidden-pattern\n" +
+			"    scope: {include: ['**/*.txt'], exclude: ['vendor/**']}\n    params: {pattern: banana, prefilter: banana}\n",
 		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
 		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
 		"hit.txt": "banana\n",
@@ -154,7 +125,7 @@ func TestLintSurvivesEngineErrorAndStillPrintsEscapeHatches(t *testing.T) {
 	out := sb.String()
 	for _, want := range []string{
 		"escape hatches:",
-		"  no-banana: marker enabled",
+		"  no-banana: scope.exclude: vendor/**",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
@@ -227,13 +198,12 @@ func TestLintPassesRedundantPrefilter(t *testing.T) {
 }
 
 func TestLintPassesRedundantPrefilterWithMainEngineRun(t *testing.T) {
-	// The rule opts into markers, so it is in rulesFeedingLint and the main engine
-	// run happens; the differential reuses those findings for its base pass.
+	// The rule carries a prefilter, so it is in rulesFeedingLint and the main
+	// engine run happens; the differential reuses those findings for its base pass.
 	// A redundant prefilter (literal present in the matching file) must still
 	// report OK — guards the reuse path against a false positive.
 	rule := "rules:\n" +
 		"  - id: cat-ok\n    type: forbidden-pattern\n    scope: {include: ['**/*.go']}\n" +
-		"    except: {marker: true}\n" +
 		"    params: {pattern: 'Category = \"[a-z]+\"', prefilter: material_cat, multiline: true}\n"
 	failed, out := lint(t, map[string]string{
 		".formwork/formwork.yaml":               "version: 1\n",
@@ -296,35 +266,6 @@ func TestLintSkipsPrefilterCheckWhenNoPrefilterRules(t *testing.T) {
 	}
 }
 
-func TestLintFlagsLoadBearingPrefilterEvenWhenSuppressed(t *testing.T) {
-	// A load-bearing prefilter whose exposed match is marker-suppressed still
-	// fails the check (pre-suppression comparison). The marker carries a reason,
-	// so exemption-hygiene stays clean and only prefilter-load-bearing fails.
-	rule := "rules:\n" +
-		"  - id: no-cat-default\n" +
-		"    type: forbidden-pattern\n" +
-		"    scope: {include: ['**/*.go']}\n" +
-		"    except: {marker: true}\n" +
-		"    params: {pattern: 'Category = \"[a-z]+\"', prefilter: material_cat, multiline: true}\n"
-	failed, out := lint(t, withFixtures(map[string]string{
-		".formwork/formwork.yaml": "version: 1\n",
-		".formwork/rules/r.yaml":  rule,
-		"bad.go":                  "package p\nvar Category = \"floor\" // formwork:allow no-cat-default legit reason\n",
-	}))
-	if failed != 1 {
-		t.Fatalf("failed=%d\n%s", failed, out)
-	}
-	for _, want := range []string{
-		"[prefilter-load-bearing] FAIL — 1 problem(s)",
-		"removing it makes the rule match bad.go",
-		"[exemption-hygiene] OK",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in:\n%s", want, out)
-		}
-	}
-}
-
 func TestLintPrefilterCheckFailsClosedOnEngineError(t *testing.T) {
 	// An unreadable in-scope file makes the differential's engine run error;
 	// Lint must return non-nil (exit 2) and still print the escape-hatch
@@ -358,52 +299,6 @@ func TestLintPrefilterCheckFailsClosedOnEngineError(t *testing.T) {
 	}
 	if strings.Contains(out, "[prefilter-load-bearing] OK") {
 		t.Fatalf("an engine error must never read as a passing check:\n%s", out)
-	}
-}
-
-func TestLintEmitsPrefilterVerdictBeforeMainEngineError(t *testing.T) {
-	// A load-bearing prefilter rule (*.go, readable) plus a marker rule (*.txt)
-	// whose in-scope file is unreadable: the main engine run errors, but the
-	// prefilter-load-bearing FAIL must still be emitted before lint surfaces the
-	// exit-2 error — a load-bearing-prefilter diagnostic must not be hidden
-	// behind an unrelated engine error (visibility must not regress on a
-	// degraded repo).
-	skipUnlessChmodEnforced(t)
-
-	root := writeRepo(t, withFixtures(map[string]string{
-		".formwork/formwork.yaml": "version: 1\n",
-		".formwork/rules/r.yaml": prefilterRule +
-			"  - id: no-banana\n    type: forbidden-pattern\n    scope: {include: ['**/*.txt']}\n" +
-			"    except: {marker: true}\n    params: {pattern: banana}\n",
-		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
-		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
-		// in-scope for the prefilter rule (*.go), readable, load-bearing
-		"consts.go": "package p\nvar Category = \"floor\"\n",
-	}))
-	// The marker rule (*.txt) forces the main engine run; this unreadable .txt
-	// makes that run error — but it is outside the prefilter rule's *.go scope,
-	// so the prefilter check's own base pass succeeds and can still emit.
-	secret := filepath.Join(root, "secret.txt")
-	if err := os.WriteFile(secret, []byte("banana\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(secret, 0o000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(secret, 0o644) })
-
-	cfg, err := config.Load(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var sb strings.Builder
-	if _, err := meta.Lint(cfg, root, &sb, false, false); err == nil {
-		t.Fatalf("expected exit 2 from the unreadable file, got nil:\n%s", sb.String())
-	}
-	out := sb.String()
-	if !strings.Contains(out, "[prefilter-load-bearing] FAIL") ||
-		!strings.Contains(out, "removing it makes the rule match consts.go") {
-		t.Fatalf("prefilter FAIL must be emitted before the main-run error:\n%s", out)
 	}
 }
 

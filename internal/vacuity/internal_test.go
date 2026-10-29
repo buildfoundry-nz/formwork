@@ -13,7 +13,7 @@ import (
 // reach this branch — the type's own factory rejects what yaml cannot read —
 // so the reader is injected.
 func TestUnreadableAnchorParamsIsAnError(t *testing.T) {
-	r, err := config.New("x", "go/guard-precedes-call", "error", "", []string{"**"}, nil, nil, nopChecker{})
+	r, err := config.New("x", "go/guard-precedes-call", "error", "", []string{"**"}, nil, nopChecker{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestUnreadableAnchorParamsIsAnError(t *testing.T) {
 // a direct caller of Vacuous can reach this).
 func TestVacuousSkipsHeavyRules(t *testing.T) {
 	r := loadHeavy(t)
-	got, err := Vacuous(r, &scan.FileSet{}, nil)
+	got, err := Vacuous(r, &scan.FileSet{})
 	if err != nil || got {
 		t.Fatalf("Vacuous(heavy) = %v, %v; want false, nil", got, err)
 	}
@@ -39,11 +39,11 @@ func TestVacuousSkipsHeavyRules(t *testing.T) {
 
 // A probe that cannot be built is an error, not a verdict either way.
 func TestVacuousProbeFailureIsAnError(t *testing.T) {
-	r, err := config.New("x", "forbidden-pattern", "error", "", []string{"src/**"}, nil, nil, nopChecker{})
+	r, err := config.New("x", "forbidden-pattern", "error", "", []string{"src/**"}, nil, nopChecker{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Vacuous(r, &scan.FileSet{}, nil); err == nil {
+	if _, err := Vacuous(r, &scan.FileSet{}); err == nil {
 		t.Fatal("Vacuous swallowed a probe failure (rule has no factory to refresh)")
 	}
 }

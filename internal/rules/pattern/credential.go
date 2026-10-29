@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/buildfoundry-nz/formwork/internal/declspan"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"gopkg.in/yaml.v3"
@@ -28,11 +29,17 @@ import (
 //
 // An excusal is now one of exactly two things, and says which.
 //
-// A CREDENTIAL names an owner: "this file is the declaration, so it may spell
-// what everyone else must not". It is a line pattern anchored at the start of
-// the line, and it declares `holders`, the exact number of lines in the rule's
-// scope that match it. A run whose count differs is a finding, so the set of
-// excused files is fixed and every change to it is a reviewed edit to a number.
+// A CREDENTIAL names an owner: "this declaration is the one place that may
+// spell what everyone else must not". It is a line pattern anchored at the
+// start of the line, and it declares `holders`, the exact number of lines in
+// the rule's scope that match it. A run whose count differs is a finding, so
+// the set of owners is fixed and every change to it is a reviewed edit to a
+// number.
+//
+// A credential sanctions the DECLARATION its line opens (internal/declspan),
+// never the file. Before 0.14 it excused the whole file that held it, so a
+// second violation anywhere else in an owner's file was invisible. The owner
+// declaration is now masked out and every other line of the file is judged.
 //
 // EVIDENCE names a discharge: "this trigger is handled, and here is the proof".
 // It excuses only a trigger it occurs within `within` lines of (before or
@@ -78,6 +85,11 @@ type credential struct {
 	src  string
 	want int64
 	seen *atomic.Int64
+	// lits gates the line scan: literals at least one of which every line
+	// the credential matches contains (autoPrefilter). A file holding none of
+	// them holds no line of this credential, so its count is unchanged by
+	// skipping it. Nil when the regex names no such set; the scan then runs.
+	lits []string
 }
 
 type evidence struct {
@@ -118,7 +130,13 @@ func compileExcusals(key string, specs []excusalSpec, syntax string) (excusals, 
 			if err != nil {
 				return out, err
 			}
-			out.credentials = append(out.credentials, &credential{m: m, src: s.Credential, want: int64(*s.Holders), seen: &atomic.Int64{}})
+			// The gate is derived as RE2 whatever the rule's syntax:
+			// compileExcusal runs the credential as RE2 whenever it parses as
+			// one, and autoPrefilter names no literals for one that does not.
+			out.credentials = append(out.credentials, &credential{
+				m: m, src: s.Credential, want: int64(*s.Holders), seen: &atomic.Int64{},
+				lits: autoPrefilter(s.Credential, ""),
+			})
 		case isEv:
 			if s.Evidence == "" {
 				return out, fmt.Errorf("%s: evidence is required", where)
@@ -154,35 +172,71 @@ func compileExcusal(where, pattern, syntax string) (lineMatcher, error) {
 	return compileMatcher(where, pattern, syntax)
 }
 
-// holdsCredential counts every credential line in f and reports whether f
-// holds at least one. It runs on every in-scope file before any prefilter, so
-// the count is over the whole scope.
-func (x excusals) holdsCredential(f *scan.File) (bool, error) {
+// homes counts every credential line in f and returns f with the
+// declaration each held credential opens masked out (internal/declspan), so
+// the rule judges every other line of the file. It runs on every in-scope file
+// before any prefilter, so the count is over the whole scope.
+//
+// The credential is matched on f, the variant the rule reads; the extent of
+// the declaration it opens is read off f.Raw(), the source as written, because
+// a comments-only or strings-only projection has no declaration structure.
+func (x excusals) homes(f *scan.File) (*scan.File, error) {
 	if len(x.credentials) == 0 {
-		return false, nil
+		return f, nil
 	}
 	lines, err := f.Lines()
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	held := false
+	var spans []declspan.Span
+	var raw []byte
+	var text string
+	textRead := false
 	for _, cr := range x.credentials {
+		if len(cr.lits) > 0 {
+			if !textRead {
+				content, err := f.Content()
+				if err != nil {
+					return nil, err
+				}
+				text, textRead = string(content), true
+			}
+			if !containsAny(text, cr.lits) {
+				continue
+			}
+		}
 		var n int64
-		for _, line := range lines {
+		for i, line := range lines {
 			ok, err := cr.m.MatchString(line)
 			if err != nil {
-				return false, err
+				return nil, err
 			}
-			if ok {
-				n++
+			if !ok {
+				continue
 			}
+			n++
+			if raw == nil {
+				if raw, err = f.Raw().Content(); err != nil {
+					return nil, err
+				}
+			}
+			spans = append(spans, declspan.Extent(f.Path(), raw, i+1))
 		}
 		if n > 0 {
 			cr.seen.Add(n)
-			held = true
 		}
 	}
-	return held, nil
+	if len(spans) == 0 {
+		return f, nil
+	}
+	// The file's imports serve its owner declaration and cannot sit inside it,
+	// so a file that holds a home owns its directives with it.
+	spans = append(spans, declspan.Directives(f.Path(), raw)...)
+	content, err := f.Content()
+	if err != nil {
+		return nil, err
+	}
+	return f.WithContent(declspan.Mask(content, spans)), nil
 }
 
 // evidenceIndex holds, per evidence entry, the 1-based lines where a match
@@ -276,19 +330,61 @@ func (c counted) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) {
 }
 
 // Finalize reports every credential whose holder count differs from its
-// declaration. A credential excuses each file that holds it, so a holder the
-// declaration does not account for is a file that excused itself.
+// declaration. A credential sanctions the declaration it opens, so a holder
+// the declaration does not account for is a declaration that sanctioned
+// itself.
+//
+// A count of ZERO is lint's, not the check's: a pruned or synthetic tree
+// holds none of the repository's homes, and a check cannot tell that from a
+// dead credential. `formwork lint` reports a credential no in-scope line
+// holds over the whole tree (DeadCredentials), so the dead case still fails
+// CI while a scratch tree carrying one rule still runs.
 func (c counted) Finalize() []rules.Match {
 	var out []rules.Match
 	for _, cr := range c.ex.credentials {
-		if got := cr.seen.Load(); got != cr.want {
+		if got := cr.seen.Load(); got != 0 && got != cr.want {
 			out = append(out, rules.Match{
 				Message: fmt.Sprintf("credential %q is held by %d line(s) across scope, declared holders %d: "+
-					"a credential excuses every file that holds it, so its holders are fixed", cr.src, got, cr.want),
+					"a credential sanctions the declaration it opens, so its holders are fixed", cr.src, got, cr.want),
 			})
 		}
 	}
 	return out
+}
+
+// DeadCredentials returns the source of each credential that no line of
+// files holds. files are the rule's in-scope files, each already in the
+// variant the rule reads (its preprocess). A dead credential sanctions
+// nothing, so it is a hygiene problem `formwork lint` reports, the credential
+// counterpart of a not_declaring marker no file declares.
+func (c counted) DeadCredentials(files []*scan.File) ([]string, error) {
+	var dead []string
+	for _, cr := range c.ex.credentials {
+		held := false
+		for _, f := range files {
+			lines, err := f.Lines()
+			if err != nil {
+				return nil, err
+			}
+			for _, l := range lines {
+				ok, err := cr.m.MatchString(l)
+				if err != nil {
+					return nil, err
+				}
+				if ok {
+					held = true
+					break
+				}
+			}
+			if held {
+				break
+			}
+		}
+		if !held {
+			dead = append(dead, cr.src)
+		}
+	}
+	return dead, nil
 }
 
 // WholeTreeInvariant: the holder count is scope-wide, which a changeset scan

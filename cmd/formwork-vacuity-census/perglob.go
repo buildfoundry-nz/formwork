@@ -46,7 +46,6 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/finding"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
-	"github.com/buildfoundry-nz/formwork/internal/vacuity"
 	"gopkg.in/yaml.v3"
 )
 
@@ -55,16 +54,14 @@ type globCount struct {
 	glob   string
 	n      int
 	deadOK bool // declared via `# glob-dead: <reason>` on the line above
-	declOK bool // declared via `# except-declaration: <reason>` (except.paths only)
 	reason string
 }
 
 // globMeasure is the per-glob scope census: for every rule, the match count
-// of each scope.include / scope.exclude / except.paths glob taken on its own.
+// of each scope.include / scope.exclude glob taken on its own.
 type globMeasure struct {
 	include map[string][]globCount
 	exclude map[string][]globCount
-	except  map[string][]globCount
 
 	totalInclude int // scope.include globs examined, corpus-wide
 
@@ -91,7 +88,7 @@ func scannedPaths(fset *scan.FileSet) []string {
 // matcher (a one-glob rule's Applies) rather than a re-implementation.
 func countGlobMatches(glob string, paths []string) (int, error) {
 	r, err := config.New("perglob", "forbidden-pattern", finding.SeverityError, "",
-		[]string{glob}, nil, nil, nil)
+		[]string{glob}, nil, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -111,7 +108,7 @@ func countGlobMatches(glob string, paths []string) (int, error) {
 func measureGlobs(root string, fset *scan.FileSet) (*globMeasure, error) {
 	paths := scannedPaths(fset)
 
-	// An EXCLUDE or an EXCEPT is measured against the tree WITHOUT the engine's
+	// An EXCLUDE is measured against the tree WITHOUT the engine's
 	// built-in skip, not against the scanned FileSet (#12178).
 	//
 	// scan.Walk drops .git and .formwork before any rule runs, so an exclude
@@ -136,7 +133,6 @@ func measureGlobs(root string, fset *scan.FileSet) (*globMeasure, error) {
 	gm := &globMeasure{
 		include: map[string][]globCount{},
 		exclude: map[string][]globCount{},
-		except:  map[string][]globCount{},
 	}
 	cache := map[string]int{}
 	count := func(glob string) (int, error) {
@@ -186,15 +182,13 @@ func measureGlobs(root string, fset *scan.FileSet) (*globMeasure, error) {
 			if err != nil {
 				return nil, fmt.Errorf("%s: rule %s: %w", f, ref.ruleID, err)
 			}
-			gc := globCount{glob: ref.glob, n: n, deadOK: ref.deadOK, declOK: ref.declOK, reason: ref.reason}
+			gc := globCount{glob: ref.glob, n: n, deadOK: ref.deadOK, reason: ref.reason}
 			switch ref.key {
 			case "include":
 				gm.include[ref.ruleID] = append(gm.include[ref.ruleID], gc)
 				gm.totalInclude++
 			case "exclude":
 				gm.exclude[ref.ruleID] = append(gm.exclude[ref.ruleID], gc)
-			case "except":
-				gm.except[ref.ruleID] = append(gm.except[ref.ruleID], gc)
 			}
 		}
 	}
@@ -203,7 +197,7 @@ func measureGlobs(root string, fset *scan.FileSet) (*globMeasure, error) {
 
 // walkIncludingBuiltinSkip enumerates every regular file under root as a
 // repo-relative slash path, WITHOUT the engine's built-in .git/.formwork prune.
-// It is the denominator for exclude/except globs only (see measureGlobs); every
+// It is the denominator for exclude globs only (see measureGlobs); every
 // include glob is still counted against the engine's own scan.Walk FileSet, so
 // no coverage claim is ever measured over files the engine will not read.
 func walkIncludingBuiltinSkip(root string) ([]string, error) {
@@ -237,10 +231,9 @@ func walkIncludingBuiltinSkip(root string) ([]string, error) {
 // globRef is one glob as declared in a rule file, before matching.
 type globRef struct {
 	ruleID string
-	key    string // "include" | "exclude" | "except"
+	key    string // "include" | "exclude"
 	glob   string
 	deadOK bool
-	declOK bool
 	reason string
 }
 
@@ -255,8 +248,8 @@ type globRef struct {
 //
 // The marker sits on the line directly above the `include:` KEY — it is a claim
 // about the whole list, not about any one glob, which is what distinguishes it
-// from `# glob-dead:` and `# except-declaration:` (both per-entry). Same
-// non-empty-reason convention as those two: a bare `# source-list-exhaustive:`
+// from `# glob-dead:` (per-entry). Same
+// non-empty-reason convention as that one: a bare `# source-list-exhaustive:`
 // declares nothing and does not subscribe.
 //
 // dir is the value as written, repo-relative and slash-separated. The globs are
@@ -281,7 +274,7 @@ type sourceListDecl struct {
 // unmarshal) still expands them.
 // It also returns the `# source-list-exhaustive:` declarations (#13517), read
 // from the same line-numbered walk: the marker is a comment, so it exists only
-// in the source text, exactly like the two per-entry markers above.
+// in the source text, exactly like the per-entry marker above.
 func parseRuleGlobs(data []byte) ([]globRef, []sourceListDecl, error) {
 	lines := strings.Split(string(data), "\n")
 	declaredWith := func(marker string, line int) (bool, string) {
@@ -297,23 +290,8 @@ func parseRuleGlobs(data []byte) ([]globRef, []sourceListDecl, error) {
 		return reason != "", reason
 	}
 	declaredDead := func(line int) (bool, string) { return declaredWith("# glob-dead:", line) }
-	// `# except-declaration: <reason>` (#10777) is recognised on except.paths
-	// ONLY, and is deliberately separate vocabulary from `# glob-dead:`. They
-	// answer different questions: glob-dead says the glob matches nothing by
-	// design, except-declaration says the path it matches is the subject's
-	// DECLARATION home — a file that can never be a violator, such as the field
-	// declaration a forbidden-pattern rule is written against. Collapsing them
-	// would let "matches nothing" excuse "matches a file the rule cannot fire
-	// on", which is the claim INERT-EXCEPT exists to separate.
-	//
-	// Scoping recognition to except.paths keeps a misplaced marker from reading
-	// as coverage: on an include glob it is simply not recognised, and if that
-	// glob is dead EMPTY-GLOB still fires and says so.
-	//
-	// The marker itself is parsed by vacuity.ExceptEntries (below), not here.
-
 	// `# source-list-exhaustive: <dir>` (#13517) is recognised on the scope.include
-	// KEY only. The two markers above are per-entry claims; this one is about the
+	// KEY only. The marker above is a per-entry claim; this one is about the
 	// LIST — that every non-test source in <dir> appears in it — so anchoring it to
 	// an entry would make it read as a statement about that entry alone.
 	declaredSourceList := func(line int) (bool, string) {
@@ -326,14 +304,7 @@ func parseRuleGlobs(data []byte) ([]globRef, []sourceListDecl, error) {
 	}
 	var refs []globRef
 	var decls []sourceListDecl
-	// The except.paths entries and their `# except-declaration:` markers are read
-	// by internal/vacuity, the same reader `formwork test` uses, so the two cannot
-	// disagree about which entries are declared inert.
-	excepts, err := vacuity.ExceptEntries(data)
-	if err != nil {
-		return nil, nil, err
-	}
-	for ruleIdx, rule := range mappingSeq(&doc, "rules") {
+	for _, rule := range mappingSeq(&doc, "rules") {
 		id := mappingScalar(rule, "id")
 		for _, key := range []string{"include", "exclude"} {
 			var globs []string
@@ -343,7 +314,7 @@ func parseRuleGlobs(data []byte) ([]globRef, []sourceListDecl, error) {
 					continue
 				}
 				deadOK, reason := declaredDead(g.Line)
-				refs = append(refs, globRef{id, key, g.Value, deadOK, false, reason})
+				refs = append(refs, globRef{id, key, g.Value, deadOK, reason})
 				globs = append(globs, g.Value)
 			}
 			if key != "include" {
@@ -352,13 +323,6 @@ func parseRuleGlobs(data []byte) ([]globRef, []sourceListDecl, error) {
 			if ok, dir := declaredSourceList(mappingKeyLine(mappingValue(rule, "scope"), key)); ok {
 				decls = append(decls, sourceListDecl{ruleID: id, dir: dir, globs: globs})
 			}
-		}
-		for _, e := range excepts[ruleIdx].Entries {
-			deadOK, reason := declaredDead(e.Line)
-			if e.Declared {
-				reason = e.Reason
-			}
-			refs = append(refs, globRef{id, "except", e.Glob, deadOK, e.Declared, reason})
 		}
 	}
 	return refs, decls, nil

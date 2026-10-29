@@ -134,7 +134,7 @@ func setRelationVerdicts(r *config.Rule, root string, m ruleMeta, inScope []*sca
 	if len(m.bFiles) == 0 || !probeableRelation(m.relation) || !sidesAreSeparable(m) {
 		return out
 	}
-	side, err := config.New("perglob", "forbidden-pattern", finding.SeverityError, "", m.bFiles, nil, nil, nil)
+	side, err := config.New("perglob", "forbidden-pattern", finding.SeverityError, "", m.bFiles, nil, nil)
 	if err != nil {
 		return out
 	}

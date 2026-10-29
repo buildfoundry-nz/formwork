@@ -21,12 +21,6 @@ type Finding struct {
 	Path     string
 	Line     int
 	Message  string
-
-	// Suppressed marks a finding exempted by an inline formwork:allow marker
-	// (spec §5). Suppressed findings never affect the exit code; lint
-	// enumerates them in its escape-hatch census.
-	Suppressed   bool
-	SuppressedBy string // "marker"
 }
 
 // Sort orders findings deterministically by (RuleID, Path, Line, Message).
@@ -44,15 +38,4 @@ func Sort(findings []Finding) {
 		}
 		return a.Message < b.Message
 	})
-}
-
-// Unsuppressed returns the findings not marked Suppressed, preserving order.
-func Unsuppressed(fs []Finding) []Finding {
-	var out []Finding
-	for _, f := range fs {
-		if !f.Suppressed {
-			out = append(out, f)
-		}
-	}
-	return out
 }

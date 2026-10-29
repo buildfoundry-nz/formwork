@@ -5,7 +5,7 @@
 // the message itself, that it "may be the disclosed #337 world", names the
 // escape as written, and hands over a two-outcome decision procedure — read the
 // callee, CALLS means this reports a hazard the code does not have, STORES means
-// the hazard is real — with a `formwork:allow` marker as the cure for the first.
+// the hazard is real — with a recomposed query as the cure for the first.
 // Every word of that was written down in exactly two places, both of them Go
 // source: the COVERAGE LIMIT block in locking.go and the fold design spec under
 // docs/specs/. The manual an adopter reads carried a four-line blockquote
@@ -16,7 +16,7 @@
 // a disclosure — escapehint_test.go's own words about why the note exists at
 // all, one channel further out. So the manual carries the residual itself: the
 // machine name the block discloses it under, the program it fires on verbatim,
-// the issue the finding cites, both outcomes of the procedure, and the marker.
+// the issue the finding cites, both outcomes of the procedure, and the cure.
 //
 // NOTHING HERE IS SPELLED. Every token required of the manual is read at
 // runtime out of the live finding, out of the fixture that produces it, or out
@@ -55,9 +55,11 @@ var (
 
 	// The three vocabularies the note is built from, matched by shape so that
 	// the values stay the finding's to choose.
-	manIssueRE  = regexp.MustCompile(`#[0-9]+`)
-	manShoutRE  = regexp.MustCompile(`[A-Z]{4,}`)
-	manMarkerRE = regexp.MustCompile(`[a-z]+:[a-z-]+`)
+	manIssueRE = regexp.MustCompile(`#[0-9]+`)
+	manShoutRE = regexp.MustCompile(`[A-Z]{4,}`)
+	// The cure for the false direction: the clause after the dash that names
+	// the hazard the code does not have, up to the semicolon.
+	manCureRE = regexp.MustCompile(`does not have — ([^;]+);`)
 
 	manHeadingRE = regexp.MustCompile(`^(#{1,6}) +(.*?)\s*$`)
 )
@@ -80,7 +82,10 @@ func TestTheManualCarriesTheEscapeTheFindingCitesAtAnOperator(t *testing.T) {
 
 	issues := manDistinct(manIssueRE.FindAllString(msg, -1))
 	shouts := manDistinct(manShoutRE.FindAllString(msg, -1))
-	markers := manDistinct(manMarkerRE.FindAllString(msg, -1))
+	var cures []string
+	if m := manCureRE.FindStringSubmatch(msg); m != nil {
+		cures = []string{m[1]}
+	}
 	// The non-vacuity floor, per vocabulary. A note reworded until one of these
 	// matches nothing would leave this test asking the manual for a shorter and
 	// shorter list and still passing, which is the shape of check this whole
@@ -94,8 +99,8 @@ func TestTheManualCarriesTheEscapeTheFindingCitesAtAnOperator(t *testing.T) {
 			"two-outcome check announced as a NOTE, so fewer than three means the "+
 			"procedure has gone out of the message and this test is asking the manual "+
 			"to carry a procedure nobody is handed: %q", len(shouts), msg)
-	case len(markers) < 1:
-		t.Fatalf("the finding names no `tool:marker` cure, so the manual is not being "+
+	case len(cures) < 1:
+		t.Fatalf("the finding names no cure, so the manual is not being "+
 			"asked to carry one — and the cure is the half that makes the disclosure "+
 			"actionable: %q", msg)
 	}
@@ -112,7 +117,7 @@ func TestTheManualCarriesTheEscapeTheFindingCitesAtAnOperator(t *testing.T) {
 	for _, s := range shouts {
 		want[s] = "a word the finding's own decision procedure turns on"
 	}
-	for _, s := range markers {
+	for _, s := range cures {
 		want[s] = "the cure the finding names"
 	}
 

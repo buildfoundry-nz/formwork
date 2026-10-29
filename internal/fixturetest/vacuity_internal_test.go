@@ -36,7 +36,7 @@ func TestJudgeErrorFailsResults(t *testing.T) {
 	}
 	boom := errors.New("probe exploded")
 	old := judgeVacuity
-	judgeVacuity = func(*config.Rule, *scan.FileSet, vacuity.DeclaredInert) (vacuity.Verdict, error) {
+	judgeVacuity = func(*config.Rule, *scan.FileSet) (vacuity.Verdict, error) {
 		return vacuity.Verdict{}, boom
 	}
 	t.Cleanup(func() { judgeVacuity = old })
@@ -73,9 +73,9 @@ func TestOnlyBehavingPassArmsAreProbed(t *testing.T) {
 	}
 	calls := 0
 	old := judgeVacuity
-	judgeVacuity = func(r *config.Rule, fs *scan.FileSet, inert vacuity.DeclaredInert) (vacuity.Verdict, error) {
+	judgeVacuity = func(r *config.Rule, fs *scan.FileSet) (vacuity.Verdict, error) {
 		calls++
-		return old(r, fs, inert)
+		return old(r, fs)
 	}
 	t.Cleanup(func() { judgeVacuity = old })
 

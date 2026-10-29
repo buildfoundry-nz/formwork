@@ -50,20 +50,10 @@ rules:
         # newly added hook is in scope the day it lands.
         - ".husky/*"
       exclude:
-        # Engine-level: scan.Walk drops any directory named .formwork before rules
-        # run (tools/formwork/internal/scan/scan.go:19,125). Declared here so this
-        # rule's written scope equals its scanned scope. The skip is load-bearing —
-        # .formwork/fixtures holds 1,449 FIRE fixtures whose job is to contain the
-        # violation this rule bans. Pinned by formwork-engine-skip-declared.
-        - '.formwork/**'
         # Markdown in .husky/ is documentation, not a hook: a `#` there opens a
-        # heading, not a shell comment, and the repo's marker ban exempts docs
-        # (forensic-grep does the same). Typed exclusion, matching how every
+        # heading, not a shell comment. Typed exclusion, matching how every
         # include above is typed by extension — pinned by pass-2, whose
-        # .husky/CLAUDE.md carries a HEADING-SHAPED marker. The shape is the
-        # pin: a marker in bare markdown prose has no `#` on its line, so the
-        # pattern could not reach it with or without this exclusion and the
-        # fixture stayed green either way (verified by deleting the line).
+        # .husky/CLAUDE.md carries a HEADING-SHAPED marker.
         - ".husky/*.md"
     # Blanks single/double-quoted string contents and heredoc BODIES, and
     # knows `#` opens a comment only at a word start, so `${#arr[@]}`, `$#`

@@ -40,7 +40,6 @@ import (
 	"testing"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
-	"github.com/buildfoundry-nz/formwork/internal/finding"
 	"github.com/buildfoundry-nz/formwork/internal/fixturetest"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/baseline"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/binarycontent"
@@ -207,7 +206,6 @@ func TestCommandFirePinsAreDrawnFromDetectorOutput(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s/%s: %v", r.ID, e.Name(), err)
 			}
-			findings = finding.Unsuppressed(findings)
 			if len(findings) == 0 {
 				t.Errorf("%s/%s: pinned manifest but the fixture produced no finding", r.ID, e.Name())
 				continue

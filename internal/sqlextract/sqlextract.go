@@ -8,6 +8,12 @@
 // split into statements — callers that need statements split them (sqltext) or
 // hand the whole candidate to a real parser (sqlparse).
 //
+// NAMED CONSTANTS ARE LITERALS to both extractors (consts.go): a '+' operand or
+// fmt.Sprint* argument naming a Go string constant — in the file, the package,
+// or an imported package of the module — is read as its value before either
+// walk starts, and a fmt.Sprint* call whose every part is constant is a value.
+// What follows is about the operands that are not constants.
+//
 // HEURISTIC LIMITS, AND THE TWO EXTRACTORS DO NOT SHARE THEM. FromGo reports
 // only fmt.Sprint{,f,ln} calls and '+' concats with a non-literal operand as
 // unresolved Sites; literals spread across assignments and strings.Builder are
@@ -43,8 +49,11 @@ import (
 	"go/token"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/buildfoundry-nz/formwork/internal/scan"
 )
 
 // FileKind classifies a path as an SQL-bearing source: "sql" for .sql, "go"
@@ -148,18 +157,25 @@ type Site struct {
 // WITHOUT changing which candidates are collected — sqltext still gets every
 // one, exactly as before.
 func FromGo(path string, src []byte) (resolved []Candidate, unresolved []Site, err error) {
+	return FromGoIn(nil, path, src)
+}
+
+// FromGoIn is FromGo reading the Go string constants a composition is made of
+// from tree, the walk path was found by (consts.go). A nil tree reads the
+// file's own constants only.
+func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate, unresolved []Site, err error) {
 	fset := token.NewFileSet()
 	file, perr := parser.ParseFile(fset, path, src, 0)
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
+	fo := foldConstants(tree, path, fset, file)
 	type rawCand struct {
 		text string
 		pos  token.Pos
 		line int
 		col  int
 	}
-	type span struct{ lo, hi token.Pos }
 	var raws []rawCand
 	var partialSpans []span
 
@@ -168,20 +184,40 @@ func FromGo(path string, src []byte) (resolved []Candidate, unresolved []Site, e
 		if !ok {
 			return true
 		}
+		if fo.made[expr] {
+			return false // a constant's value: its declaration is the candidate
+		}
+		if fo.judgedBody(expr) {
+			return false // a judged template body: its instances are the candidates
+		}
 		if s, ok := stringValue(expr); ok {
 			raws = append(raws, rawCand{text: s, pos: expr.Pos(), line: fset.Position(expr.Pos()).Line, col: fset.Position(expr.Pos()).Column})
 			return false // fully consumed; do not descend
 		}
 		if key, reason, ok := unresolvedReason(expr); ok {
+			// One composition, one Site: "x" + a + "y" is two unresolved
+			// '+' nodes, and the inner one's text is part of the outer one's.
+			// Every span still marks its fragments Partial.
+			nested := false
+			for _, sp := range partialSpans {
+				if expr.Pos() >= sp.lo && expr.End() <= sp.hi {
+					nested = true
+					break
+				}
+			}
 			partialSpans = append(partialSpans, span{lo: expr.Pos(), hi: expr.End()})
-			text, _ := reassemble(expr)
-			unresolved = append(unresolved, Site{
-				Path:   path,
-				Line:   fset.Position(expr.Pos()).Line,
-				Key:    key,
-				Reason: reason,
-				Text:   text,
-			})
+			// A template body the walk instantiates in full is judged per
+			// instance (template_index.go), not as a composition.
+			if !nested && !fo.judgedBody(expr) {
+				text, _ := reassemble(expr)
+				unresolved = append(unresolved, Site{
+					Path:   path,
+					Line:   fset.Position(expr.Pos()).Line,
+					Key:    key,
+					Reason: reason,
+					Text:   text,
+				})
+			}
 			// keep descending: nested resolvable literals are still collected
 		}
 		return true
@@ -197,13 +233,20 @@ func FromGo(path string, src []byte) (resolved []Candidate, unresolved []Site, e
 		}
 		resolved = append(resolved, Candidate{Text: rc.text, Line: rc.line, Col: rc.col, Partial: partial})
 	}
+	resolved = append(resolved, fo.instances...)
+	unresolved = append(unresolved, fo.unread...)
+	sort.SliceStable(unresolved, func(i, j int) bool { return unresolved[i].Line < unresolved[j].Line })
 	return resolved, unresolved, nil
 }
 
 // stringValue folds expr into its constant string value when it is a string
-// literal, a parenthesised string expression, or a '+' chain of such.
+// literal, a parenthesised string expression, a '+' chain of such, or a
+// fmt.Sprint{,f,ln} call every part of which is one (sprintValue). A named
+// constant reaches here as a literal: foldConstants put it there.
 func stringValue(expr ast.Expr) (string, bool) {
 	switch v := expr.(type) {
+	case *ast.CallExpr:
+		return sprintValue(v)
 	case *ast.BasicLit:
 		if v.Kind != token.STRING {
 			return "", false
@@ -235,6 +278,10 @@ func stringValue(expr ast.Expr) (string, bool) {
 // fwExprPlaceholder is the synthetic identifier FromGoReassembled substitutes
 // for every non-literal part of a reassembled composition.
 const fwExprPlaceholder = "fw_expr"
+
+// Placeholder is fwExprPlaceholder for a consumer that reads a Site's Text:
+// each operand the extractor could not read stands as this word there.
+const Placeholder = fwExprPlaceholder
 
 // verbPattern matches one fmt verb: an optional explicit argument index
 // ([n]), optional flags (+ - space 0 #), an optional width and/or precision
@@ -292,11 +339,18 @@ var verbPattern = regexp.MustCompile(`%(\[\d+\])?[-+ 0#]*(\*|\d+)?(\.(\*|\d+))?[
 //
 // err is only for a Go AST parse failure.
 func FromGoReassembled(path string, src []byte) ([]Candidate, []Site, error) {
+	return FromGoReassembledIn(nil, path, src)
+}
+
+// FromGoReassembledIn is FromGoReassembled reading the Go string constants a
+// composition is made of from tree, as FromGoIn does.
+func FromGoReassembledIn(tree *scan.FileSet, path string, src []byte) ([]Candidate, []Site, error) {
 	fset := token.NewFileSet()
 	file, perr := parser.ParseFile(fset, path, src, 0)
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
+	fo := foldConstants(tree, path, fset, file)
 	sink := newSiteSink(path, fset, src)
 	sink.readPackageSeeds(file)
 	// ONE traversal doing both jobs (#45). It used to be two full walks over the
@@ -346,6 +400,12 @@ func FromGoReassembled(path string, src []byte) ([]Candidate, []Site, error) {
 		if !ok {
 			return true
 		}
+		if fo.made[expr] {
+			return false // a constant's value: its declaration is the candidate
+		}
+		if fo.judgedBody(expr) {
+			return false // a judged template body: its instances are the candidates
+		}
 		if expr.Pos() < consumedEnd {
 			return true // inside a consumed expression: descend, but do not re-collect
 		}
@@ -359,7 +419,7 @@ func FromGoReassembled(path string, src []byte) ([]Candidate, []Site, error) {
 		}
 		return true
 	})
-	return append(exprCands, foldCands...), sink.collected(), nil
+	return append(append(exprCands, foldCands...), fo.instances...), sink.collected(), nil
 }
 
 // reassemble reports the best-effort complete reassembly of expr, when expr
@@ -472,16 +532,13 @@ func reassembleSprintf(call *ast.CallExpr) (string, bool) {
 	if len(call.Args) == 0 {
 		return "", false
 	}
-	lit, ok := call.Args[0].(*ast.BasicLit)
-	if !ok || lit.Kind != token.STRING {
-		return "", false
-	}
-	first, err := strconv.Unquote(lit.Value)
-	if err != nil {
+	first, ok := stringValue(call.Args[0])
+	if !ok {
 		return "", false
 	}
 	if name == "Sprintf" {
-		return substituteVerbs(first), true
+		text, _ := formatVerbs(first, call.Args[1:])
+		return text, true
 	}
 	sep := ""
 	if name == "Sprintln" {
@@ -500,15 +557,63 @@ func reassembleSprintf(call *ast.CallExpr) (string, bool) {
 	return b.String(), true
 }
 
-// substituteVerbs replaces each fmt verb in format with the synthetic
-// placeholder "fw_expr", and each literal "%%" with "%".
-func substituteVerbs(format string) string {
-	return verbPattern.ReplaceAllStringFunc(format, func(m string) string {
+// sprintValue is the value of a fmt.Sprint{,f,ln} call whose every part is a
+// string constant: a Sprintf whose verbs are each a plain %s or %v naming one
+// (formatVerbs), or a Sprint or Sprintln of nothing but them. Those are what
+// the call evaluates to whatever runs it. Any other call is not a value.
+func sprintValue(call *ast.CallExpr) (string, bool) {
+	if !isFmtSprint(call) || len(call.Args) == 0 {
+		return "", false
+	}
+	name := call.Fun.(*ast.SelectorExpr).Sel.Name
+	if name == "Sprintf" {
+		format, ok := stringValue(call.Args[0])
+		if !ok {
+			return "", false
+		}
+		return formatVerbs(format, call.Args[1:])
+	}
+	parts := make([]string, len(call.Args))
+	for i, a := range call.Args {
+		s, ok := stringValue(a)
+		if !ok {
+			return "", false
+		}
+		parts[i] = s
+	}
+	if name == "Sprintln" {
+		return strings.Join(parts, " ") + "\n", true
+	}
+	return strings.Join(parts, ""), true
+}
+
+// formatVerbs substitutes format's verbs: a plain %s or %v whose argument is a
+// string constant takes its value, and every other verb the placeholder. exact
+// is true when every verb took a value and every argument was used — the text
+// is then what fmt.Sprintf returns. An explicit argument index or a '*' width
+// puts the arguments out of step with the verbs, so each verb from there on
+// is a placeholder.
+func formatVerbs(format string, args []ast.Expr) (text string, exact bool) {
+	exact = true
+	next, inStep := 0, true
+	text = verbPattern.ReplaceAllStringFunc(format, func(m string) string {
 		if m == "%%" {
 			return "%"
 		}
+		if strings.ContainsAny(m, "[*") {
+			inStep = false
+		}
+		i := next
+		next++
+		if inStep && (m == "%s" || m == "%v") && i < len(args) {
+			if s, ok := stringValue(args[i]); ok {
+				return s
+			}
+		}
+		exact = false
 		return fwExprPlaceholder
 	})
+	return text, exact && inStep && next == len(args)
 }
 
 // unresolvedReason reports whether expr is a SQL-bearing composition that could

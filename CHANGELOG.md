@@ -10,12 +10,7 @@
   `go/call-confined-to-func-name` or `go/guard-precedes-call` fixture holding no
   occurrence of the anchored symbol/sink) fail the arm and the rule, exit 1, by
   default. A corpus with such fixtures that passed before fails now; fix the
-  fixture so it exercises the rule (#49). A pass fixture standing at an
-  `except.paths` entry declared inert with `# except-declaration: <reason>` (a
-  bare marker declares nothing) is excused, exactly as the vacuity census
-  excuses it; both read the marker through `internal/vacuity` (#49). The
-  marker is read from the corpus's own `.formwork/rules/*.yaml` only, so a
-  `library:` pack rule's declared-inert entry does not excuse its fixture (#49).
+  fixture so it exercises the rule (#49).
 
 ### Added
 
@@ -32,6 +27,326 @@
 - `formwork test --format json` writes a versioned (`version: 1`) per-rule,
   per-arm result document; the human output is rendered from the same
   structured results and is unchanged (#49).
+
+## 0.16.0
+
+### Added
+
+- **`formwork check-content --batch`: one corpus load for an NDJSON file set.**
+  Each stdin line is a strict `{path, content}` object and each output line is
+  the existing schema-1 result for that record, in input order. Reachability,
+  generated state, findings, content hashes, and replay handles are independent
+  per record; finalizers and cross-file rules stay deferred. Empty or malformed
+  input fails closed, and the aggregate exit is 1 when any record has an
+  error-severity finding. `--path` and `--batch` are mutually exclusive.
+- **`formwork check-content --path P`: stateless single-content evaluation.** The
+  command reads complete file bytes from stdin and runs only proven file-local
+  rules through the existing engine. Its versioned JSON report carries corpus
+  and content hashes, evaluated rule ids, applicable deferred reasons and
+  out-of-scope counts, bounded findings with cures and explain handles, and a deterministic
+  replay fingerprint. Zero eligible rules is distinct from eligible rules
+  passing; ignored and nonregular paths are `not_scanned`. Whole-tree,
+  finalizing, external-tool, census/credential, and tree-reading rules are
+  deferred, and SQL analyzers opt in only for `.sql` paths. Full `check` is
+  unchanged.
+- **`FORMWORK_FILES`: a changeset run tells a detector which files changed.**
+  Under `--staged` and `--range`, a command or census detector runs with
+  `FORMWORK_FILES` naming a listing of the changed files its rule's scope
+  admits. A detector that judges each file on its own can read that and parse
+  nothing else. A whole-tree run sets nothing, so the detector judges the root
+  as before. On a 4,300-rule corpus, nine Go census detectors re-parsed about
+  22,700 Go files on every Go commit, roughly 170 CPU-seconds, to judge the
+  handful of files the commit changed.
+- **`dart/marked-single-home`: the Dart form of `go/marked-single-home`.** A
+  top-level declaration whose comment run carries `params.marker` is the one
+  declaration of its identity in scope; any second declaration of it is a
+  finding naming the home. Declarations are column-0 lines outside strings and
+  block comments, so members never count, and a library-private name is keyed
+  on its file. On a 4,300-rule corpus, 48 Dart `pattern-count` rules each
+  pinned one such name to `n: 1`, and each one's mutation proof planted a
+  second declaration.
+
+## 0.15.1
+
+### Fixed
+
+- **A release names its repository.** v0.14.3 and v0.15.0 were tagged but
+  never published: the release runner fetched through a git mirror, whose URL
+  rewrite (`url.<mirror>.insteadOf`) is what `git remote get-url` reports, and
+  GoReleaser read the repository from that URL — owner `github.com` — so every
+  GitHub API call 404'd. `.goreleaser.yaml` now names
+  `buildfoundry-nz/formwork`. 0.15.1 is 0.15.0 (and so 0.14.3) published.
+
+## 0.15.0
+
+### Added
+
+- **`tests:` and `scope.subject: production`.** A repository declares its test
+  code once in `formwork.yaml` (`tests:`, path globs). A rule whose subject only
+  production code can have says `scope.subject: production` and reads no file
+  `tests:` names; every other rule reads tests. This replaces a per-rule
+  `scope.exclude` of test globs, which could not be told from an exclude that
+  forgives a violation. The escape-hatch census counts the test files each
+  production subject leaves out, `formwork lint` refuses one that leaves out
+  none, and a production subject with no `tests:` definition is refused at
+  load.
+
+### Changed
+
+- **The walk reads the repository's `.formwork`, except its fixtures.** The
+  root `.formwork` was pruned whole, so no rule could read `formwork.yaml`,
+  the rule YAML or the mutation specs, and every check over the corpus itself
+  had to shell out (`type: command`). Only the root's `.formwork/fixtures` is
+  pruned now — each fixture is its own rule's proof, judged by `formwork
+  test`. The rest is scanned, and reached only by an include glob rooted at
+  `.formwork/`: `**` does not descend into it, so a rule written for
+  application code never reads the definitions that spell its own token. A
+  root `.formwork` symlink (a shared rule set) is still skipped, and now
+  recorded as a link the walk declined to follow. A `scan.ignore` glob hiding
+  tracked rule YAML is reported like any other hidden tracked path.
+- **The SQL rules read SQL template functions.** A repository keeps a
+  predicate in one place as a function of the aliases and placeholders it is
+  spliced with — `VisibleWhere("p")`, `OverdueSQL("$1")` — and both its body
+  and every query calling it were compositions no rule could read. A
+  *template* — a package-level function whose parameters and result are all
+  `string` and whose body is one `return` — is now read: a call with constant
+  arguments reads as the instance it builds, at the call, and the definition
+  is judged once per distinct argument set the walk calls it with. Its body is
+  then not unread SQL. A template some call feeds a non-constant, or that
+  nothing calls, stays unread at the definition, and the non-constant call is
+  unread where it stands.
+- **`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
+  carrying SQL that the extractor cannot read — an operand that is a variable,
+  a call or a field — is a finding, `SQL could not be read (…), so this rule
+  cannot judge it`, where it was a census line and a pass. For
+  `sql/statement-predicate` it is a finding whatever the `table` pattern says,
+  since the unread operand may be the table. The escape-hatch census no longer
+  lists these two types. **Migration:** compose such statements from Go
+  constants and bind what varies as a parameter; `formwork lint` on the
+  previous release lists every site.
+- **The SQL rules read Go string constants.** A query composed from a named
+  constant — `"SELECT " + cols + " FROM t"`, `scanvault.Cols + " WHERE …"`,
+  `fmt.Sprintf("… %s …", cte)` — was a composition no SQL rule could read,
+  so it was judged as fragments or not at all. Both extractors now read a Go
+  constant expression of string type whole: literals, constants declared in
+  the file, elsewhere in its package, or in an imported package of the module
+  (located by `go.mod`, its module path and its directory `replace`s), `+`,
+  conversions to a string type, and `fmt.Sprint*` calls of constants with
+  plain `%s`/`%v` verbs. A name declared more than once in a package is not
+  read. On one corpus this took the census from 1,909 unreadable SQL
+  compositions to 1,025, and its SQL rules found 22 violations the fragments
+  had hidden. A rule now reads a sibling file on a `--staged`/`--range` run
+  even when only the composing file changed.
+- **The escape-hatch census lists only SQL it could not read.** For
+  `sql/parses` and `sql/statement-predicate` it listed every `+` chain and
+  `fmt.Sprint*` call it could not fold as "SQL … could not be read", whatever
+  the string held. One corpus's SQL rules were each told this about 22,693
+  lines, 2,040 of which carried SQL; the rest were log messages, paths,
+  regular expressions and e-mail text. A composition is now listed when its
+  text carries a statement, a clause or a SQL-only token (a cast, a positional
+  parameter, `IS NULL`); `internal/rules/sqlparse/sqlbearing.go` states the
+  test and what it misses. A composition nested in another is listed once, as
+  the whole.
+- **The `generic` pack carries no generated, vendored, build or test
+  excludes.** Its rules read every file the adopting repository does not
+  declare as generated (`generated:`), test code for a production subject
+  (`tests:`), or ignored (`scan.ignore`, `scan.gitignore`). The per-rule
+  globs that stood in for those facts are gone, with the paths one adopter
+  had pinned into a portable pack (`gcs/`, `blobstore/`, `internal/vendorjson/`,
+  `internal/lockdowntests/`, `tools/formwork/`). Three pack rules state
+  `scope.subject: production`, so an adopter loading `library: [generic]`
+  declares `tests:`; without it the load names what is missing. The one
+  exclude left is typed: markdown under `.husky/` is documentation, not a
+  hook script.
+
+## 0.14.3
+
+### Fixed
+
+- **A pruned tree runs beside a rule with homes.** A synthetic or scratch tree
+  that carries one rule beside only the files its own proof needs holds none
+  of the repository's not_declaring homes or credential holders. `formwork
+  check` reported each as a holder count of zero, so a synthetic test could
+  not run any rule that names a home outside its scratch tree. A count of zero
+  is now `formwork lint`'s: lint reports a not_declaring marker no file
+  declares (as before) and, new, a require_absent credential no in-scope line
+  holds. A count above zero that differs from the declaration is still a
+  `formwork check` finding.
+
+### Performance
+
+- **A credential's holder count skips files that cannot hold it.** 0.14
+  counts every credential over every in-scope file, ahead of any prefilter,
+  and the line scan was about a third of a credential rule's CPU. Each
+  credential now carries the literal gate `autoPrefilter` already derives for
+  a pattern: a file holding none of the credential's guaranteed literals holds
+  none of its lines, so it is skipped without changing the count. On
+  TakeoffQS's 243 home-carrying rules over the whole tree, CPU went from 128 s
+  to 82 s.
+
+## 0.14.2
+
+### Fixed
+
+- **A pruned corpus loads beside a `generated:` definition.** 0.14.0 refused
+  to load a `formwork.yaml` whose `generated:` `proven_by` named a rule absent
+  from the loaded corpus. Tools that load one rule and its fixtures beside the
+  repository's `formwork.yaml` (a mutation-proof scratch tree, a benchmark
+  harness, a synthetic test) therefore could not evaluate anything. The check
+  now lives in `formwork lint`'s `generated-definition`, which reads the whole
+  corpus: a proven_by that names no rule is a lint failure, not a load error.
+
+## 0.14.1
+
+### Added
+
+- **`go/marked-single-home`: a home is declared at the declaration.** A
+  top-level func, method, type, const or var whose doc comment carries
+  `params.marker` is the one declaration of its identity in scope: a second
+  declaration of the same kind and name (and receiver type, for a method),
+  marked or not, is a finding that names the home. A marker that documents no
+  top-level declaration is a finding too. It is the abstract form of the
+  `pattern-count` rule-per-name family (`'^func offerFor\('`, `n: 1`): on a
+  4,300-rule corpus, 67 of the 125 Go rules in that family have mutation proofs that plant exactly the
+  second declaration this one rule catches.
+
+## 0.14.0
+
+### Changed (breaking)
+
+- **A credential sanctions the declaration it opens, never the file.** A
+  forbidden-pattern `require_absent`/`none_of` credential used to excuse the
+  whole file that held it, so a second violation anywhere else in an owner's
+  file was invisible. The engine now masks only the declaration the credential
+  line opens (`internal/declspan`): in Go, the statement its first token begins
+  (a func or method through its body, a const/var/type spec through its value;
+  a `package` clause is the whole file), in Dart and proto the declaration
+  through its first top-level block or semicolon, in non-code files the
+  document. A credential on a comment line sanctions only that line. A file
+  that holds a home also owns its import directives (Go `import`; Dart
+  `import`/`export`/`part`/`library`), which serve every declaration in it and
+  cannot sit inside one. Holders are counted as before. Migration: an owner file that also uses the pattern
+  outside the owner declaration now fires there; move that use into the owner,
+  or give it its own credential and raise `holders`.
+- **`scope.not_declaring` entries are `{marker, holders}` and name a home
+  declaration.** A bare-string entry is refused at load. Each place a marker
+  occurs opens a home, the declaration that begins on that line (the same
+  extents a credential uses); the engine masks it and judges the rest of the
+  file, where it used to skip the whole file. `holders` pins the number of
+  places in scope that declare the marker, judged on the live tree, and a rule
+  declaring the key is a whole-tree invariant, so it runs over the tracked tree
+  under `--staged`/`--range`. The census reports declarations removed rather
+  than files.
+
+### Added
+
+- **One definition of generated output.** `formwork.yaml` `generated:` lists
+  `{marker, proven_by}` entries. A file whose leading comment block carries a
+  declared marker is outside every rule that does not declare
+  `scope.generated: true`, replacing per-rule lists of generator output globs.
+  `proven_by` is required and must name corpus rules: the freshness gates that
+  prove a file carrying the header reproduces from its generator. `formwork
+  lint`'s `generated-definition` check fails a proving rule no CI lane selects
+  and a marker no scanned file carries, and the escape-hatch census counts each
+  marker's files.
+- `scan.File.Raw()` returns the source a preprocessor variant was computed
+  from.
+
+## 0.13.2
+
+### Changed
+
+- **A `.formwork/` change runs only what it can affect.** Under `--staged`
+  and `--range`, any path under `.formwork/` used to run every
+  changeset-gated rule. Now `formwork.yaml` still runs every rule, and an
+  edited rule file runs the rules it declares. Fixtures, mutation specs and
+  the durations hint run nothing extra, because `check` loads only
+  `formwork.yaml` and `rules/*.yaml` and its walk never enters the
+  directory. For the same reason, a path under a root `.formwork/` no longer
+  reaches a scope-bound invariant whose globs happen to match it. A census
+  detector reads the root itself, so an admitted path still runs it. Each rule
+  now records its source file (`Rule.File`). On a 4,300-rule corpus a range
+  touching one mutation spec took 494 s, against 33 s for one touching a
+  docs file.
+
+## 0.13.1
+
+### Changed
+
+- **forbidden-pattern skips files that cannot match.** A forbidden-pattern
+  rule with no declared `prefilter` now derives one from its RE2 pattern:
+  literals at least one of which every match contains, taken from the
+  pattern's guaranteed runs. A file whose content holds none of them is not
+  scanned line by line. The gate tests the same preprocessed variant the
+  lines come from, so no verdict changes. It declines whenever it cannot
+  prove that: regexp2, case-folded literals, an alternation branch with no
+  guaranteed run, literals under 3 bytes, more than 8 branches, or U+FFFD
+  (Go's regexp matches invalid UTF-8 as U+FFFD, and a byte search would miss
+  it). On a 4,300-rule corpus a whole-tree `check --skip-escapes` went from
+  273 s to 153 s wall and 1,365 to 996 CPU-seconds, with identical findings,
+  and its fixture suite passed unchanged (13,894 fixtures).
+
+## 0.13.0
+
+### Removed (breaking)
+
+- **No finding can be exempted.** The `except:` block is gone from the rule
+  schema, so a rule declaring `except.paths` or `except.marker` is refused at
+  load (exit 2, `field except not found`) instead of running with the excusal
+  ignored. A `formwork:allow` comment is now ordinary text: the finding on its
+  line fails the run like any other. Gone with them: `internal/marker`,
+  `finding.Suppressed`/`SuppressedBy`, `finding.Unsuppressed` and
+  `corpus.Unsuppressed`; the `suppressed` array and `summary.suppressed` in
+  `-format json`, the `::notice` suppressed lines in `-format github` and the
+  `N suppressed` summary tail; `exemption-hygiene`'s reasonless-marker arm; the
+  census's `marker enabled`, `suppressed` and `except.paths` lines; `explain`'s
+  `except_paths` and `marker` fields; and the vacuity census's DEAD-EXCEPT-GLOB
+  and INERT-EXCEPT arms with their `# except-declaration:` vocabulary.
+  `config.New` and `corpus.New` drop their except-paths argument.
+  Migration: cure each excused file, or narrow `scope.include` to what the rule
+  is about.
+- **`sql/locking-select-order` names a recomposition, not a marker, as its cure** for
+  the disclosed #42 and #337 worlds: compose the ORDER BY where this pass can
+  read it on every path.
+
+### Fixed
+
+- **The escape-hatch census reports `scope.not_declaring`.** It printed nothing
+  for the one scope subtraction keyed on file content, although its own
+  documentation said it was reported with live match counts. Each marker now
+  prints how many in-scope files it removed and how many of those the rule
+  would have fired on. `explain` shows the markers too.
+- **A dead `scope.not_declaring` marker beside a live sibling is reported.**
+  `exemption-hygiene` asked whether any of a rule's markers matched a file,
+  so one declared marker made every sibling read as live.
+
+## 0.12.2
+
+### Fixed
+
+- **The engine's git calls no longer wait on core.fsmonitor.** git consults
+  fsmonitor on every index read and waits for its answer, so a wedged
+  fsmonitor daemon stalled `formwork check --staged` indefinitely. On one
+  adopter machine that check held a machine-wide pre-commit lock for ten
+  minutes and stopped every commit behind it. Both of internal/vcs's exec sites
+  now run git with `-c core.fsmonitor=false`. fsmonitor only changes how git
+  finds changed paths, not what it answers, so every answer is unchanged.
+  The ignored-path listing was also faster without it: 8 s against 11 to 16 s
+  on a 66,000-file worktree under load.
+
+## 0.12.1
+
+### Changed
+
+- **Scope matching skips re-validating stored globs.** `Rule.Applies` runs for
+  every (file, rule) pair the engine considers, and almost every pair is a
+  miss. `doublestar.Match` re-validates the whole pattern on each miss, which
+  was about a third of `check`'s in-process CPU on a 4,300-rule corpus.
+  `scope.include` and `scope.exclude` are validated once by `config.New` and
+  cannot be reassigned outside the package, so they now match unvalidated;
+  `except.paths`, an exported field, keeps the validating matcher.
+  `BenchmarkRuleAppliesMostlyMisses`: about 2.15 µs to 1.43 µs. Verdicts are
+  unchanged.
 
 ## 0.12.0
 

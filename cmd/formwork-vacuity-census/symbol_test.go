@@ -334,35 +334,3 @@ func TestUndecidedSymbolAnchorsAreDisclosed(t *testing.T) {
 		t.Fatalf("an undecidable symbol anchor must be disclosed, not folded into the class-2 zero:\n%s", out)
 	}
 }
-
-// A SUPPRESSED finding still proves the symbol exists. The rule is green on
-// this tree — every call site carries a formwork:allow marker — but a new
-// unmarked call would trip it tomorrow, so the anchor is live. Reading only
-// unsuppressed findings would call a fully-marked live symbol dead and retire a
-// working gate; this is the same reading exceptExcuses uses.
-//
-// except.marker is what arms the marker channel: without it the engine never
-// consults an inline formwork:allow at all, the comment below is inert, and
-// this arm silently stops testing suppression (it did, until #12494 caught it).
-func TestMarkerSuppressedCallSiteIsStillLive(t *testing.T) {
-	root := writeCorpus(t, `rules:
-  - id: suppressed-but-live
-    type: go/call-confined-to-func-name
-    severity: error
-    scope:
-      include: ['src/**/*.go']
-    except:
-      marker: true
-    params:
-      symbol: 'ConsumeTakeoff\b'
-      allowed_func: '^chokepoint$'
-    tags: [always]
-`, map[string]string{
-		"src/a.go": "package a\n\nfunc rogue() {\n\tConsumeTakeoff() // formwork:allow suppressed-but-live legacy call site\n}\n",
-	})
-
-	_, out := census(t, root)
-	if strings.Contains(out, "DEAD-SYMBOL") {
-		t.Fatalf("a symbol whose only call site is marker-suppressed is still live:\n%s", out)
-	}
-}

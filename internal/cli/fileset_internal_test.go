@@ -35,7 +35,7 @@ func TestRequestedButAbsentClassifiesEveryOutcome(t *testing.T) {
 	write("scanned.go")
 	write("unscanned.go")
 	write("gen/hidden.go")
-	write(".formwork/rules/r.yaml")
+	write(".formwork/fixtures/r/fire-1/a.go")
 	write("sub/.formwork")
 	for _, d := range []string{"realsub", "phantomdir"} {
 		if err := os.Mkdir(filepath.Join(root, d), 0o755); err != nil {
@@ -47,16 +47,16 @@ func TestRequestedButAbsentClassifiesEveryOutcome(t *testing.T) {
 	got := &scan.FileSet{Root: root, Files: []*scan.File{scan.NewMemFile("scanned.go", nil)}}
 	opts := scan.Opts{Ignore: []string{"gen/**"}}
 	requested := []string{
-		"scanned.go",             // produced — nothing to explain
-		".formwork/rules/r.yaml", // a built-in skip ANCESTOR — never scannable
-		"sub/.formwork",          // a regular file NAMED .formwork — the walk scans it
-		"realsub",                // git calls it a gitlink: a pointer, carved out
-		"uninit",                 // a gitlink whose directory was never created
-		"phantomdir",             // a directory git recorded NOTHING for: refused
-		"gen/hidden.go",          // on disk, hidden by a declared glob
-		"gone.go",                // never on disk
-		"script.sh",              // an EXECUTABLE blob: still a file, still refused
-		"unscanned.go",           // on disk, regular, no channel explains it
+		"scanned.go",                       // produced — nothing to explain
+		".formwork/fixtures/r/fire-1/a.go", // a built-in skip ANCESTOR — never scannable
+		"sub/.formwork",                    // a regular file NAMED .formwork — the walk scans it
+		"realsub",                          // git calls it a gitlink: a pointer, carved out
+		"uninit",                           // a gitlink whose directory was never created
+		"phantomdir",                       // a directory git recorded NOTHING for: refused
+		"gen/hidden.go",                    // on disk, hidden by a declared glob
+		"gone.go",                          // never on disk
+		"script.sh",                        // an EXECUTABLE blob: still a file, still refused
+		"unscanned.go",                     // on disk, regular, no channel explains it
 	}
 	// git's answer, which is the only pointer oracle in either mode. The two
 	// gitlinks differ only in whether their directory exists, and both must be

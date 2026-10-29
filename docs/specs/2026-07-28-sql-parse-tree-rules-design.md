@@ -133,6 +133,9 @@ internal/rules/sqltext/     EDIT — sources Go candidates from sqlextract; beha
 Boundaries hold to design spec §6:
 
 - `sqlextract` knows nothing about rules (a pure Go-AST → string utility).
+  **[§11]** It reads the walk (`scan.FileSet`) since 2026-10-29, to answer one
+  Go question — what string a named constant holds — and still knows nothing
+  of rules.
 - `sqlparse`'s parser wrapper knows nothing about lanes / git / output formats.
 - The rule types know only the wrapper + extractor; nothing else imports
   go-pgquery.
@@ -188,6 +191,8 @@ func FromGo(path string, src []byte) (resolved []Candidate, unresolved []Site, e
 - *Emitting* unresolved sites as findings is an **opt-in** that **no rule in
   this increment enables** — the consumer's `--inventory` census is out of
   scope, and a fleet-wide behavior change must not ride across on a refactor.
+  **[§12]** Since 2026-10-29 `sql/parses` and `sql/statement-predicate` emit
+  them, as findings; see §12.
 
 A `.go` parse failure remains a returned error (engine → exit 2), never a silent
 pass — unchanged.
@@ -444,3 +449,95 @@ each finding refuted against the real code before acceptance — 9 confirmed of 
   `sqltext` has always tolerated but which would false-positive `sql/parses`.
   Mark them `Partial` (keeping `sqltext` byte-identical) and skip them on the
   parse-tree path. §4, §5.2.
+
+## 11. Revision 2026-10-29: named constants are literals
+
+Constant folding was the extractors' boundary from the start (`stringValue`
+folds a `+` chain of literals), and it stopped at the literal. A query composed
+from a named constant — a shared CTE, a column list, a status predicate kept in
+one place — was a composition neither extractor could read, so `sqltext` judged
+its literal fragments and the parse-tree rules skipped it. Measured on the
+TakeoffQS corpus (buildfoundry-nz/TakeoffQS#24467): of 2,040 SQL compositions in
+the files its 71 SQL rules govern, 900 were made of nothing but literals and
+constants, 501 from constants of their own package and the rest from constants
+another package of the module exports.
+
+**Decision.** The boundary is the Go language's: a constant expression of string
+type. `consts.go` rewrites each `+` operand and `fmt.Sprint*` argument that
+names one into a parenthesised literal spanning the operand, before either walk
+starts, so no extractor arm changes and the R9 `Partial` marking stays
+positional. A bare constant is left alone — its declaration is already a
+candidate — and the literals the pass makes are never candidates of their own.
+`fmt.Sprint*` of constants with plain `%s`/`%v` verbs is a value too.
+
+**The boundary change.** A constant is declared in another file of the package,
+or another package of the module, more often than in the file that composes the
+query, so `sqlextract` now reads the walk the file came from
+(`scan.File.Tree`): the package's other files by directory, and an import by
+the importing module's `go.mod` (module path, directory `replace`s). The walk is
+the whole tree under a `--staged`/`--range` run too, so a change to the
+composing file alone still reads the constant it did not touch. A name declared
+twice in one package (two build-constrained files) is not read; go.work, vendor
+directories and modules outside the tree are not read either. Each of those
+fails toward the census, which lists the composition, never toward a pass.
+
+**Effect on §4.** `Candidate` now also covers a chain of literals and named
+constants; R4's line-handling and R9's `Partial` are unchanged. The `Site` set
+shrinks by every composition that was constant all along.
+
+## 12. Revision 2026-10-29: the FromGo rules fail closed
+
+§4 kept unresolved sites out of every rule's findings, so "a fleet-wide
+behavior change must not ride across on a refactor", and #75 later listed them
+in the lint census instead. A census line is not a verdict. A statement the
+rule could not read passed `formwork check` unjudged, and a `require` held only
+for SQL that happened to be written readably — on TakeoffQS
+(buildfoundry-nz/TakeoffQS#24467), 1,025 compositions in the files its 71 SQL
+rules govern after §11.
+
+**Decision.** `sql/parses` and `sql/statement-predicate`, which read only what
+they can fold, report each unresolved site whose text carries SQL
+(`sqlparse.SQLBearingSites`) as a finding. For `sql/statement-predicate` that
+holds whatever the `table` pattern says: the unread operand may be the table.
+The census no longer lists these two types, since nothing they leave unread is
+unenforced (`sqlparse.FailsClosed`).
+
+**Why now and not at §4.** Before §11 the unread set held every composition
+built from a named constant, and failing on it would have failed ordinary,
+readable-in-principle SQL. With constants read, what is left has text decided at
+run time, which the rule cannot vouch for and the author can rewrite: compose
+the statement from constants and bind what varies as a parameter.
+
+**Not changed.** The locking pair reads a composition through placeholder
+reassembly by design (§5.3) and declines only the shapes the fold cannot follow;
+the census lists those for it as before.
+
+## 13. Revision 2026-10-29: SQL templates are read at both ends
+
+§11 read named constants; it left the shape repositories use to keep a
+predicate in one place — a function of the aliases and placeholders it is
+spliced with (`VisibleWhere("p")`, `OverdueSQL("$1")`). Its body is a
+composition of literals and parameters, and every query calling it a
+composition with a call for an operand, so §12 would fail both. Spelling each
+instantiation as a constant is no cure: rules guard these homes with a
+credential on the function, so the predicate may be written in that one
+declaration only.
+
+**Decision.** A *template* — package-level, `string` parameters and result,
+body a single `return` (templates.go) — is evaluated with constant arguments.
+At a call, the instance reads as a literal wherever the call stands. At the
+definition, the body is judged once per distinct argument set the walk calls
+it with, from a walk-wide index of template calls built once per run
+(template_index.go); a call inside another template's body is instantiated
+from that template's instances. The body's compositions are not sites when
+every instantiation is known; a template some call feeds a non-constant, or
+that nothing calls, keeps them, because nothing then says what it builds — the
+fail-closed reading. A non-constant call is a site where it stands, or part of
+its composition's site when it is a `+` operand.
+
+**Why both ends.** A rule scoped to the package that writes a predicate
+expects to judge it, and judging only at calls would let a store-package rule
+miss every instance built from a route. Measured on TakeoffQS: 41 fewer unread
+compositions, no new findings, and the index costs one parse of the walk's Go
+files per run.
+

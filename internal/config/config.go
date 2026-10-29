@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/bmatcuk/doublestar/v4"
@@ -34,9 +35,7 @@ type Rule struct {
 	// (#53). Empty means undeclared, which lint reports rather than skips.
 	FixtureExempt string
 
-	Preprocess  string   // preprocess variant name; "" means raw
-	Marker      bool     // honor inline formwork:allow markers
-	ExceptPaths []string // except.paths carve-out globs (read-only after construction)
+	Preprocess string // preprocess variant name; "" means raw
 
 	// Library is the pack name this rule was loaded from (e.g. "generic").
 	// Empty means the rule was declared in the adopting repo. Lint's
@@ -44,13 +43,27 @@ type Rule struct {
 	// live in the pack and are proven by `formwork test -C stdlib/<name>`.
 	Library string
 
+	// File is the slash-separated, repo-relative path of the rule file that
+	// declared this rule (.formwork/rules/<name>.yaml). Empty for a library
+	// rule, whose definition ships in the binary. A changeset that edits it may
+	// have changed the rule itself, so the changeset gate runs the rule.
+	File string
+
 	include  []string
 	exclude  []string
 	minFiles int
 	// notDeclaring is scope.not_declaring: literal markers a file may declare
 	// to remove itself from this rule. Content-keyed, unlike every other scope
 	// field — see scopedeclare.go for why a declaration is not a path.
-	notDeclaring []string
+	notDeclaring []DeclaringEntry
+	// generation is the config's definition of generated output, shared by
+	// every rule Load builds; judgesGenerated is scope.generated: true.
+	generation      *Generation
+	judgesGenerated bool
+	// testCode is the config's definition of test code; productionOnly is
+	// scope.subject: production (testcode.go).
+	testCode       *TestCode
+	productionOnly bool
 	// excludeComments is parallel to exclude: the YAML head/line comment on
 	// each scope.exclude entry (trimmed, without the leading '#'), empty when
 	// the entry had no comment. Lint uses it to require a justification on
@@ -69,11 +82,11 @@ type ExcludeEntry struct {
 
 // New builds a compiled rule directly. Load uses it; engine and report tests
 // use it to construct rules without YAML.
-func New(id, typeName string, sev finding.Severity, cure string, include, exclude, exceptPaths []string, c rules.Checker) (*Rule, error) {
+func New(id, typeName string, sev finding.Severity, cure string, include, exclude []string, c rules.Checker) (*Rule, error) {
 	if len(include) == 0 {
 		return nil, fmt.Errorf("rule %s: scope.include must not be empty", id)
 	}
-	for _, globs := range [][]string{include, exclude, exceptPaths} {
+	for _, globs := range [][]string{include, exclude} {
 		for _, g := range globs {
 			if !doublestar.ValidatePattern(g) {
 				return nil, fmt.Errorf("rule %s: invalid glob %q", id, g)
@@ -82,40 +95,46 @@ func New(id, typeName string, sev finding.Severity, cure string, include, exclud
 	}
 	return &Rule{
 		ID: id, Type: typeName, Severity: sev, Cure: cure,
-		include: include, exclude: exclude, ExceptPaths: exceptPaths, Checker: c,
+		include: include, exclude: exclude, Checker: c,
 	}, nil
 }
 
 // Applies reports whether relPath (slash-separated) is in this rule's scope.
 func (r *Rule) Applies(relPath string) bool {
-	return matchAny(r.include, relPath) &&
-		!matchAny(r.exclude, relPath) &&
-		!matchAny(r.ExceptPaths, relPath)
+	if r.productionOnly && r.testCode.Contains(relPath) {
+		return false
+	}
+	return r.InPathScope(relPath)
 }
 
-// CarvedOutBy reports which except.paths glob removed relPath from this rule's
-// evaluation, and whether any did.
-//
-// The include/exclude test comes FIRST and is the whole point: a path the rule
-// never covered was not carved out by anything, so a count built on this
-// measures a carve-out's EFFECT rather than its declaration (#138). That is the
-// same distinction scan.ignore already reports with live match counts, and the
-// one except.paths was missing — an entry whose subject moved away printed with
-// the same weight as one doing real work.
-//
-// except.paths is a scope SUBTRACTION, not a suppression: Applies returns false
-// for a matched path, so the rule never evaluates the file and there is no
-// finding for a census to count. Reading the file set is the only way to see it.
-func (r *Rule) CarvedOutBy(relPath string) (string, bool) {
-	if !matchAny(r.include, relPath) || matchAny(r.exclude, relPath) {
-		return "", false
-	}
-	for _, g := range r.ExceptPaths {
-		if ok, err := doublestar.Match(g, relPath); err == nil && ok {
-			return g, true
+// InPathScope reports whether relPath matches the rule's include and not its
+// exclude, before scope.subject: the path scope a production subject narrows.
+func (r *Rule) InPathScope(relPath string) bool {
+	return matchIncludes(r.include, relPath) && !matchStored(r.exclude, relPath)
+}
+
+// governanceDir is the walk root's .formwork: formwork.yaml, the rule YAML and
+// the mutation specs the walk reads since #24467 item 9 (its fixtures it
+// still prunes, scan.BuiltinSkipDirs).
+const governanceDir = ".formwork/"
+
+// matchIncludes is matchStored for include globs, with one rule: a path in
+// the governance directory is reached only by a glob WRITTEN for it — one
+// rooted at a literal `.formwork/`. A rule about application code scoped `**`
+// was never written for the corpus that defines it, and reaching it would fire
+// every forbidden token on the rule YAML that spells it; a rule over the
+// corpus names the corpus.
+func matchIncludes(patterns []string, path string) bool {
+	governance := strings.HasPrefix(path, governanceDir)
+	for _, p := range patterns {
+		if governance && !strings.HasPrefix(p, governanceDir) {
+			continue
+		}
+		if doublestar.MatchUnvalidated(p, path) {
+			return true
 		}
 	}
-	return "", false
+	return false
 }
 
 // Exclude returns this rule's scope.exclude globs (read-only; do not mutate).
@@ -210,7 +229,9 @@ func (r *Rule) Cost() rules.Cost {
 // pattern(exists) / set-relation / pattern-count / baseline rule false-fails it
 // when the file bearing its token is not in the change range (#4).
 func (r *Rule) WholeTreeInvariant() bool {
-	return rules.IsWholeTreeInvariant(r.Checker)
+	// A scope.not_declaring rule pins how many places declare each marker, a
+	// count over the whole scope that a changeset scan cannot see.
+	return rules.IsWholeTreeInvariant(r.Checker) || len(r.notDeclaring) > 0
 }
 
 // Fresh returns a copy of the rule with a newly constructed checker.
@@ -240,6 +261,19 @@ func (r *Rule) CloneWithChecker(c rules.Checker) *Rule {
 	clone := *r
 	clone.Checker = c
 	return &clone
+}
+
+// matchStored matches include and exclude, which New validated and nothing
+// outside this package can reassign. Applies runs for every (file, rule) pair
+// the engine considers, and almost every pair is a miss; Match re-validates the
+// whole pattern on every miss, which a stored glob never needs.
+func matchStored(patterns []string, path string) bool {
+	for _, p := range patterns {
+		if doublestar.MatchUnvalidated(p, path) {
+			return true
+		}
+	}
+	return false
 }
 
 func matchAny(patterns []string, path string) bool {
@@ -291,6 +325,9 @@ func (l Lane) Selects(r *Rule) bool {
 // Lanes by Name.
 type Config struct {
 	Version int
+	// CorpusHash fingerprints the exact envelope and rule-file bytes LoadRules
+	// consumed, including embedded library files later overridden locally.
+	CorpusHash string
 	// Engine is the raw engine-version constraint from formwork.yaml ("" if
 	// absent). EngineConstraint is its parsed form (nil if absent). A binary
 	// whose version does not satisfy the constraint refuses to run (spec §4).
@@ -314,6 +351,12 @@ type Config struct {
 	// bad merge or a templating error produces), and "add a rule file" is
 	// useless advice to someone staring at the rule file they just wrote.
 	RuleFiles int
+	// Generation is the formwork.yaml `generated:` definition, nil when the
+	// key is absent. Every rule loaded with this config carries it.
+	Generation *Generation
+	// Tests is the formwork.yaml `tests:` definition of test code, nil when
+	// the repository declares none (testcode.go).
+	Tests *TestCode
 }
 
 // ScopeConfig classifies a changeset (spec §8): which paths are docs,
@@ -395,6 +438,10 @@ type rootSpec struct {
 	Lanes   map[string]laneSpec `yaml:"lanes"`
 	Scope   scopeConfigSpec     `yaml:"scope"`
 	Scan    scanSpec            `yaml:"scan"`
+	// Generated is the one definition of generated output (generated.go).
+	Generated []generatedSpec `yaml:"generated"`
+	// Tests is the one definition of test code (testcode.go).
+	Tests []string `yaml:"tests"`
 }
 
 type laneSpec struct {
@@ -415,16 +462,15 @@ type fileSpec struct {
 }
 
 type ruleSpec struct {
-	ID         string     `yaml:"id"`
-	Type       string     `yaml:"type"`
-	Severity   string     `yaml:"severity"`
-	Scope      scopeSpec  `yaml:"scope"`
-	Preprocess string     `yaml:"preprocess"`
-	Params     yaml.Node  `yaml:"params"`
-	Except     exceptSpec `yaml:"except"`
-	Cure       string     `yaml:"cure"`
-	Origin     string     `yaml:"origin"`
-	Tags       []string   `yaml:"tags"`
+	ID         string    `yaml:"id"`
+	Type       string    `yaml:"type"`
+	Severity   string    `yaml:"severity"`
+	Scope      scopeSpec `yaml:"scope"`
+	Preprocess string    `yaml:"preprocess"`
+	Params     yaml.Node `yaml:"params"`
+	Cure       string    `yaml:"cure"`
+	Origin     string    `yaml:"origin"`
+	Tags       []string  `yaml:"tags"`
 	// FixtureExempt is a heavy rule's DECLARED reason for carrying no
 	// fixtures (#53). Heavy rules used to be exempt by cost, which made
 	// "cannot be fixtured by construction" and "nobody bothered" the same
@@ -450,11 +496,12 @@ type scopeSpec struct {
 	// human and decodes to a scalar), and so an empty marker — which matches
 	// every file — is an error rather than a rule scoped to nothing.
 	NotDeclaring yaml.Node `yaml:"not_declaring"`
-}
-
-type exceptSpec struct {
-	Paths  []string `yaml:"paths"`
-	Marker bool     `yaml:"marker"`
+	// Generated: true makes the rule judge files a declared generator wrote,
+	// which every other rule never reads (generated.go).
+	Generated bool `yaml:"generated"`
+	// Subject: production makes the rule read no file the repository's
+	// `tests:` names; the default, all, reads tests (testcode.go).
+	Subject string `yaml:"subject"`
 }
 
 var idRE = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -477,8 +524,9 @@ func strictUnmarshal(data []byte, out any) error {
 // execution via Load, so the gate's guarantee weakened from "allowed to
 // evaluate THIS config" to "was allowed to evaluate some recent config").
 type Envelope struct {
-	dir  string
-	root rootSpec
+	dir       string
+	root      rootSpec
+	rootBytes []byte
 
 	Version          int
 	Engine           string
@@ -509,7 +557,7 @@ func ReadEnvelope(repoRoot string) (*Envelope, error) {
 			return nil, fmt.Errorf("config: formwork.yaml: engine: invalid constraint %q: %w", root.Engine, err)
 		}
 	}
-	return &Envelope{dir: dir, root: root, Version: root.Version, Engine: root.Engine, EngineConstraint: engineConstraint}, nil
+	return &Envelope{dir: dir, root: root, rootBytes: rootBytes, Version: root.Version, Engine: root.Engine, EngineConstraint: engineConstraint}, nil
 }
 
 // Load reads .formwork/formwork.yaml and .formwork/rules/*.yaml under
@@ -639,7 +687,7 @@ func compile(spec ruleSpec) (*Rule, error) {
 	if err != nil {
 		return nil, fmt.Errorf("rule %s: scope.not_declaring: %w", spec.ID, err)
 	}
-	rule, err := New(spec.ID, spec.Type, sev, spec.Cure, spec.Scope.Include, excludeGlobs, spec.Except.Paths, checker)
+	rule, err := New(spec.ID, spec.Type, sev, spec.Cure, spec.Scope.Include, excludeGlobs, checker)
 	if err != nil {
 		return nil, err
 	}
@@ -648,6 +696,10 @@ func compile(spec ruleSpec) (*Rule, error) {
 	}
 	rule.excludeComments = excludeComments
 	rule.notDeclaring = notDeclaring
+	rule.judgesGenerated = spec.Scope.Generated
+	if rule.productionOnly, err = parseSubject(spec.Scope.Subject); err != nil {
+		return nil, fmt.Errorf("rule %s: scope.subject: %w", spec.ID, err)
+	}
 	rule.Origin = spec.Origin
 	rule.Tags = spec.Tags
 	if rule.FixtureExempt, err = fixtureExemptReason(spec.ID, spec.FixtureExempt); err != nil {
@@ -656,6 +708,5 @@ func compile(spec ruleSpec) (*Rule, error) {
 	rule.factory = factory
 	rule.params = params
 	rule.Preprocess = spec.Preprocess
-	rule.Marker = spec.Except.Marker
 	return rule, nil
 }

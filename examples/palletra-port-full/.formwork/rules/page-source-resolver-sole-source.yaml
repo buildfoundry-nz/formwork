@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-page-source-resolver-sole-source.sh
 # (#7139). The single-page source-precedence resolver lives ONCE, in
 # workerharness/pagefeedresolve. This scans every non-test *.go under
@@ -26,9 +29,6 @@ rules:
         - "freightworks/services/core-api/internal/workerharness/**/*.go"
       exclude:
         - "**/*_test.go"
-    except:
-      paths:
-        - "freightworks/services/core-api/internal/workerharness/pagefeedresolve/*.go"
     preprocess: decomment-go
     params:
       pattern: 'pdftrace\.ExtractPageData\(|func\s+FetchSinglePageBytes'

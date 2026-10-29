@@ -13,6 +13,7 @@
 package meta
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
@@ -37,6 +38,10 @@ func notDeclaringProblems(r *config.Rule, fset *scan.FileSet) []string {
 // relative to what the rule looks at, and asking the whole tree would call an
 // entry live because some unrelated file elsewhere happens to carry it.
 //
+// The question is about THIS marker. Asking Rule.DeclinedBy, which answers
+// "does any marker match", called a dead marker live whenever a sibling marker
+// on the same rule was declared somewhere.
+//
 // A file whose content cannot be read counts as not declaring: the alternative
 // is calling an entry live on a file nobody could read, which is the direction
 // that hides a dead entry.
@@ -49,7 +54,7 @@ func declaredByAny(marker string, r *config.Rule, fset *scan.FileSet) bool {
 		if err != nil {
 			continue
 		}
-		if _, ok := r.DeclinedBy(content); ok {
+		if bytes.Contains(content, []byte(marker)) {
 			return true
 		}
 	}

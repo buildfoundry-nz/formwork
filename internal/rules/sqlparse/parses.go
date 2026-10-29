@@ -83,13 +83,18 @@ func newParses(node *yaml.Node) (rules.Checker, error) {
 
 // CheckFile flags each SQL statement that fails to parse. For .sql files every
 // failure is reported; for .go files only SQL-shaped candidates are, so
-// non-SQL string literals never fire.
+// non-SQL string literals never fire. A .go composition carrying SQL that the
+// extractor could not read is a finding too: whether it parses is a question
+// this rule cannot answer about it (statementsWithSites).
 func (c *parses) CheckFile(f *scan.File) ([]rules.Match, error) {
-	_, fails, err := statements(f)
+	_, fails, sites, err := statementsWithSites(f)
 	if err != nil {
 		return nil, err
 	}
 	var ms []rules.Match
+	for _, s := range sites {
+		ms = append(ms, UnreadableMatch(s))
+	}
 	for _, fail := range fails {
 		if fail.FromGo && !looksLikeSQL(fail.Text) {
 			continue

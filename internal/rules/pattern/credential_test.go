@@ -55,37 +55,69 @@ func TestCredentialCopiedMidLineDoesNotExcuse(t *testing.T) {
 }
 
 // The GROWTH forgery: a second file carrying the credential at the start of a
-// line. It excuses itself, and the holder count catches it.
+// line. The holder count catches it, and the credential sanctions only the
+// declaration it opens, so the forger's other use of the literal is a finding
+// of its own.
 func TestCredentialSecondHolderIsCounted(t *testing.T) {
 	c := mustChecker(t, "forbidden-pattern", credentialRule)
 	ms := runAll(t, c, map[string]string{
 		"audit/mapping.go": "package audit\nconst SourceAutoPolicy = \"auto_policy\"\n",
 		"forge/forge.go":   "package forge\nconst SourceAutoPolicy = \"auto_policy\"\nvar s = \"auto_policy\"\n",
 	})
-	if len(ms) != 1 || !strings.Contains(ms[0].Message, "held by 2 line(s)") {
-		t.Fatalf("want one holder-count finding, got %+v", ms)
+	var count, line bool
+	for _, m := range ms {
+		count = count || strings.Contains(m.Message, "held by 2 line(s)")
+		line = line || m.Line == 3 // forge.go:3; only forge.go has a third line
+	}
+	if len(ms) != 2 || !count || !line {
+		t.Fatalf("want the holder-count finding and forge.go:3, got %+v", ms)
+	}
+}
+
+// A credential sanctions the declaration its line opens, not the file that
+// holds it: a second use beside the owner, in the same file, is judged.
+func TestCredentialSanctionsOnlyTheDeclarationItOpens(t *testing.T) {
+	c := mustChecker(t, "forbidden-pattern", "pattern: 'rawQuery'\n"+
+		"require_absent:\n  - {credential: '^func owner\\(', holders: 1}\n")
+	ms := runAll(t, c, map[string]string{
+		"a.go": "package a\n\nfunc owner() {\n\trawQuery()\n}\n\nfunc sibling() {\n\trawQuery()\n}\n",
+	})
+	if len(ms) != 1 || ms[0].Line != 8 {
+		t.Fatalf("want only the sibling's use (a.go:8), got %+v", ms)
 	}
 }
 
 // A holder in a file the prefilter skips is still counted.
 func TestCredentialCountedThroughThePrefilter(t *testing.T) {
 	c := mustChecker(t, "forbidden-pattern", "pattern: 'rawQuery'\nprefilter: rawQuery\n"+
-		"require_absent:\n  - {credential: '^// OWNER', holders: 1}\n")
+		"require_absent:\n  - {credential: '^func owner\\(', holders: 1}\n")
 	ms := runAll(t, c, map[string]string{
-		"a.go": "// OWNER\nrawQuery()\n",
-		"b.go": "// OWNER\nnothing here\n",
+		"a.go": "package a\nfunc owner() {\n\trawQuery()\n}\n",
+		"b.go": "package b\nfunc owner() {}\n",
 	})
 	if len(ms) != 1 || !strings.Contains(ms[0].Message, "held by 2 line(s)") {
 		t.Fatalf("want the prefiltered holder counted, got %+v", ms)
 	}
 }
 
-// Losing the holder is a finding too: a credential nothing holds is stale.
-func TestCredentialMissingHolderIsAFinding(t *testing.T) {
-	c := mustChecker(t, "forbidden-pattern", credentialRule)
-	ms := runAll(t, c, map[string]string{"other/use.go": "package other\n"})
-	if len(ms) != 1 || !strings.Contains(ms[0].Message, "held by 0 line(s)") {
+// Losing a holder while another remains is a finding: the count is pinned.
+func TestCredentialLostHolderIsAFinding(t *testing.T) {
+	c := mustChecker(t, "forbidden-pattern", "pattern: '\"auto_policy\"'\n"+
+		"require_absent:\n  - {credential: '^const SourceAutoPolicy = \"auto_policy\"', holders: 2}\n")
+	ms := runAll(t, c, map[string]string{"a/owner.go": "package a\nconst SourceAutoPolicy = \"auto_policy\"\n"})
+	if len(ms) != 1 || !strings.Contains(ms[0].Message, "held by 1 line(s)") {
 		t.Fatalf("want a holder-count finding, got %+v", ms)
+	}
+}
+
+// A tree holding none of the credential's homes is not judged by the check:
+// a pruned or synthetic tree cannot be told from a dead credential, and
+// `formwork lint` reports the dead credential over the whole tree (meta
+// TestLintReportsACredentialNoLineHolds).
+func TestCredentialZeroHoldersIsLintsNotTheChecks(t *testing.T) {
+	c := mustChecker(t, "forbidden-pattern", credentialRule)
+	if ms := runAll(t, c, map[string]string{"other/use.go": "package other\n"}); len(ms) != 0 {
+		t.Fatalf("want no finding on a tree holding none of the homes, got %+v", ms)
 	}
 }
 
@@ -183,11 +215,14 @@ func TestEvidenceMultilinePerTrigger(t *testing.T) {
 	}
 }
 
-// The holder count is a live-tree fact: a fixture run does not judge it.
+// The holder count is a live-tree fact: a fixture run does not judge it. Two
+// holders against a declared one is the count a live run must report.
 func TestCredentialCountSkippedInFixtureRuns(t *testing.T) {
 	c := mustChecker(t, "forbidden-pattern", credentialRule)
-	if _, err := c.CheckFile(scan.NewMemFile("other/use.go", []byte("package other\n"))); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"a/owner.go", "b/copy.go"} {
+		if _, err := c.CheckFile(scan.NewMemFile(name, []byte("package p\nconst SourceAutoPolicy = \"auto_policy\"\n"))); err != nil {
+			t.Fatal(err)
+		}
 	}
 	ef := c.(rules.ErrFinalizer)
 	if ms, _ := ef.FinalizeErr(rules.FinalizeContext{Fixture: true}); len(ms) != 0 {
@@ -195,5 +230,35 @@ func TestCredentialCountSkippedInFixtureRuns(t *testing.T) {
 	}
 	if ms, _ := ef.FinalizeErr(rules.FinalizeContext{}); len(ms) != 1 {
 		t.Fatalf("a live run must judge the count, got %+v", ms)
+	}
+}
+
+// An import serves its whole file and no declaration can enclose it, so the
+// owner's file owns its imports; a file with no owner does not.
+func TestCredentialOwnersFileOwnsItsImports(t *testing.T) {
+	c := mustChecker(t, "forbidden-pattern", "pattern: 'package:dio/'\n"+
+		"require_absent:\n  - {credential: '^class WireDio', holders: 1}\n")
+	ms := runAll(t, c, map[string]string{
+		"lib/wire_dio.dart": "import 'package:dio/dio.dart';\n\nclass WireDio {\n  final Dio d;\n}\n",
+		"lib/screen.dart":   "import 'package:dio/dio.dart';\n\nclass Screen {}\n",
+	})
+	if len(ms) != 1 || ms[0].Line != 1 {
+		t.Fatalf("want only the non-owner's import (screen.dart:1), got %+v", ms)
+	}
+}
+
+// The literal gate skips a file that cannot hold a credential, and only such a
+// file: an indented holder behind a character class still counts, and a file
+// with the literal elsewhere than a holder line counts nothing.
+func TestCredentialLiteralGateKeepsTheCount(t *testing.T) {
+	c := mustChecker(t, "forbidden-pattern", "pattern: 'rawQuery\\('\n"+
+		"require_absent:\n  - {credential: '^[ \\t]*func offerFor\\(', holders: 1}\n")
+	ms := runAll(t, c, map[string]string{
+		"a/owner.go":   "package a\n\n\tfunc offerFor() {\n\trawQuery()\n}\n",
+		"b/mention.go": "package b\n\n// see func offerFor(\nvar x = 1\n",
+		"c/plain.go":   "package c\n\nfunc other() {}\n",
+	})
+	if len(ms) != 0 {
+		t.Fatalf("want the indented holder counted once and nothing else, got %+v", ms)
 	}
 }

@@ -55,12 +55,11 @@ import (
 // its verdict, so "no in-scope file" implies nothing about whether that fixture
 // can discriminate, and the universal-scope probe would re-run an expensive
 // tool to learn what the run three lines above already reported.
-func passVacuousVerdict(r *config.Rule, fixture string, ffs *scan.FileSet, gm *globMeasure) ([]verdict, error) {
+func passVacuousVerdict(r *config.Rule, fixture string, ffs *scan.FileSet) ([]verdict, error) {
 	// The probe itself lives in internal/vacuity, shared with `formwork test`:
 	// one definition of "vacuous", so the census and the test runner cannot
-	// disagree. The except-declaration excuse is the same too: globMeasure's
-	// entries come from vacuity.ExceptEntries and the match is DeclaredInert.Excuses.
-	vac, err := vacuity.Vacuous(r, ffs, func(fs *scan.FileSet) bool { return declaredInertExcept(r, fs, gm) })
+	// disagree.
+	vac, err := vacuity.Vacuous(r, ffs)
 	if err != nil {
 		return nil, fmt.Errorf("fixture %s: %w", fixture, err)
 	}
@@ -73,34 +72,4 @@ func passVacuousVerdict(r *config.Rule, fixture string, ffs *scan.FileSet, gm *g
 			"it is green under any pattern and any scope, so it demonstrates nothing",
 		evidence: []string{".formwork/fixtures/" + r.ID + "/" + fixture},
 	}}, nil
-}
-
-// declaredInertExcept reports whether this fixture stands at an except.paths
-// entry its author has DECLARED inert in place with `# except-declaration:
-// <reason>` (#10777).
-//
-// That vocabulary already means "this entry names a file the pattern could
-// never match anyway, listed so the roster stays complete and auditable" —
-// labour-method-choice-single-writer says exactly that about catalog_labour.go,
-// which is generic over every line_kind and carries both line_kind and
-// subcategory_id as bind parameters, so no literal the pattern matches can
-// appear in it. Firing there would demand the author delete an auditable roster
-// entry or fabricate a violation to keep it, and an arm that does that is
-// switched off within a week.
-//
-// The declaration must carry a non-empty reason: vacuity.ExceptEntries marks an
-// entry Declared only for a marker with text after the colon, so a bare
-// `# except-declaration:` buys nothing here, exactly as it buys nothing for the
-// sibling vocabularies.
-func declaredInertExcept(r *config.Rule, ffs *scan.FileSet, gm *globMeasure) bool {
-	if gm == nil {
-		return false
-	}
-	inert := vacuity.DeclaredInert{}
-	for _, gc := range gm.except[r.ID] {
-		if gc.declOK {
-			inert[r.ID] = append(inert[r.ID], gc.glob)
-		}
-	}
-	return inert.Excuses(r.ID, ffs)
 }

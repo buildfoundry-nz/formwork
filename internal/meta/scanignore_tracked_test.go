@@ -236,15 +236,15 @@ func TestLintScanIgnoreTrackedGitFailureIsError(t *testing.T) {
 }
 
 // TestLintScanIgnoreTrackedNeverReportsBuiltinSkips pins acceptance
-// criterion 3 against BOTH match paths: .formwork produces no records
-// (skipDirs precedes ignore matching in the walk), and the record-free
-// fallback must exclude built-in-skip components too — without that
-// exclusion this test fails, because tracked .formwork files are record-less
-// and '.formwork/**' textually matches them. .formwork must stay
-// committable — it holds the rule corpus.
+// criterion 3 against BOTH match paths: the root's .formwork/fixtures
+// produces no records (the built-in skip precedes ignore matching in the
+// walk), and the record-free fallback must exclude built-in-skip components
+// too — without that exclusion this test fails, because tracked fixtures are
+// record-less and '.formwork/fixtures/**' textually matches them. Fixtures
+// must stay committable — they are each rule's proof.
 func TestLintScanIgnoreTrackedNeverReportsBuiltinSkips(t *testing.T) {
 	root := writeRepo(t, map[string]string{
-		".formwork/formwork.yaml":                   "version: 1\nscan:\n  ignore:\n    - glob: '.formwork/**'\n      reason: would textually match the corpus itself\n",
+		".formwork/formwork.yaml":                   "version: 1\nscan:\n  ignore:\n    - glob: '.formwork/fixtures/**'\n      reason: would textually match the fixtures\n",
 		".formwork/rules/r.yaml":                    lintRule,
 		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
 		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
@@ -257,7 +257,29 @@ func TestLintScanIgnoreTrackedNeverReportsBuiltinSkips(t *testing.T) {
 		t.Fatal(err)
 	}
 	if failed != 0 || !strings.Contains(sb.String(), "[scan-ignore-tracked] OK") {
-		t.Fatalf("tracked .formwork files are built-in-skip territory, never scan.ignore-hidden, failed=%d:\n%s", failed, sb.String())
+		t.Fatalf("tracked fixtures are built-in-skip territory, never scan.ignore-hidden, failed=%d:\n%s", failed, sb.String())
+	}
+}
+
+// The governance the walk reads since #24467 item 9 is ordinary scanned
+// content, so an operator glob hiding it hides tracked files from every rule
+// that names the corpus — the exemption scan-ignore-tracked exists to report.
+func TestLintScanIgnoreTrackedReportsHiddenGovernance(t *testing.T) {
+	root := writeRepo(t, map[string]string{
+		".formwork/formwork.yaml":                   "version: 1\nscan:\n  ignore:\n    - glob: '.formwork/rules/**'\n      reason: hides the rule corpus from rules over it\n",
+		".formwork/rules/r.yaml":                    lintRule,
+		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
+		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
+		"notes.txt": "in scope\n",
+	})
+	gitTrack(t, root, ".formwork", "notes.txt")
+	var sb strings.Builder
+	failed, err := meta.Lint(mustLoad(t, root), root, &sb, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed == 0 || !strings.Contains(sb.String(), ".formwork/rules/r.yaml") {
+		t.Fatalf("tracked rule YAML hidden by scan.ignore is a reported exemption, failed=%d:\n%s", failed, sb.String())
 	}
 }
 

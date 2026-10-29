@@ -17,7 +17,6 @@ func sampleFindings() []finding.Finding {
 	return []finding.Finding{
 		{RuleID: "a", Severity: finding.SeverityError, Path: "x.go", Line: 3, Message: "bad thing"},
 		{RuleID: "w", Severity: finding.SeverityWarn, Message: "scope msg"},
-		{RuleID: "b", Severity: finding.SeverityError, Path: "y.go", Message: "hidden", Suppressed: true, SuppressedBy: "marker"},
 	}
 }
 
@@ -34,17 +33,21 @@ func TestJSONReport(t *testing.T) {
 			RulesTotal  int `json:"rules_total"`
 			RulesPassed int `json:"rules_passed"`
 			Findings    int `json:"findings"`
-			Suppressed  int `json:"suppressed"`
 		} `json:"summary"`
 	}
 	if err := json.Unmarshal(buf.Bytes(), &rep); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, buf.String())
 	}
-	// live findings: a(error) + w(warn) = 2; b is suppressed.
-	if rep.Summary.Findings != 2 || rep.Summary.Suppressed != 1 {
+	// findings: a(error) + w(warn) = 2.
+	if rep.Summary.Findings != 2 {
 		t.Fatalf("summary = %+v", rep.Summary)
 	}
-	// rules a,b: a has an error finding → fails; b's only finding is suppressed → passes.
+	// rules a,b: a has an error finding → fails; b has none → passes.
+	// There is no suppression channel, so the report has no "suppressed" key
+	// anywhere: a consumer cannot read an exempted finding as a pass.
+	if strings.Contains(buf.String(), `"suppressed"`) {
+		t.Fatalf("report still carries a suppressed channel:\n%s", buf.String())
+	}
 	if rep.Summary.RulesTotal != 2 || rep.Summary.RulesPassed != 1 {
 		t.Fatalf("rules summary = %+v", rep.Summary)
 	}
@@ -53,59 +56,6 @@ func TestJSONReport(t *testing.T) {
 	}
 	if rep.Findings[0].Rule != "a" || rep.Findings[0].Line != 3 {
 		t.Fatalf("first finding = %+v", rep.Findings[0])
-	}
-}
-
-// TestJSONNamesSuppressedFindings pins #91's JSON half: the suppressed
-// findings are enumerated (rule/path/line/message/suppressed_by, engine order
-// preserved) and the summary count is DERIVED from that list — the two cannot
-// drift because one is the length of the other.
-func TestJSONNamesSuppressedFindings(t *testing.T) {
-	fs := []finding.Finding{
-		{RuleID: "a", Severity: finding.SeverityError, Path: "x.go", Line: 3, Message: "bad thing"},
-		{RuleID: "b", Severity: finding.SeverityError, Path: "y.go", Line: 7, Message: "hidden", Suppressed: true, SuppressedBy: "marker"},
-		{RuleID: "c", Severity: finding.SeverityError, Path: "z.go", Line: 9, Message: "waived", Suppressed: true, SuppressedBy: "marker"},
-	}
-	var buf bytes.Buffer
-	report.JSON(&buf, []*config.Rule{rule("a"), rule("b"), rule("c")}, fs, report.ScanSummary{}, nil)
-
-	var rep struct {
-		Suppressed []struct {
-			Rule, Severity, Path, Message string
-			Line                          int
-			SuppressedBy                  string `json:"suppressed_by"`
-		} `json:"suppressed"`
-		Summary struct {
-			Suppressed int `json:"suppressed"`
-		} `json:"summary"`
-	}
-	if err := json.Unmarshal(buf.Bytes(), &rep); err != nil {
-		t.Fatalf("invalid JSON: %v\n%s", err, buf.String())
-	}
-	if len(rep.Suppressed) != 2 {
-		t.Fatalf("suppressed array = %+v, want the 2 suppressed findings enumerated", rep.Suppressed)
-	}
-	if rep.Suppressed[0].Rule != "b" || rep.Suppressed[0].Line != 7 || rep.Suppressed[0].SuppressedBy != "marker" {
-		t.Fatalf("first suppressed entry = %+v", rep.Suppressed[0])
-	}
-	if rep.Suppressed[1].Rule != "c" || rep.Suppressed[1].SuppressedBy != "marker" {
-		t.Fatalf("second suppressed entry = %+v", rep.Suppressed[1])
-	}
-	if rep.Summary.Suppressed != len(rep.Suppressed) {
-		t.Fatalf("summary.suppressed = %d, want len(suppressed) = %d — the count must derive from the list",
-			rep.Summary.Suppressed, len(rep.Suppressed))
-	}
-}
-
-// TestJSONSuppressedEmptyIsArrayNotNull asserts on the raw bytes: a machine
-// consumer iterating .suppressed must get [] on a clean run, never null.
-func TestJSONSuppressedEmptyIsArrayNotNull(t *testing.T) {
-	var buf bytes.Buffer
-	report.JSON(&buf, []*config.Rule{rule("a")}, []finding.Finding{
-		{RuleID: "a", Severity: finding.SeverityError, Path: "x.go", Line: 3, Message: "bad thing"},
-	}, report.ScanSummary{}, nil)
-	if !strings.Contains(buf.String(), `"suppressed": []`) {
-		t.Fatalf("suppressed must encode as [] when empty, got:\n%s", buf.String())
 	}
 }
 
@@ -161,11 +111,6 @@ func TestGitHubCarriesCure(t *testing.T) {
 	rls := []*config.Rule{
 		{ID: "a", Cure: "run make fmt\r\nthen 100% commit"},
 		rule("w"),
-		// b's finding is suppressed; its cure must NOT surface on the
-		// ::notice line — an exempted finding is not asking to be
-		// remediated. Without a cure here, a mutant appending cure to
-		// notices would stay green.
-		{ID: "b", Cure: "should never surface"},
 	}
 	var buf bytes.Buffer
 	report.GitHub(&buf, rls, sampleFindings(), report.ScanSummary{})
@@ -177,13 +122,6 @@ func TestGitHubCarriesCure(t *testing.T) {
 	// The cure-less rule's annotation is byte-identical to today's form.
 	if !strings.Contains(out, "::warning::scope msg (w)\n") {
 		t.Fatalf("cure-less annotation changed:\n%s", out)
-	}
-	// The suppressed notice for cured rule b stays exactly cure-free.
-	if !strings.Contains(out, "::notice file=y.go::suppressed: hidden (b; marker)\n") {
-		t.Fatalf("suppressed notice changed:\n%s", out)
-	}
-	if strings.Contains(out, "should never surface") {
-		t.Fatalf("suppressed notice leaked its rule's cure:\n%s", out)
 	}
 }
 
@@ -417,83 +355,6 @@ func TestGitHubReport(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
-	}
-	// The suppressed finding surfaces ONLY at notice level (#91) — never as an
-	// error or warning, which would read as a failure.
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if strings.Contains(line, "hidden") && !strings.HasPrefix(line, "::notice") {
-			t.Fatalf("suppressed finding leaked at non-notice level: %q", line)
-		}
-	}
-}
-
-// TestGitHubNamesSuppressedFindingsAsNotices pins #91's PR-lane half: each
-// suppressed finding becomes one ::notice annotation naming the finding, the
-// rule, and the suppression channel — after every live annotation, since
-// reviewers read failures first.
-func TestGitHubNamesSuppressedFindingsAsNotices(t *testing.T) {
-	fs := []finding.Finding{
-		{RuleID: "a", Severity: finding.SeverityError, Path: "x.go", Line: 3, Message: "bad thing"},
-		{RuleID: "b", Severity: finding.SeverityError, Path: "y,z.go", Line: 7, Message: "hidden", Suppressed: true, SuppressedBy: "marker"},
-		{RuleID: "c", Severity: finding.SeverityError, Message: "scope-wide waived", Suppressed: true, SuppressedBy: "marker"},
-	}
-	var buf bytes.Buffer
-	report.GitHub(&buf, nil, fs, report.ScanSummary{})
-	out := buf.String()
-	for _, want := range []string{
-		"::notice file=y%2Cz.go,line=7::suppressed: hidden (b; marker)",
-		"::notice::suppressed: scope-wide waived (c; marker)",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in:\n%s", want, out)
-		}
-	}
-	ei, ni := strings.Index(out, "::error"), strings.Index(out, "::notice")
-	if ei < 0 || ni < 0 {
-		t.Fatalf("both levels must be present (Index -1 would make the ordering check vacuous):\n%s", out)
-	}
-	if ni < ei {
-		t.Fatalf("notices must follow live annotations:\n%s", out)
-	}
-}
-
-// TestGitHubNoticesFollowLiveEvenWhenSuppressedSortsFirst pins the "after the
-// live annotations" contract against the regression the simple fixtures can't
-// see: engine sort order can legitimately put a suppressed finding FIRST in
-// the input slice, and a renderer that collapsed the two loops into one
-// interleaved pass would emit its notice first — byte-identical output on
-// live-first fixtures, spec violation on this one.
-func TestGitHubNoticesFollowLiveEvenWhenSuppressedSortsFirst(t *testing.T) {
-	fs := []finding.Finding{
-		{RuleID: "a", Severity: finding.SeverityError, Path: "a.go", Line: 1, Message: "waived early", Suppressed: true, SuppressedBy: "marker"},
-		{RuleID: "b", Severity: finding.SeverityError, Path: "b.go", Line: 2, Message: "live late"},
-	}
-	var buf bytes.Buffer
-	report.GitHub(&buf, nil, fs, report.ScanSummary{})
-	out := buf.String()
-	le, fn := strings.LastIndex(out, "::error"), strings.Index(out, "::notice")
-	if le < 0 || fn < 0 {
-		t.Fatalf("both levels must be present:\n%s", out)
-	}
-	if fn < le {
-		t.Fatalf("suppressed-first input must still render every live annotation before any notice:\n%s", out)
-	}
-}
-
-// No suppressed findings means no SUPPRESSED notices. It no longer means no
-// notices at all: the scan summary is emitted unconditionally, which is the
-// point of #151 — this renderer used to write zero bytes for a run with nothing
-// to report, so the surface adopters read said nothing about a scan that may
-// have looked at nothing. The narrower assertion is what the test was always
-// about; the broader one was only ever true by accident.
-func TestGitHubEmitsNoSuppressedNoticesWhenNoneSuppressed(t *testing.T) {
-	fs := []finding.Finding{
-		{RuleID: "a", Severity: finding.SeverityError, Path: "x.go", Line: 3, Message: "bad thing"},
-	}
-	var buf bytes.Buffer
-	report.GitHub(&buf, nil, fs, report.ScanSummary{})
-	if strings.Contains(buf.String(), "suppressed:") {
-		t.Fatalf("no suppressed findings, no suppressed notices:\n%s", buf.String())
 	}
 }
 

@@ -48,7 +48,7 @@ func selfTest() error {
 	}
 	for _, c := range cases {
 		r, err := config.New("selftest", "required-pattern", finding.SeverityError, "",
-			c.include, c.exclude, nil, nil)
+			c.include, c.exclude, nil)
 		if err != nil {
 			return fmt.Errorf("self-test %q: building rule: %w", c.name, err)
 		}

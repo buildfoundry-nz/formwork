@@ -40,7 +40,7 @@ import (
 
 // Run executes the CLI and returns the process exit code:
 // 0 pass, 1 error-severity findings, 2 usage/config/engine error.
-func Run(args []string, stdout, stderr io.Writer) int {
+func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// FORMWORK_GIT_ENV is resolved ONCE, here, before any subcommand runs.
 	// internal/vcs decides what the variable means and enforces it at the git
 	// exec sites; this is only where the answer is printed, because that package
@@ -66,6 +66,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "check":
 		return runCheck(args[1:], stdout, stderr)
+	case "check-content":
+		return runCheckContent(args[1:], stdin, stdout, stderr)
 	case "test":
 		return runTest(args[1:], stdout, stderr)
 	case "lint":
@@ -92,7 +94,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "usage: formwork <command> [flags]")
-	fmt.Fprintln(w, "commands: check, test, lint, scope, hooks, explain, list, rules-for, version")
+	fmt.Fprintln(w, "commands: check, check-content, test, lint, scope, hooks, explain, list, rules-for, version")
 }
 
 // newFlagSet builds a FlagSet for a subcommand with the shared "-C" root

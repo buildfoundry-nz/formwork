@@ -4,6 +4,23 @@
 
 ### Added
 
+- **`formwork check-content --batch`: one corpus load for an NDJSON file set.**
+  Each stdin line is a strict `{path, content}` object and each output line is
+  the existing schema-1 result for that record, in input order. Reachability,
+  generated state, findings, content hashes, and replay handles are independent
+  per record; finalizers and cross-file rules stay deferred. Empty or malformed
+  input fails closed, and the aggregate exit is 1 when any record has an
+  error-severity finding. `--path` and `--batch` are mutually exclusive.
+- **`formwork check-content --path P`: stateless single-content evaluation.** The
+  command reads complete file bytes from stdin and runs only proven file-local
+  rules through the existing engine. Its versioned JSON report carries corpus
+  and content hashes, evaluated rule ids, explicit out-of-scope/deferred
+  reasons, bounded findings with cures and explain handles, and a deterministic
+  replay fingerprint. Zero eligible rules is distinct from eligible rules
+  passing; ignored and nonregular paths are `not_scanned`. Whole-tree,
+  finalizing, external-tool, census/credential, and tree-reading rules are
+  deferred, and SQL analyzers opt in only for `.sql` paths. Full `check` is
+  unchanged.
 - **`FORMWORK_FILES`: a changeset run tells a detector which files changed.**
   Under `--staged` and `--range`, a command or census detector runs with
   `FORMWORK_FILES` naming a listing of the changed files its rule's scope

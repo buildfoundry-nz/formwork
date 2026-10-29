@@ -56,6 +56,11 @@ a release than get wrong.
 | `1` | violations found |
 | `2` | engine or configuration error — the run did not reach a verdict |
 
+`check-content` applies this contract to its eligible single-file rules only.
+Its JSON says which rules were deferred or out of scope and distinguishes zero
+eligible rules from a clean evaluated set; exit 0 there is not a repository-wide
+pass. See [Single-content checks](#single-content-checks).
+
 The distinction that matters is `1` versus `2`. A crashed, panicking, or
 misconfigured rule must **never** read as a pass. Collapsing the two
 (`formwork check || true`) discards the difference between "your repo is clean"
@@ -1396,6 +1401,11 @@ lanes:
 `formwork check --lane <name>` runs only that lane. `formwork lint` reports a
 lane selecting **zero** rules, and a rule reachable by no CI lane.
 
+Lanes do not select rules for `check-content`, in either single-path or batch
+mode. Cost classes likewise do not determine eligibility there: only the
+path-aware `ContentOnly` opt-in and the explicit tree-context deferrals below
+apply. `check-content` has no `--lane` or `--cost-max` flag.
+
 ### File-set modes
 
 | invocation | what is scanned |
@@ -1487,6 +1497,130 @@ The flag is refused (exit 2), never ignored, when it cannot be honoured: an
 unreadable or unparseable report, a report carrying no `durations` object (a
 `human`/`github` report, or one from a `--staged`/`--range` run, which collect
 no timings), or the flag combined with `--staged`/`--range`.
+
+---
+
+## Single-content checks
+
+```sh
+formwork check-content [-C <root>] --path <file> [--all-findings] < <file>
+```
+
+This evaluates the **complete stdin bytes** as one file under the configuration
+at `-C`; it never substitutes the target path's disk contents. Empty stdin is
+valid empty content. `--path` is required, positional operands are refused, and
+stdin/flag/config/engine failures are exit 2. The path uses `rules-for`
+normalization and walk-reachability rules: an intended file that does not exist
+yet is valid, a directory or out-of-root path is exit 2, and an ignored or
+nonregular path produces `status: "not_scanned"` rather than a clean evaluated
+result. `scan.ignore` and `scan.gitignore` retain their ordinary meaning.
+
+The ordinary engine runs over one `scan.NewMemFile` with one worker, so
+preprocessors, finding ordering, cures, and analyzer errors are unchanged.
+There is no second matcher, daemon, MCP server, or replay store.
+
+### Eligible and deferred rules
+
+Eligibility is an explicit, path-aware checker opt-in, not `cost: fast`. The
+current file-local families are:
+
+- `binary-content`, `file-naming`, `file-size`, `ordering`, and
+  `forbidden-pattern` without census or credentials;
+- `go/expected-derives-from-actual`, `go/func-line-budget`,
+  `go/call-confined-to-func-name`, and `go/guard-precedes-call`;
+- `dart/ref-after-await`, `dart/numeric-field-validated`, and
+  `dart/gate-reads-are-listened`;
+- `sql/parses`, `sql/statement-predicate`, `sql/locking-select-order`, and
+  `sql/locking-target` **only for `.sql` paths**, with the analyzers'
+  case-insensitive extension classification (`.SQL`, `.Sql`, and so on). On
+  `.go` these rules defer: their extraction can read siblings, package
+  constants, and templates.
+
+Every `Finalizer`/`ErrFinalizer` is deferred, including a wrapped finalizer, as
+are whole-tree/cross-file rules, `scope.min_files`, `scope.not_declaring`,
+generated-only scopes, external commands, git-diff, census/credential forms,
+and other tree readers. Unknown checkers default to ineligible. Running only a
+finalizing rule's per-file half would not be its full-check verdict.
+
+`not_evaluated` gives each applicable but unevaluated rule a stable reason.
+Rules the path scope does not select are counted in `out_of_scope` without
+per-rule entries, and a `not_scanned` result carries its path attribution rather
+than enumerating the whole corpus:
+
+| reason | meaning | counted as |
+|---|---|---|
+| `generated_excluded` | declared generated content is outside an ordinary rule's scope | `out_of_scope` |
+| `scope_min_files` | the floor is a repository-corpus assertion | `deferred` |
+| `scope_not_declaring` | holder counting/masking needs tree context | `deferred` |
+| `generated_only_scope` | generated-only evaluation depends on repository proof context | `deferred` |
+| `finalizer` | any finalization phase exists, even behind a wrapper | `deferred` |
+| `whole_tree_invariant` | the verdict is not file-local | `deferred` |
+| `content_only_not_supported` | the checker has no path-specific opt-in | `deferred` |
+
+### JSON contract (schema 1)
+
+Stdout is one object with these fields:
+
+- `schema_version` (`1`), `engine_version`, normalized `path`, and `status`.
+- `corpus_hash`: `sha256:` followed by the digest of the exact loaded
+  `formwork.yaml`, embedded-library, and local rule bytes, including library
+  files later overridden locally. `content_hash` is the same digest form over
+  the exact stdin bytes.
+- `coverage`: `rules_total`, `in_scope`, `eligible`, `evaluated`, `deferred`,
+  and `out_of_scope`. `evaluated_rule_ids` lists the eligible rules actually
+  handed to the engine. `not_evaluated` contains `{rule, reason}` entries as
+  above.
+- `findings`: `{rule, severity, path, line, message, cure, explain}` entries.
+  `explain` is `formwork explain <rule-id>`. Empty cures and line zero remain
+  explicit. `findings_total` counts all engine findings and
+  `findings_omitted` counts those beyond the default first three.
+  `--all-findings` returns the complete array over the same evaluation.
+- `replay_handle`: a deterministic SHA-256 fingerprint of the
+  schema/engine/corpus/path/content identity and reachability classification.
+  A `not_scanned` result's deciding channel and glob/gitignore rule are included,
+  so a findings result and a newly ignored or nonregular path cannot share a
+  handle. It does not identify stored server state. `elapsed_ms` is
+  observational and is not part of that identity.
+- `not_scanned`, when applicable, carries the same attribution shape as
+  `rules-for` (`by`, relevant glob/gitignore rule and reason, and any external
+  tool rules that may re-scan independently).
+
+`evaluated_rule_ids`, `not_evaluated`, and `findings` are always arrays, never
+`null`. `status` is `clean` (eligible rules evaluated with no findings),
+`findings` (including warn-only findings), `no_eligible_rules`, or
+`not_scanned`. There is intentionally no `rules_passed` field: zero eligible
+rules cannot become a vacuous pass count.
+
+Exit 0 means no error-severity findings among eligible rules, exit 1 means at
+least one, and exit 2 means input/config/engine failure. Severity is evaluated
+before output truncation, so an omitted error still exits 1. Any single-content
+result — including `clean` — is only a verdict about the supplied bytes and the
+eligible rule set, never a whole-repository green.
+
+### Batch mode
+
+```sh
+formwork check-content [-C <root>] --batch [--all-findings] < records.jsonl
+```
+
+Each stdin line is one JSON object with required `path` and `content` fields;
+`content` may be `""`. Unknown fields, missing/null fields, malformed or blank
+lines, and multiple JSON values on one line are exit 2. `--path` and `--batch`
+are mutually exclusive. An empty batch is exit 2 rather than a vacuous pass.
+
+Output is newline-delimited JSON: one compact object with the exact schema above
+per input record, in input order. Configuration is loaded once for the whole
+invocation. Every record independently normalizes its path, checks reachability,
+plans generated/scope eligibility, and runs the singleton evaluator. Content
+hashes and replay handles are independent, `not_scanned` affects only its own
+record, and finalizer/cross-file rules never run. `--all-findings` applies per
+record.
+
+Results are emitted only after every record has evaluated successfully, so a
+later malformed record or engine error cannot leave a partial batch looking
+complete. JSON write errors are exit 2. The aggregate exit is 1 if any record
+has an error-severity finding, 0 otherwise, and 2 for input/config/engine/output
+failure. No batch-wide status replaces each record's `status` and `coverage`.
 
 ---
 

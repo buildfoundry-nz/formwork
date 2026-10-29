@@ -70,6 +70,14 @@ func introspectFormat(f string, stderr io.Writer) bool {
 }
 
 func emitJSON(w, stderr io.Writer, v any) int {
+	return emitJSONIndent(w, stderr, v, "  ")
+}
+
+func emitJSONLine(w, stderr io.Writer, v any) int {
+	return emitJSONIndent(w, stderr, v, "")
+}
+
+func emitJSONIndent(w, stderr io.Writer, v any, indent string) int {
 	// Every -format json answer is one object: a list is a named member of
 	// it, never the document itself. A bare top-level array is a shape no
 	// declared message decodes without framing it in code, which is what
@@ -78,14 +86,23 @@ func emitJSON(w, stderr io.Writer, v any) int {
 		fmt.Fprintf(stderr, "formwork: rendering json: a %s is not a document; wrap it in an object\n", k)
 		return 2
 	}
-	out, err := json.MarshalIndent(v, "", "  ")
+	var out []byte
+	var err error
+	if indent == "" {
+		out, err = json.Marshal(v)
+	} else {
+		out, err = json.MarshalIndent(v, "", indent)
+	}
 	if err != nil {
 		// Unreachable with the fixed-field structs marshaled today, but an
 		// exit 2 must never be mute (fail-open review finding 4).
 		fmt.Fprintf(stderr, "formwork: rendering json: %v\n", err)
 		return 2
 	}
-	fmt.Fprintln(w, string(out))
+	if _, err := fmt.Fprintln(w, string(out)); err != nil {
+		fmt.Fprintf(stderr, "formwork: writing json: %v\n", err)
+		return 2
+	}
 	return 0
 }
 

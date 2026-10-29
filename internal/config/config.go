@@ -325,6 +325,9 @@ func (l Lane) Selects(r *Rule) bool {
 // Lanes by Name.
 type Config struct {
 	Version int
+	// CorpusHash fingerprints the exact envelope and rule-file bytes LoadRules
+	// consumed, including embedded library files later overridden locally.
+	CorpusHash string
 	// Engine is the raw engine-version constraint from formwork.yaml ("" if
 	// absent). EngineConstraint is its parsed form (nil if absent). A binary
 	// whose version does not satisfy the constraint refuses to run (spec §4).
@@ -521,8 +524,9 @@ func strictUnmarshal(data []byte, out any) error {
 // execution via Load, so the gate's guarantee weakened from "allowed to
 // evaluate THIS config" to "was allowed to evaluate some recent config").
 type Envelope struct {
-	dir  string
-	root rootSpec
+	dir       string
+	root      rootSpec
+	rootBytes []byte
 
 	Version          int
 	Engine           string
@@ -553,7 +557,7 @@ func ReadEnvelope(repoRoot string) (*Envelope, error) {
 			return nil, fmt.Errorf("config: formwork.yaml: engine: invalid constraint %q: %w", root.Engine, err)
 		}
 	}
-	return &Envelope{dir: dir, root: root, Version: root.Version, Engine: root.Engine, EngineConstraint: engineConstraint}, nil
+	return &Envelope{dir: dir, root: root, rootBytes: rootBytes, Version: root.Version, Engine: root.Engine, EngineConstraint: engineConstraint}, nil
 }
 
 // Load reads .formwork/formwork.yaml and .formwork/rules/*.yaml under

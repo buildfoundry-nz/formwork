@@ -30,7 +30,7 @@ import (
 func runCLI(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	code := cli.Run(args, &stdout, &stderr)
+	code := cli.Run(args, bytes.NewReader(nil), &stdout, &stderr)
 	return code, stdout.String(), stderr.String()
 }
 

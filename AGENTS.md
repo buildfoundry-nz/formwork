@@ -58,6 +58,19 @@ markers, allowlists or `except.paths`); `formwork lint`'s hygiene checks and an
 escape-hatch census enumerate **every** channel by which a file can escape a
 rule's scope — including the ones nobody declared.
 
+**Single-content checks.** `formwork check-content --path P` reads complete file
+content from stdin and evaluates it through the ordinary engine over one
+in-memory file. Only checkers that explicitly implement path-aware
+`rules.ContentOnly` are eligible. Finalizers, whole-tree/cross-file readers,
+`scope.min_files`, `scope.not_declaring`, generated-only scopes, and unknown
+checkers are deferred with explicit reasons; `cost: fast` is not eligibility.
+The versioned JSON report distinguishes clean eligible rules from zero eligible
+rules and never claims whole-repository coverage. `--batch` reads strict
+`{path, content}` JSON objects one per stdin line, loads config once, and emits
+one independent result object per line in input order. Generated/reachability
+state is per record; empty input is exit 2. Lanes and cost classes do not select
+or filter these rules. Full `check` is unchanged.
+
 **Self-testing.** `formwork test` (fire/pass fixtures, `want:` markers, `.want`
 manifests) and `formwork lint` (rules-present, fixture coverage, empty scope,
 lane reachability, command-trigger-armable, and more). Both take `--rule <id>`

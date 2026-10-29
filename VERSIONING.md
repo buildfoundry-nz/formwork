@@ -23,6 +23,14 @@ interface, what may change, and what protects you when it does.
 | `1`  | violations found |
 | `2`  | engine or configuration error |
 
+For `check-content`, exit 0 means no error-severity findings among the eligible
+single-file rules. Deferred and out-of-scope rules did not run; the JSON
+`status` and `coverage` fields distinguish that state, including zero eligible
+rules, from eligible rules passing. It is not a whole-repository pass.
+`--batch` applies the same contract across every record: exit 1 means any
+record has an error-severity finding, while empty input, malformed records,
+config/engine failures, and output write failures are exit 2.
+
 This contract will not change in 0.x, and it is the one thing we would rather
 break a release than get wrong. The distinction that matters is `1` vs `2`: a
 crashed, panicking, or misconfigured rule must **never** read as a pass. If you
@@ -76,6 +84,16 @@ table.
   minor version. Findings are sorted deterministically by (rule id, path, line,
   message), and that ordering is part of the contract — diffing two runs is a
   supported use.
+- **`check-content`** emits one object with `schema_version: 1`. Its field names,
+  finding shape, evaluated/not-evaluated arrays, coverage/status vocabulary,
+  corpus/content hashes, and replay handle are API under the same minor-version
+  rule. Arrays are non-nil. `findings_total` and exit severity are computed
+  before the default three-finding bound; `--all-findings` changes only the
+  rendered array. The replay handle is a deterministic fingerprint, not stored
+  server state. With `--batch`, input is one strict `{path, content}` object per
+  line and output is one compact object with this same schema per line, in input
+  order. Per-record hashes, status, coverage, and replay identity are API; no
+  batch-wide document replaces them.
 - **`-format github`** emits GitHub Actions workflow-command annotations. The
   format is GitHub's, not ours; we track it.
 - **`-format human` is NOT API.** It is for people, it will change to read
@@ -84,9 +102,9 @@ table.
 
 ### CLI surface — API
 
-Command names (`check`, `test`, `lint`, `scope`, `hooks`, `explain`, `list`,
-`rules-for`, `version`) and their flags. Removing a command or flag, or changing
-a flag's meaning, is breaking. Adding is not.
+Command names (`check`, `check-content`, `test`, `lint`, `scope`, `hooks`,
+`explain`, `list`, `rules-for`, `version`) and their flags. Removing a command
+or flag, or changing a flag's meaning, is breaking. Adding is not.
 
 ## What is NOT API
 

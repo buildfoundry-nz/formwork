@@ -113,8 +113,9 @@ Go ≥ 1.24 (pin exact toolchain at scaffold time).
 
 ```
 formwork/
-  cmd/formwork/            CLI entry point (subcommands: check, test, lint,
-                           scope, hooks, explain, list, rules-for, version;
+  cmd/formwork/            CLI entry point (subcommands: check, check-content,
+                           test, lint, scope, hooks, explain, list, rules-for,
+                           version;
                            init is designed in §10 but deferred — not built,
                            deliberately, until the open-source quickstart
                            arc (#110) decides its shape)
@@ -637,6 +638,85 @@ Output preserves the existing ecosystem contract:
   caught and reported as exit 2 — a crashed rule can never pass.
 - `severity: warn` findings are reported but do not affect the exit code;
   only `error` findings produce exit 1.
+
+### Single-content evaluation (`check-content`)
+
+`formwork check-content -C <root> --path P [--all-findings]` reads the COMPLETE
+content of P from stdin, including empty content, and judges those supplied
+bytes rather than P's disk contents. P is normalized and classified through the
+same helper and reachability seams as `rules-for`: a nonexistent intended file
+is valid, while an ignored or nonregular path is an explicit `not_scanned`
+result. Missing/extra operands, flag errors, stdin read failures, and path
+classification failures are exit 2. Configuration loads through the same strict
+envelope/version gate as every other command.
+
+This is a planning mode over the existing engine, not a second evaluator. The
+planner constructs one `scan.NewMemFile`, selects eligible rules, and calls
+`engine.Run` over a singleton `FileSet` with one worker. Preprocessors, finding
+order, cures, and engine errors are therefore the ordinary implementations.
+There is no MCP, daemon, or stored result service.
+
+Eligibility is a path-aware `rules.ContentOnly` opt-in, false by default for an
+unknown checker and independent of `cost:`. The planner independently defers
+whole-tree/cross-file rules; every `Finalizer`/`ErrFinalizer`, including one
+hidden by a wrapper that exposes `rules.CheckerWrapper`; `scope.min_files`;
+`scope.not_declaring`; generated-only scopes; and command, git-diff, census,
+credential, or other tree readers. Only binary-content, file-naming, file-size,
+ordering, plain file-local forbidden-pattern forms, proven non-finalizing
+Go/Dart analyzers, and SQL analyzers on `.sql` paths opt in. SQL on `.go` is
+deferred because its extraction reads sibling/package/template data. Full
+`check` planning and behavior do not use this filter.
+
+The command emits one JSON object with `schema_version: 1`, `engine_version`,
+`corpus_hash`, normalized `path`, `content_hash`, `status`, `coverage`,
+`evaluated_rule_ids`, `not_evaluated`, `findings`, `findings_total`,
+`findings_omitted`, `replay_handle`, `elapsed_ms`, and optional `not_scanned`.
+All arrays are non-nil. The corpus hash is SHA-256 over a versioned,
+length-framed sequence of the exact envelope, embedded-library, and local rule
+bytes consumed by `LoadRules` (including library bytes later overridden
+locally); the content hash is SHA-256 over stdin. The replay handle fingerprints
+the schema/engine/corpus/path/content identity plus the reachability
+classification, including the deciding channel and glob/gitignore rule for a
+`not_scanned` result, and does not imply storage.
+
+Each finding carries `rule`, `severity`, `path`, `line`, `message`, `cure`, and
+an `explain` command handle. At most three are rendered by default;
+`--all-findings` renders all without changing evaluation or replay identity.
+Totals and error-severity exit status use the untruncated result. `status` is
+`clean`, `findings`, `no_eligible_rules`, or `not_scanned`, and `coverage`
+carries `rules_total`, `in_scope`, `eligible`, `evaluated`, `deferred`, and
+`out_of_scope`; there is deliberately no vacuous `rules_passed`. Not-evaluated
+reasons are `generated_excluded`, `scope_min_files`, `scope_not_declaring`,
+`generated_only_scope`, `finalizer`, `whole_tree_invariant`, and
+`content_only_not_supported`. Generated exclusion is a scope exclusion, not a
+deferral. Rules outside the path scope contribute only to `out_of_scope`, and a
+`not_scanned` result carries path attribution rather than corpus-wide
+per-rule entries. Exit 0 means no error-severity finding among eligible rules,
+1 means at least one, and 2 means input/config/engine failure.
+A clean or zero-eligible single-content answer is not a whole-repository green.
+
+#### Batch single-content evaluation
+
+`formwork check-content --batch [--all-findings]` accepts one strict JSON object
+per stdin line, `{path, content}`, and emits one compact schema-1 document per
+output line in input order. `--path` and `--batch` are mutually exclusive. Both
+fields are required, although `content` may be the empty string; unknown fields,
+missing fields, blank/malformed lines, and multiple values on one line are exit
+2. An empty batch is exit 2 rather than a vacuous pass.
+
+The invocation loads and gates the corpus once. Each record then independently
+normalizes its path, classifies reachability, plans generated/scope eligibility,
+constructs its own in-memory file, and runs the same single-file evaluator.
+`not_scanned` is a result for that record only and does not abort later records.
+Content hashes and replay handles are therefore independent, and no generated
+or reachability state is carried between records. Finalizers and cross-file
+rules remain deferred per record; there is no batch-wide engine run. Output is
+held until all records evaluate successfully, so malformed input or an engine
+error cannot leave a partial batch looking complete. JSON write failures are
+exit 2. Exit 1 means any record has an error-severity finding; otherwise exit 0.
+Lanes and cost classes do not select or filter rules in either single-content
+mode: `ContentOnly` and the independent deferral guards are the only additional
+planning filter.
 
 Performance target: full-tree evaluation of all fast rules on a repo the size
 of the validating target in low single-digit seconds (vs ~30s today), single

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/sha256"
 	"fmt"
 	iofs "io/fs"
 	"os"
@@ -54,6 +55,13 @@ func (e *Envelope) LoadRules() (*Config, error) {
 	}
 
 	cfg := &Config{Version: e.Version, Engine: e.Engine, EngineConstraint: e.EngineConstraint, Lanes: lanes, Scope: scope, Ignore: ignore, Gitignore: gitignore, Library: append([]string(nil), e.root.Library...), RuleFiles: len(ruleFiles), Generation: generation, Tests: testCode}
+	corpus := sha256.New()
+	hashBytes := func(source string, data []byte) {
+		fmt.Fprintf(corpus, "formwork-corpus-v1\x00%s\x00%d\x00", source, len(data))
+		corpus.Write(data)
+		corpus.Write([]byte{0})
+	}
+	hashBytes(".formwork/formwork.yaml", e.rootBytes)
 	seen := map[string]string{} // rule id -> file it was defined in
 	index := map[string]int{}   // rule id -> slot in cfg.Rules
 
@@ -76,6 +84,7 @@ func (e *Envelope) LoadRules() (*Config, error) {
 				return nil, fmt.Errorf("config: library %s: reading %s: %w", pack, name, err)
 			}
 			src := "library:" + pack + "/" + name
+			hashBytes(src, data)
 			if err := loadRuleFile(cfg, seen, index, src, data, pack); err != nil {
 				return nil, err
 			}
@@ -87,10 +96,12 @@ func (e *Envelope) LoadRules() (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("config: reading %s: %w", rf, err)
 		}
+		hashBytes(path.Join(".formwork", "rules", filepath.Base(rf)), data)
 		if err := loadRuleFile(cfg, seen, index, rf, data, ""); err != nil {
 			return nil, err
 		}
 	}
+	cfg.CorpusHash = fmt.Sprintf("sha256:%x", corpus.Sum(nil))
 	sort.Slice(cfg.Rules, func(i, j int) bool { return cfg.Rules[i].ID < cfg.Rules[j].ID })
 	// A proven_by that names no loaded rule is NOT refused here. Tools load
 	// pruned corpora beside the repository's formwork.yaml (one rule and its

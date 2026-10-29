@@ -66,6 +66,8 @@ variant and the reasoning.
 
 ```sh
 formwork check     # evaluate all rules; exit 0 pass, 1 violations, 2 error
+formwork check-content --path src/a.go < src/a.go  # eligible file-local rules only
+formwork check-content --batch < records.jsonl      # one {path, content} per line
 formwork test      # run every rule against its fixtures
 formwork lint      # self-integrity checks over the config itself
 formwork rules-for <path>...   # which rules govern these paths
@@ -73,6 +75,14 @@ formwork explain <rule-id>     # one rule in full
 formwork list rules|lanes|types|preprocessors
 formwork version
 ```
+
+`check-content` reads the supplied bytes, not the path's disk contents, and
+emits one versioned JSON object. Tree-dependent rules are explicitly deferred;
+zero eligible rules is reported differently from eligible rules passing. It is
+a single-file verdict, not a repository-wide green. With `--batch`, stdin and
+stdout are newline-delimited JSON: one strict `{path, content}` input object and
+one independent schema-1 result per line. Configuration loads once for the
+whole batch; empty or malformed input is exit 2.
 
 This repo self-hosts: its own rules live in `.formwork/`.
 

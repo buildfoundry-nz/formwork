@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.15.2
+## 0.16.0
 
 ### Added
 
@@ -14,8 +14,8 @@
 - **`formwork check-content --path P`: stateless single-content evaluation.** The
   command reads complete file bytes from stdin and runs only proven file-local
   rules through the existing engine. Its versioned JSON report carries corpus
-  and content hashes, evaluated rule ids, explicit out-of-scope/deferred
-  reasons, bounded findings with cures and explain handles, and a deterministic
+  and content hashes, evaluated rule ids, applicable deferred reasons and
+  out-of-scope counts, bounded findings with cures and explain handles, and a deterministic
   replay fingerprint. Zero eligible rules is distinct from eligible rules
   passing; ignored and nonregular paths are `not_scanned`. Whole-tree,
   finalizing, external-tool, census/credential, and tree-reading rules are

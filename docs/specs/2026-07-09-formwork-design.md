@@ -790,8 +790,8 @@ The validating target's synth-test discipline, built into the engine:
   read, and the downstream consumer (TakeoffQS) already gates both codes with no
   baseline. A probe that cannot run is exit 2. Kept quirk: a
   `guard-precedes-call` rule with `funcs` runs a second probe with the filter
-  defeated. There is no excuse for a fixture standing at an exempted path:
-  main's 06258a4 removed `except:`, so nothing can be declared inert.
+  defeated. There is no excuse for a vacuous pass fixture: the config has no
+  `except:` block, so no path can be declared inert.
 
 ## 8. Orchestration
 

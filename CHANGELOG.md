@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-### Changed
+## 0.17.0
+
+### Changed (breaking)
 
 - **`formwork test` now fails a pass fixture that could never have failed its
   rule.** `PASS-FIXTURE-VACUOUS` (the rule reaches no file of the fixture and
@@ -11,6 +13,9 @@
   occurrence of the anchored symbol/sink) fail the arm and the rule, exit 1, by
   default. A corpus with such fixtures that passed before fails now; fix the
   fixture so it exercises the rule (#49).
+
+### Changed
+
 - **`sql/parses` and `sql/statement-predicate` read an integer hole.** A `%d`
   verb, `strconv.Itoa`, `strconv.FormatInt` and `strconv.FormatUint` read as a
   number, because an integer cannot carry statement text. A composition with no
@@ -34,13 +39,20 @@
   output instead of staying silent. The verdicts live in the new
   `internal/vacuity`, which the vacuity census now calls for
   `PASS-FIXTURE-VACUOUS` (#49).
-
 - `formwork test --rule` takes several rules in one call, repeated
   (`--rule a --rule b`) or comma-separated (`--rule a,b`), so one corpus load
   serves the whole selection. Any unknown id is exit 2 with nothing run (#49).
 - `formwork test --format json` writes a versioned (`version: 1`) per-rule,
   per-arm result document; the human output is rendered from the same
-  structured results and is unchanged (#49).
+  structured results and changes only by the `not-judged` note above (#49).
+
+### Fixed
+
+- **Globs follow the `doublestar` fix for a doublestar inside a brace.** A
+  pattern like `x{**/a,b}` now treats the `**` as mid-pattern, so it matches like
+  `x*/a` and `xb`. `doublestar` is now 4.10.4, and `pg_query_go` is 6.2.5.
+- **The darwin verify and release builds run on `macos-15`,** because GitHub
+  retired the `macos-14` runner images.
 
 ## 0.16.0
 

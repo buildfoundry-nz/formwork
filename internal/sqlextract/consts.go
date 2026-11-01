@@ -113,6 +113,7 @@ type constFile struct {
 	unaliased      []string          // import paths named by their package clause
 	importDirs     map[string]string // local name → dir, resolved on first use
 	importsOnce    sync.Once
+	locals         map[*ast.Object]ast.Expr // constant_locals.go; nil outside the file being folded
 }
 
 func envFor(tree *scan.FileSet) *constEnv {
@@ -314,6 +315,11 @@ func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, env map[stri
 				val, ok := env[v.Name]
 				return val, ok
 			}
+			if cf != nil {
+				if value, ok := cf.locals[v.Obj]; ok {
+					return e.fold(value, cf, false, env, depth+1)
+				}
+			}
 		}
 		if v.Obj != nil {
 			if v.Obj.Kind != ast.Con {
@@ -354,6 +360,9 @@ func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, env map[stri
 		}
 		if isIntegerFormat(v) {
 			return integerHole, true
+		}
+		if isStringsJoin(v) {
+			return e.foldJoin(v, cf, env, depth)
 		}
 		return e.callTemplate(v, cf, env, depth)
 	}
@@ -451,9 +460,14 @@ func within(e ast.Expr, spans []span) bool {
 // string constant, or a conversion of one, becomes a parenthesised literal
 // spanning the operand, and so does every call of a SQL template whose
 // arguments are constants, wherever it stands (templates.go). tree may be nil.
-func foldConstants(tree *scan.FileSet, p string, fset *token.FileSet, file *ast.File) folded {
+// readLocals reads constant locals too (constant_locals.go); reassembly leaves
+// them to its own assignment-flow fold.
+func foldConstants(tree *scan.FileSet, p string, fset *token.FileSet, file *ast.File, readLocals bool) folded {
 	e := envFor(tree)
 	cf := newConstFile(p, file)
+	if readLocals {
+		cf.locals = constantLocals(file)
+	}
 	out := folded{made: map[ast.Expr]bool{}}
 	for _, d := range file.Decls {
 		fd, ok := d.(*ast.FuncDecl)

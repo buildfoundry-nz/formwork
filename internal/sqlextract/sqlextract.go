@@ -169,7 +169,7 @@ func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
-	fo := foldConstants(tree, path, fset, file)
+	fo := foldConstants(tree, path, fset, file, true)
 	type rawCand struct {
 		text string
 		pos  token.Pos
@@ -378,7 +378,7 @@ func FromGoReassembledIn(tree *scan.FileSet, path string, src []byte) ([]Candida
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
-	fo := foldConstants(tree, path, fset, file)
+	fo := foldConstants(tree, path, fset, file, false)
 	sink := newSiteSink(path, fset, src)
 	sink.readPackageSeeds(file)
 	// ONE traversal doing both jobs (#45). It used to be two full walks over the

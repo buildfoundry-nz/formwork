@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.17.1
+
 ### Added
 
 - **`sql/statement-predicate` takes `unread: census`.** A rule naming it lists SQL

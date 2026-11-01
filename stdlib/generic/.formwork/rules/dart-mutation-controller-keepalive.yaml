@@ -5,7 +5,6 @@ rules:
   severity: error
   scope:
     include: [packages/*/lib/**/*.dart, frontend/lib/**/*.dart, frontend/admin_app/lib/**/*.dart]
-    exclude: ['**/*.g.dart', '**/*.freezed.dart', '**/*.pb.dart']
   params:
     pattern: '\bawait\s+'
     require_present: ['bool\s+build\s*\(']

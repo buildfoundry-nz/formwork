@@ -6,8 +6,8 @@
 //
 // Product enforcement is formwork type:command
 // (.formwork/rules/count-relation-arm-is-anchored.yaml) with origin on this
-// file. Exit 0 = no new unanchored arms and no stale debt entries, 1 =
-// offenders or staleness listed, 2 = usage/env error.
+// file. Exit 0 = no unanchored arms, 1 = offenders listed, 2 = usage/env
+// error.
 //
 // # The hole
 //
@@ -50,16 +50,10 @@
 //
 // # Known debt
 //
-// First-run census (2026-07-29): NONE. All eleven unanchored arms were cured
-// with `require_symbol: left` in the change that installed the ratchet, so
-// #15103 ABOLISHED the known-debt list. All eleven pre-existing unanchored
-// arms were cured with require_symbol: left in the change that installed this
-// ratchet, so .formwork/allowlists/count-relation-unanchored-arms.txt shipped
-// EMPTY and its only remaining purpose was to be added to. The file and the
-// read are gone: every unanchored arm is a finding and there is nowhere to
-// record an exception. Historical note — the
-// list is SELF-CLEANING: an entry whose arm stops tripping fails this census
-// as stale, so curing an arm forces its entry out.
+// First-run census (2026-07-29): NONE. All eleven pre-existing unanchored
+// arms were cured with `require_symbol: left` in the change that installed
+// this ratchet, so #15103 ABOLISHED the known-debt list: every unanchored arm
+// is a finding and there is nowhere to record an exception.
 package main
 
 import (
@@ -128,8 +122,8 @@ func paramsHaveAnchor(lines []string, start, end int) bool {
 
 // detect scans root/.formwork/rules/*.yaml and returns every
 // go/per-func-count-relation arm whose params declare no anchor, plus corpus
-// stats. It reads the corpus ONLY; allowlist reconciliation is main's job, so
-// tests exercise detection against bare fixture trees.
+// stats. It reads the corpus ONLY; the verdict is main's job, so tests
+// exercise detection against bare fixture trees.
 //
 // Arms are walked as yaml.Node mappings so rematerialised keys (id not first)
 // and comment-only "funcs:" still parse the way the engine does (#14091).
@@ -253,11 +247,8 @@ func main() {
 		st.files, st.arms, st.countArms)
 
 	// UNCONDITIONAL since #15103. Every flagged arm is a finding; there is no
-	// known-debt list to reconcile against, so census.Reconcile's carried-debt
-	// and stale-entry bookkeeping has nothing to do here. The sibling
-	// formwork-universal-cure-census still carries live rows and still calls
-	// Reconcile — that is why this verdict is written out here rather than by
-	// changing the shared helper underneath it.
+	// known-debt list, and the shared helper has none to offer. The verdict is
+	// written out here because its message names the cure.
 	const why = "declares neither funcs: nor require_symbol: — the relation holds vacuously when both sides count zero, so renaming the constraining symbol retires the invariant silently (#10517)"
 	for _, fl := range flags {
 		fmt.Printf("NEW %s:%d: arm %q %s\n", fl.File, fl.Line, fl.Arm, why)

@@ -72,7 +72,7 @@ jobs:
           # (#17 mislabeled it blacksmith-6vcpu-macos-14, a runner that does
           # not exist — the same fix ci.yml's verify matrix carries.)
           - platform: darwin
-            runner: macos-14
+            runner: macos-15
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -7,8 +7,6 @@ rules:
     scope:
       include:
         - "**/*.go"
-      exclude:
-        - ".formwork/**"
     preprocess: comments-only-go
     params:
       pattern: "(?i)((^|[^a-z0-9_./-])(todo|fixme|hack|xxx)($|[^a-z0-9_])|[./-](todo|fixme|hack|xxx)($|[^a-z0-9_./-]|[./-]($|[^a-z0-9])))"
@@ -24,11 +22,6 @@ rules:
     scope:
       include:
         - "**/*.dart"
-      exclude:
-        - ".formwork/**"
-        - "**/*.freezed.dart"
-        - "**/*.g.dart"
-        - "**/*.pb*.dart"
     preprocess: comments-only-dart
     params:
       pattern: "(?i)((^|[^a-z0-9_./-])(todo|fixme|hack|xxx)($|[^a-z0-9_])|[./-](todo|fixme|hack|xxx)($|[^a-z0-9_./-]|[./-]($|[^a-z0-9])))"
@@ -44,8 +37,6 @@ rules:
     scope:
       include:
         - "**/*.sql"
-      exclude:
-        - ".formwork/**"
     preprocess: comments-only-sql
     params:
       pattern: "(?i)((^|[^a-z0-9_./-])(todo|fixme|hack|xxx)($|[^a-z0-9_])|[./-](todo|fixme|hack|xxx)($|[^a-z0-9_./-]|[./-]($|[^a-z0-9])))"

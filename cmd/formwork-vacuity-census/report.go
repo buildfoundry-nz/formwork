@@ -94,17 +94,7 @@ func printProvenance(rows []row, cfg *config.Config, fset *scan.FileSet, gm *glo
 		fmt.Fprintf(stdout, "    (relation: disjoint, or the two sides drawn from overlapping globs. Blanking\n")
 		fmt.Fprintf(stdout, "     the b side cannot falsify either shape, so no verdict is claimed — #12180.)\n")
 	}
-	// Same obligation, one arm over: INERT-EXCEPT judges a literal except.paths
-	// entry by re-running the rule over the one file it names, and that probe is
-	// invalid for a heavy rule and misreads a relation. Those entries get no
-	// verdict, so the count is said out loud rather than folded into the arm's
-	// zero (#10777).
-	if n := undecidedExceptEntries(cfg, gm); n > 0 {
-		fmt.Fprintf(stdout, "  except.paths entries NOT decided here:         %d\n", n)
-		fmt.Fprintf(stdout, "    (heavy or relation rules: a one-file probe would shell out once per entry, or\n")
-		fmt.Fprintf(stdout, "     misread a relation an empty tree satisfies. No verdict is claimed — #10777.)\n")
-	}
-	// Same obligation again, for the name-anchored go types. DEAD-SYMBOL and
+	// Same obligation, one arm over, for the name-anchored go types. DEAD-SYMBOL and
 	// DEAD-SINK read an absent call site, which only condemns an anchor whose
 	// subject is declared nowhere; a package-qualified pattern names another
 	// package and the census has no type information to resolve it. Those rules

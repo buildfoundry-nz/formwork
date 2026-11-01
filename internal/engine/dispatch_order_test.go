@@ -305,7 +305,7 @@ func TestRunFindingsAreIdenticalUnderEveryDispatchOrder(t *testing.T) {
 	render := func(fds []finding.Finding) string {
 		var b strings.Builder
 		for _, fd := range fds {
-			fmt.Fprintf(&b, "%s\t%s\t%s\t%d\t%s\t%v\n", fd.RuleID, fd.Severity, fd.Path, fd.Line, fd.Message, fd.Suppressed)
+			fmt.Fprintf(&b, "%s\t%s\t%s\t%d\t%s\n", fd.RuleID, fd.Severity, fd.Path, fd.Line, fd.Message)
 		}
 		return b.String()
 	}

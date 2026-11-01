@@ -56,8 +56,7 @@ import (
 
 // existsDeclarations reports which rule ids carry the reviewed escape, read from
 // the rule files as TEXT because the marker is a comment and exists nowhere
-// else — the same reason `# glob-dead:` and `# except-declaration:` are read
-// this way.
+// else — the same reason `# glob-dead:` is read this way.
 //
 // It accepts the marker anywhere in the CONTIGUOUS comment block immediately
 // above the arm's `- id:` line, not solely on the line directly above. The two
@@ -103,7 +102,7 @@ func existsDeclarations(root string) (map[string]bool, error) {
 }
 
 // existsDeclaration is the in-place reviewed escape, matching the `# glob-dead:`
-// and `# except-declaration:` conventions this census already reads. A bare
+// convention this census already reads. A bare
 // marker with no reason declares nothing, the same non-empty-reason rule
 // `# glob-dead:` uses.
 const existsDeclaration = "# exists-multi-file:"

@@ -30,11 +30,11 @@ func TestEveryBuiltinRuleTypeIsRegistered(t *testing.T) {
 		// The NAME-anchored families. Each package registers several type
 		// names, and a census that resolves only the family it happens to know
 		// mis-classifies the rest as unknown types.
-		"dart/gate-reads-are-listened", "dart/method-delegates",
+		"dart/gate-reads-are-listened", "dart/marked-single-home", "dart/method-delegates",
 		"dart/numeric-field-validated", "dart/ref-after-await",
 		"go/call-confined-to-func-name", "go/call-order-in-func",
 		"go/func-line-budget", "go/guard-precedes-call",
-		"go/per-func-count-relation",
+		"go/marked-single-home", "go/per-func-count-relation",
 		"sql/locking-select-order", "sql/locking-target", "sql/parses",
 		"sql/statement-predicate",
 	} {
@@ -79,13 +79,12 @@ func TestWalkAndRunMeasureWithTheEnginesOwnScanner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	live := corpus.Unsuppressed(fds)
-	if len(live) != 1 {
-		t.Fatalf("got %d unsuppressed finding(s), want 1 — the rule must fire on "+
-			"exactly the planted subject", len(live))
+	if len(fds) != 1 {
+		t.Fatalf("got %d finding(s), want 1 — the rule must fire on "+
+			"exactly the planted subject", len(fds))
 	}
-	if !strings.Contains(live[0].Path, "subject.txt") {
-		t.Fatalf("finding on %q, want the planted subject", live[0].Path)
+	if !strings.Contains(fds[0].Path, "subject.txt") {
+		t.Fatalf("finding on %q, want the planted subject", fds[0].Path)
 	}
 }
 

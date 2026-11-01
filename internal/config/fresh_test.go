@@ -57,7 +57,7 @@ func TestFreshReturnsIndependentCheckers(t *testing.T) {
 }
 
 func TestFreshErrorsForConstructorBuiltRules(t *testing.T) {
-	r, err := config.New("hand-built", "fake", finding.SeverityError, "", []string{"**"}, nil, nil, nopChecker{})
+	r, err := config.New("hand-built", "fake", finding.SeverityError, "", []string{"**"}, nil, nopChecker{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -71,9 +71,12 @@ type forbidden struct {
 	requirePresent []lineMatcher // whole-file guards on `pattern` mode (RE2, linear)
 	ex             excusals
 	prefilter      string // if set, a file not containing this literal cannot match — skip cheaply
-	multiline      bool
-	denial         *denial // nil unless params.denied_by is set (#4)
-	window         int     // all_of only: 0 = whole-file co-occurrence; >0 = within this many consecutive lines
+	// autoLits is the gate derived from the pattern when no prefilter was
+	// declared (autoprefilter.go): a file containing none of them cannot match.
+	autoLits  []string
+	multiline bool
+	denial    *denial // nil unless params.denied_by is set (#4)
+	window    int     // all_of only: 0 = whole-file co-occurrence; >0 = within this many consecutive lines
 
 	// Pattern sources kept verbatim for the prefilter-implication analysis
 	// (implication.go): it re-parses them with regexp/syntax to decide whether
@@ -165,6 +168,9 @@ func newForbidden(params *yaml.Node) (rules.Checker, error) {
 		return nil, err
 	}
 	c.re = re
+	if p.Prefilter == "" {
+		c.autoLits = autoPrefilter(p.Pattern, p.Syntax)
+	}
 	for _, pat := range p.RequirePresent {
 		m, err := compileMatcher("forbidden-pattern require_present", pat, p.Syntax)
 		if err != nil {
@@ -233,7 +239,7 @@ func (c *forbidden) windowedAllOf(f *scan.File) ([]rules.Match, error) {
 
 // fileGuardsFail reports whether the whole-file require_present guards reject
 // this file (so the line-anchored pattern must not be reported). Credentials
-// (require_absent) are decided per line by holdsCredential, not here.
+// (require_absent) mask their declarations in homes, not here.
 // One linear scan per guard — the RE2 replacement for a backtracking lookaround.
 func (c *forbidden) fileGuardsFail(s string) (bool, error) {
 	for _, m := range c.requirePresent {
@@ -251,12 +257,9 @@ func (c *forbidden) fileGuardsFail(s string) (bool, error) {
 func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 	// Co-occurrence mode: cheap linear scans over whole content.
 	if len(c.allOf) > 0 {
-		held, err := c.ex.holdsCredential(f)
+		f, err := c.ex.homes(f) // a held none_of credential's declaration is masked, and counted
 		if err != nil {
 			return nil, err
-		}
-		if held {
-			return nil, nil // a none_of credential is held → excused, and counted
 		}
 		content, err := f.Content()
 		if err != nil {
@@ -297,7 +300,7 @@ func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 	// cross-line block/co-occurrence can match (spec §5). Reports one finding at
 	// the line where the first match starts.
 	if c.multiline {
-		held, err := c.ex.holdsCredential(f)
+		f, err := c.ex.homes(f)
 		if err != nil {
 			return nil, err
 		}
@@ -309,7 +312,7 @@ func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 		if c.prefilter != "" && !strings.Contains(s, c.prefilter) {
 			return nil, nil // cheap literal gate — skip the backtracking regex
 		}
-		if held {
+		if len(c.autoLits) > 0 && !containsAny(s, c.autoLits) {
 			return nil, nil
 		}
 		fail, err := c.fileGuardsFail(s)
@@ -362,21 +365,21 @@ func (c *forbidden) CheckFile(f *scan.File) ([]rules.Match, error) {
 	// Credentials are counted BEFORE the prefilter gate: a holder in a file the
 	// prefilter skips is still a holder, and an uncounted holder is exactly the
 	// forgery the count exists to catch.
-	held, err := c.ex.holdsCredential(f)
+	f, err := c.ex.homes(f)
 	if err != nil {
 		return nil, err
 	}
-	if held {
-		return nil, nil
-	}
 	guarded := len(c.requirePresent) > 0 || len(c.ex.credentials) > 0 || len(c.ex.evidence) > 0
-	if c.prefilter != "" || len(c.requirePresent) > 0 {
+	if c.prefilter != "" || len(c.autoLits) > 0 || len(c.requirePresent) > 0 {
 		content, err := f.Content()
 		if err != nil {
 			return nil, err
 		}
 		s := string(content)
 		if c.prefilter != "" && !strings.Contains(s, c.prefilter) {
+			return nil, nil
+		}
+		if len(c.autoLits) > 0 && !containsAny(s, c.autoLits) {
 			return nil, nil
 		}
 		if len(c.requirePresent) > 0 {

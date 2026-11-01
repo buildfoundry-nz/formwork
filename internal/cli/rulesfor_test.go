@@ -114,21 +114,6 @@ func equalStringSets(a, b []string) bool {
 	return true
 }
 
-func TestRulesForRespectsExceptPaths(t *testing.T) {
-	// src/clean.txt is carved out via except.paths — the display must agree
-	// with the verdict Applies() would give, or guidance lies.
-	code, out, _ := runCLI(t, "rules-for", "-C", filepath.Join("testdata", "toyrepo"), "src/clean.txt")
-	if code != 0 {
-		t.Fatalf("exit %d:\n%s", code, out)
-	}
-	if strings.Contains(out, "no-todo-markers") {
-		t.Fatalf("except.paths carve-out ignored:\n%s", out)
-	}
-	if !strings.Contains(out, "none") {
-		t.Fatalf("zero governing rules must be explicit, not silent:\n%s", out)
-	}
-}
-
 func TestRulesForNonexistentPathIsNotAnError(t *testing.T) {
 	// Scope is a glob question, not a filesystem question: guidance is asked
 	// about files the agent is ABOUT to create.
@@ -189,17 +174,20 @@ func TestRulesForJSONGroupsByPath(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	var got []struct {
-		Path  string `json:"path"`
-		Rules []struct {
-			ID       string `json:"id"`
-			Severity string `json:"severity"`
-			Cure     string `json:"cure"`
-		} `json:"rules"`
+	var doc struct {
+		Paths []struct {
+			Path  string `json:"path"`
+			Rules []struct {
+				ID       string `json:"id"`
+				Severity string `json:"severity"`
+				Cure     string `json:"cure"`
+			} `json:"rules"`
+		} `json:"paths"`
 	}
-	if err := json.Unmarshal([]byte(out), &got); err != nil {
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
 	}
+	got := doc.Paths
 	if len(got) != 2 || got[0].Path != "README.md" || got[1].Path != "src/notes.txt" {
 		t.Fatalf("paths not in argv order: %+v", got)
 	}
@@ -298,18 +286,21 @@ scan:
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	var got []struct {
-		Path       string `json:"path"`
-		Rules      []any  `json:"rules"`
-		NotScanned *struct {
-			By     string `json:"by"`
-			Glob   string `json:"glob"`
-			Reason string `json:"reason"`
-		} `json:"not_scanned"`
+	var doc struct {
+		Paths []struct {
+			Path       string `json:"path"`
+			Rules      []any  `json:"rules"`
+			NotScanned *struct {
+				By     string `json:"by"`
+				Glob   string `json:"glob"`
+				Reason string `json:"reason"`
+			} `json:"not_scanned"`
+		} `json:"paths"`
 	}
-	if err := json.Unmarshal([]byte(out), &got); err != nil {
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
 	}
+	got := doc.Paths
 	if len(got) != 1 || got[0].NotScanned == nil || got[0].NotScanned.Glob != "vendor/**" || got[0].NotScanned.Reason != "vendored, not ours" || len(got[0].Rules) != 0 {
 		t.Fatalf("not_scanned must be structural with empty rules: %+v", got[0])
 	}
@@ -376,28 +367,6 @@ func TestRulesForCanonicalizesCaseOnInsensitiveFS(t *testing.T) {
 	}
 	if !strings.Contains(out, "src/notes.txt") {
 		t.Fatalf("answer must be framed at the on-disk spelling:\n%s", out)
-	}
-}
-
-func TestRulesForAllowlistedPathShowsSuppression(t *testing.T) {
-	// Finding 4: an allowlisted path IS governed but every finding there is
-	// suppressed — display must carry the suppression like the engine does
-	// (finding.SuppressedBy), not report bare governance.
-	root := explainRepo(t)
-	code, out, _ := runCLI(t, "rules-for", "-C", root, "internal/old/db.go")
-	if code != 0 {
-		t.Fatalf("exit %d:\n%s", code, out)
-	}
-	if !strings.Contains(out, "guard-pool") {
-		t.Fatalf("allowlisted path is still governed; rule must be listed:\n%s", out)
-	}
-	if !strings.Contains(out, "suppressed") || !strings.Contains(out, "allowlists/pool.txt") {
-		t.Fatalf("suppression must be disclosed with the allowlist file:\n%s", out)
-	}
-	// JSON: structural field, matching the engine's SuppressedBy shape.
-	code, jout, _ := runCLI(t, "rules-for", "-C", root, "-format", "json", "internal/old/db.go")
-	if code != 0 || !strings.Contains(jout, `"suppressed_by"`) {
-		t.Fatalf("JSON must carry suppressed_by (exit %d):\n%s", code, jout)
 	}
 }
 

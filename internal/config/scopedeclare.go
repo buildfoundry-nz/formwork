@@ -38,66 +38,113 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/buildfoundry-nz/formwork/internal/declspan"
 	"gopkg.in/yaml.v3"
 )
 
-// parseNotDeclaring decodes the scope.not_declaring node: a sequence of literal
-// markers. An absent key yields nil — the behaviour that predates it.
+// DeclaringEntry is one scope.not_declaring entry: a literal marker and the
+// exact number of places in the rule's scope that declare it.
+type DeclaringEntry struct {
+	Marker  string
+	Holders int
+}
+
+// Home is one declaration a not_declaring marker opens in a file: the entry's
+// index in NotDeclaringEntries and the lines the declaration spans.
+type Home struct {
+	Entry int
+	Span  declspan.Span
+}
+
+// parseNotDeclaring decodes the scope.not_declaring node: a sequence of
+// {marker, holders} entries. An absent key yields nil.
 //
 // Every failure mode here is an edit that did not finish, and the alternative
 // to refusing it is a rule that silently judges (or silently skips) a class the
 // author thought they had named:
 //
-//   - a non-sequence node, including a bare string, because `not_declaring:
-//     "Code generated"` reads as one marker to a human and decodes to a
-//     different shape;
-//   - a non-scalar entry;
-//   - an empty or whitespace-only marker, which `bytes.Contains` matches in
-//     EVERY file — a rule scoped to nothing at all, the fail-open direction.
-func parseNotDeclaring(n yaml.Node) ([]string, error) {
+//   - a non-sequence node, including a bare string;
+//   - a bare-string entry, the pre-0.14 shape: an unpinned marker lets any file
+//     that copies it remove a declaration of its own from the rule, so every
+//     entry declares holders, the exact count of places that declare it;
+//   - an empty or whitespace-only marker, which matches EVERY file;
+//   - holders below 1, a marker nothing declares, which removes nothing.
+func parseNotDeclaring(n yaml.Node) ([]DeclaringEntry, error) {
 	if n.Kind == 0 {
 		return nil, nil
 	}
 	if n.Kind != yaml.SequenceNode {
-		return nil, fmt.Errorf("want a sequence of literal markers, got kind %v", n.Kind)
+		return nil, fmt.Errorf("want a sequence of {marker, holders} entries, got kind %v", n.Kind)
 	}
-	out := make([]string, 0, len(n.Content))
+	out := make([]DeclaringEntry, 0, len(n.Content))
 	for _, item := range n.Content {
-		if item.Kind != yaml.ScalarNode {
-			return nil, fmt.Errorf("entry must be a string marker, got kind %v", item.Kind)
+		if item.Kind != yaml.MappingNode {
+			return nil, fmt.Errorf("entry must be {marker, holders}, got kind %v: an unpinned marker lets any file that copies it remove a declaration of its own", item.Kind)
 		}
-		if strings.TrimSpace(item.Value) == "" {
-			return nil, fmt.Errorf("entry is empty; an empty marker matches every file, which scopes the rule to nothing")
+		var e struct {
+			Marker  string `yaml:"marker"`
+			Holders *int   `yaml:"holders"`
 		}
-		out = append(out, item.Value)
+		if err := item.Decode(&e); err != nil {
+			return nil, err
+		}
+		for i := 0; i+1 < len(item.Content); i += 2 {
+			if k := item.Content[i].Value; k != "marker" && k != "holders" {
+				return nil, fmt.Errorf("entry has unknown key %q; want {marker, holders}", k)
+			}
+		}
+		if strings.TrimSpace(e.Marker) == "" {
+			return nil, fmt.Errorf("entry marker is empty; an empty marker matches every file, which scopes the rule to nothing")
+		}
+		if e.Holders == nil {
+			return nil, fmt.Errorf("entry %q: holders is required: the exact number of places in scope that declare it", e.Marker)
+		}
+		if *e.Holders < 1 {
+			return nil, fmt.Errorf("entry %q: holders must be >= 1, got %d: a marker nothing declares removes nothing; delete it", e.Marker, *e.Holders)
+		}
+		out = append(out, DeclaringEntry{Marker: e.Marker, Holders: *e.Holders})
 	}
 	return out, nil
 }
 
-// NotDeclaring returns this rule's scope.not_declaring markers (read-only; do
-// not mutate). Empty when the rule declares none. Used by the escape-hatch
-// census so the key is never a silent subtraction.
+// NotDeclaring returns this rule's scope.not_declaring markers, in entry order.
+// Empty when the rule declares none. Used by the escape-hatch census so the
+// key is never a silent subtraction.
 func (r *Rule) NotDeclaring() []string {
-	return r.notDeclaring
+	out := make([]string, len(r.notDeclaring))
+	for i, e := range r.notDeclaring {
+		out[i] = e.Marker
+	}
+	return out
 }
 
-// DeclinedBy reports which scope.not_declaring marker removed a file with this
-// content from the rule's evaluation, and whether any did.
+// NotDeclaringEntries returns the {marker, holders} entries (read-only).
+func (r *Rule) NotDeclaringEntries() []DeclaringEntry { return r.notDeclaring }
+
+// Homes returns every declaration in content that one of the rule's
+// not_declaring markers opens: one Home per occurrence of a marker, spanning
+// the declaration that begins on the occurrence's first line (declspan). The
+// engine masks those lines before the rule reads the file, so the home is
+// removed and every other line of the file is judged.
 //
 // Content, not path: this is the one scope test that cannot be answered from a
-// file name. Callers hold the bytes already — the engine reads every file it
-// evaluates — so this costs a substring scan, and only for rules that declare
-// the key.
-//
-// The marker is matched as a LITERAL, not a pattern. A generator's line is
-// fixed text it emits verbatim, and a regexp here would make the difference
-// between "declares this" and "mentions this" depend on metacharacters nobody
-// intended to write.
-func (r *Rule) DeclinedBy(content []byte) (string, bool) {
-	for _, m := range r.notDeclaring {
-		if bytes.Contains(content, []byte(m)) {
-			return m, true
+// file name. The marker is matched as a LITERAL, not a pattern: a declaration
+// is fixed text, and a regexp would make the difference between "declares
+// this" and "mentions this" depend on metacharacters nobody meant.
+func (r *Rule) Homes(path string, content []byte) []Home {
+	var out []Home
+	for i, e := range r.notDeclaring {
+		m := []byte(e.Marker)
+		for off := 0; ; {
+			j := bytes.Index(content[off:], m)
+			if j < 0 {
+				break
+			}
+			at := off + j
+			line := 1 + bytes.Count(content[:at], []byte("\n"))
+			out = append(out, Home{Entry: i, Span: declspan.Extent(path, content, line)})
+			off = at + len(m)
 		}
 	}
-	return "", false
+	return out
 }

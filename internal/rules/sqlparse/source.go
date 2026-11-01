@@ -81,33 +81,41 @@ type parseFailure struct {
 // internal-contract change only; sql/parses' observable findings (and the set
 // of things it would have reported) are unchanged.
 func statements(f *scan.File) ([]Stmt, []parseFailure, error) {
+	stmts, fails, _, err := statementsWithSites(f)
+	return stmts, fails, err
+}
+
+// statementsWithSites is statements plus the SQL compositions in a .go file
+// FromGo could not read (SQLBearingSites), which sql/parses fails closed on.
+func statementsWithSites(f *scan.File) ([]Stmt, []parseFailure, []sqlextract.Site, error) {
 	switch sqlextract.FileKind(f.Path()) {
 	case "sql":
 		content, err := f.Content()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		return parseChunk(string(content), 1, 0, false, candidateRisks{})
+		stmts, fails, err := parseChunk(string(content), 1, 0, false, candidateRisks{})
+		return stmts, fails, nil, err
 	case "go":
 		content, err := f.Content()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		// The unresolved Sites are discarded here and the Partial fragments they
-		// explain are skipped just below, so an unreassemblable composition
-		// leaves no trace in THIS RULE's output — by design (#75). Coverage
-		// gaps are lint's to report: its escape-hatch census asks THIS
-		// extractor the same question over the files this rule governs and
-		// enumerates each one with its reason. A rule that failed on unreadable
-		// SQL would fail on ordinary dynamic SQL nobody meant to police.
+		// The unresolved Sites are RETURNED, and the rule fails on each that
+		// carries SQL. They were discarded here (#75), on the reasoning that a
+		// rule failing on unreadable SQL would fail on ordinary dynamic SQL
+		// nobody meant to police, and the census listed them instead. But a
+		// census line is not a verdict: a statement the rule could not read
+		// passed `check` unjudged, and the rule's guarantee held only for the
+		// SQL that happened to be written readably. Since the extractor reads
+		// every Go constant (consts.go), what remains unread is SQL whose text
+		// is decided at run time, and the rule cannot vouch for it.
 		//
-		// "This extractor" is load-bearing and was not true of the census until
-		// #311: it asked FromGo for every rule spelled `sql/`, which is right
-		// here and wrong for the two locking types, whose limits are the fold's
-		// and not FromGo's. CensusSites (unreadable.go) owns that mapping now.
-		cands, _, err := sqlextract.FromGo(f.Path(), content)
+		// The Partial fragments those sites explain are still skipped just
+		// below: a fragment is not a statement, and the site is the finding.
+		cands, sites, err := sqlextract.FromGoIn(f.Tree(), f.Path(), content)
 		if err != nil {
-			return nil, nil, err // Go AST parse failure ⇒ exit 2
+			return nil, nil, nil, err // Go AST parse failure ⇒ exit 2
 		}
 		var stmts []Stmt
 		var fails []parseFailure
@@ -131,9 +139,9 @@ func statements(f *scan.File) ([]Stmt, []parseFailure, error) {
 			stmts = append(stmts, cs...)
 			fails = append(fails, cf...)
 		}
-		return stmts, fails, nil
+		return stmts, fails, SQLBearingSites(sites), nil
 	default:
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 }
 
@@ -200,7 +208,7 @@ func lockingStatements(f *scan.File) ([]Stmt, error) {
 		// the same extractor for the #75 census, so the fold's coverage limits
 		// reach an operator through the channel built for them rather than as a
 		// finding on ordinary dynamic SQL nobody meant to police (#311).
-		cands, _, err := sqlextract.FromGoReassembled(f.Path(), content)
+		cands, _, err := sqlextract.FromGoReassembledIn(f.Tree(), f.Path(), content)
 		if err != nil {
 			return nil, err // Go AST parse failure ⇒ exit 2 — always checked first
 		}

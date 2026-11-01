@@ -592,7 +592,8 @@ corpus-disclosure-proof:
 # not, and the asymmetry is deliberate — but not for the reason this comment
 # gave until #324. It said palletra-port-full's TREE legitimately carries 91
 # findings. That tree carries nothing: `formwork check -C
-# examples/palletra-port-full` opens with `scan: 0 file(s) scanned`, and every
+# examples/palletra-port-full` opens with `scan: 618 file(s) scanned` — every one
+# the corpus's own .formwork, none of them source — and every
 # figure in the next two sentences is re-derived from that same run by
 # `corpus-disclosure-proof` above. Of the 91 findings, 87 are command-rule
 # findings — each one a detector this corpus does not carry and cannot, so the

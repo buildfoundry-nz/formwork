@@ -267,6 +267,9 @@ func intersection(a, b map[string]bool) []string {
 // elements from either side and false-reports the relation (#4).
 func (c *setRelation) WholeTreeInvariant() bool { return true }
 
+// ScopeBound is true: both sets are built from in-scope files in CheckFile.
+func (c *setRelation) ScopeBound() bool { return true }
+
 func init() {
 	rules.Register("set-relation", newSetRelation)
 }

@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-dart-footer-flip-seam-owns-notifier-clear.sh (#3872 /
 # #4628), RULE A — only the footer-flip seam file may read the optimistic
 # primary-action notifier; any leaf under packages/feature_dimension/lib or
@@ -32,10 +35,6 @@ rules:
         - "**/*.pb.dart"
         - "**/*.pbenum.dart"
         - "**/*.pbjson.dart"
-    except:
-      paths:
-        - "packages/plt_canvas_kit/lib/measure/providers/footer_session_toggle.dart"
-        - "packages/feature_dimension/lib/providers/footer_session_toggle.dart"
     params:
       pattern: 'plotOptimisticPrimaryActionProvider\([^)]*\)\.notifier'
     cure: "Route optimistic show/clear through the footer-flip seam (runWithFooterToggle / publishFooterToggle / resetFooterFlip) so a throw always clears the override; a leaf must not read plotOptimisticPrimaryActionProvider(...).notifier (#4628)."

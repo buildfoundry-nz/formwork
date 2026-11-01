@@ -18,13 +18,16 @@ func TestUnderBuiltinSkipDirExcludesTheLeaf(t *testing.T) {
 		underAny bool
 	}{
 		{"src/a.go", false, false},
-		{".formwork/rules/r.yaml", true, true},
+		// The governance the walk reads since #24467 item 9, and the fixtures
+		// it still prunes.
+		{".formwork/rules/r.yaml", false, false},
+		{".formwork/fixtures/r/fire-1/a.go", true, true},
 		{"a/.git/config", true, true},
-		// The leaf cases: a FILE with a skip-directory's name.
-		{".formwork", false, true},
+		// The leaf cases: a FILE at a skip directory's path.
+		{".formwork/fixtures", false, true},
 		{"sub/.git", false, true},
 		// A skip ancestor still wins over a skip-named leaf.
-		{".formwork/.formwork", true, true},
+		{".formwork/fixtures/.git", true, true},
 		// A NESTED .formwork is not in the set at all since #268 — neither as
 		// a leaf nor as an ancestor — so this row now says false twice for a
 		// reason that has nothing to do with the leaf distinction above.

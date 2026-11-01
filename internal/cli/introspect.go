@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
@@ -69,15 +70,50 @@ func introspectFormat(f string, stderr io.Writer) bool {
 }
 
 func emitJSON(w, stderr io.Writer, v any) int {
-	out, err := json.MarshalIndent(v, "", "  ")
+	return emitJSONIndent(w, stderr, v, "  ")
+}
+
+func emitJSONLine(w, stderr io.Writer, v any) int {
+	return emitJSONIndent(w, stderr, v, "")
+}
+
+func emitJSONIndent(w, stderr io.Writer, v any, indent string) int {
+	// Every -format json answer is one object: a list is a named member of
+	// it, never the document itself. A bare top-level array is a shape no
+	// declared message decodes without framing it in code, which is what
+	// every consumer used to do.
+	if k := reflect.ValueOf(v).Kind(); k != reflect.Struct && k != reflect.Pointer {
+		fmt.Fprintf(stderr, "formwork: rendering json: a %s is not a document; wrap it in an object\n", k)
+		return 2
+	}
+	var out []byte
+	var err error
+	if indent == "" {
+		out, err = json.Marshal(v)
+	} else {
+		out, err = json.MarshalIndent(v, "", indent)
+	}
 	if err != nil {
 		// Unreachable with the fixed-field structs marshaled today, but an
 		// exit 2 must never be mute (fail-open review finding 4).
 		fmt.Fprintf(stderr, "formwork: rendering json: %v\n", err)
 		return 2
 	}
-	fmt.Fprintln(w, string(out))
+	if _, err := fmt.Fprintln(w, string(out)); err != nil {
+		fmt.Fprintf(stderr, "formwork: writing json: %v\n", err)
+		return 2
+	}
 	return 0
+}
+
+// ruleList is `list rules` JSON output: the rules, sorted by id.
+type ruleList struct {
+	Rules []ruleRow `json:"rules"`
+}
+
+// laneList is `list lanes` JSON output: the lanes, sorted by name.
+type laneList struct {
+	Lanes []laneRow `json:"lanes"`
 }
 
 // ruleRow is one rule in `list rules` JSON output.
@@ -136,9 +172,9 @@ func runList(args []string, stdout, stderr io.Writer) int {
 	}
 	switch kind := fs.Arg(0); kind {
 	case "types":
-		return listStrings(stdout, stderr, *format, rules.TypeNames())
+		return listStrings(stdout, stderr, *format, namesDoc{Types: rules.TypeNames()}, rules.TypeNames())
 	case "preprocessors":
-		return listStrings(stdout, stderr, *format, preprocess.Names())
+		return listStrings(stdout, stderr, *format, namesDoc{Preprocessors: preprocess.Names()}, preprocess.Names())
 	case "rules":
 		cfg, ok := loadGatedNonEmpty(*root, "there is nothing to enumerate and an empty list would read as \"this repository declares no guardrails\"", stderr)
 		if !ok {
@@ -153,7 +189,7 @@ func runList(args []string, stdout, stderr io.Writer) int {
 			})
 		}
 		if *format == "json" {
-			return emitJSON(stdout, stderr, rows)
+			return emitJSON(stdout, stderr, ruleList{Rules: rows})
 		}
 		for _, row := range rows {
 			pre := row.Preprocess
@@ -177,7 +213,7 @@ func runList(args []string, stdout, stderr io.Writer) int {
 			rows = append(rows, laneRow{Name: l.Name, All: l.All, Tags: l.Tags, Cost: l.Cost, CI: l.CI, Shape: "list-lane"})
 		}
 		if *format == "json" {
-			return emitJSON(stdout, stderr, rows)
+			return emitJSON(stdout, stderr, laneList{Lanes: rows})
 		}
 		for _, row := range rows {
 			sel := "all"
@@ -207,31 +243,29 @@ type excludeOut struct {
 	Comment string `json:"comment,omitempty"`
 }
 
-// allowlistOut is a rule's allowlist file plus its entry paths.
-type allowlistOut struct {
-	File    string   `json:"file"`
-	Entries []string `json:"entries"`
+// declOut is one scope.not_declaring entry: the marker and its pinned holders.
+type declOut struct {
+	Marker  string `json:"marker"`
+	Holders int    `json:"holders"`
 }
 
 // explainOut is the full JSON rendering of one rule.
 type explainOut struct {
-	ID          string        `json:"id"`
-	Type        string        `json:"type"`
-	Severity    string        `json:"severity"`
-	Cost        string        `json:"cost"`
-	Preprocess  string        `json:"preprocess,omitempty"`
-	Include     []string      `json:"include"`
-	Exclude     []excludeOut  `json:"exclude,omitempty"`
-	MinFiles    int           `json:"min_files,omitempty"`
-	ExceptPaths []string      `json:"except_paths,omitempty"`
-	Marker      bool          `json:"marker"`
-	Allowlist   *allowlistOut `json:"allowlist,omitempty"`
-	Params      any           `json:"params,omitempty"`
-	Cure        string        `json:"cure,omitempty"`
-	Origin      string        `json:"origin,omitempty"`
-	Tags        []string      `json:"tags,omitempty"`
-	Lanes       []string      `json:"lanes"`
-	Fixtures    []string      `json:"fixtures"`
+	ID           string       `json:"id"`
+	Type         string       `json:"type"`
+	Severity     string       `json:"severity"`
+	Cost         string       `json:"cost"`
+	Preprocess   string       `json:"preprocess,omitempty"`
+	Include      []string     `json:"include"`
+	Exclude      []excludeOut `json:"exclude,omitempty"`
+	NotDeclaring []declOut    `json:"not_declaring,omitempty"`
+	MinFiles     int          `json:"min_files,omitempty"`
+	Params       any          `json:"params,omitempty"`
+	Cure         string       `json:"cure,omitempty"`
+	Origin       string       `json:"origin,omitempty"`
+	Tags         []string     `json:"tags,omitempty"`
+	Lanes        []string     `json:"lanes"`
+	Fixtures     []string     `json:"fixtures"`
 }
 
 func runExplain(args []string, stdout, stderr io.Writer) int {
@@ -274,19 +308,15 @@ func runExplain(args []string, stdout, stderr io.Writer) int {
 	out := explainOut{
 		ID: rule.ID, Type: rule.Type, Severity: string(rule.Severity),
 		Cost: string(rule.Cost()), Preprocess: rule.Preprocess,
-		Include: rule.Include(), MinFiles: rule.MinFiles(), ExceptPaths: rule.ExceptPaths,
-		Marker: rule.Marker, Cure: rule.Cure, Origin: rule.Origin,
+		Include: rule.Include(), MinFiles: rule.MinFiles(),
+		Cure: rule.Cure, Origin: rule.Origin,
 		Tags: rule.Tags, Lanes: lanesOf(cfg, rule), Fixtures: fixtures,
 	}
 	for _, e := range rule.ExcludeEntries() {
 		out.Exclude = append(out.Exclude, excludeOut{Glob: e.Glob, Comment: e.Comment})
 	}
-	if rule.Allowlist != nil {
-		al := &allowlistOut{File: rule.Allowlist.File, Entries: make([]string, 0, len(rule.Allowlist.Entries))}
-		for _, e := range rule.Allowlist.Entries {
-			al.Entries = append(al.Entries, e.Path)
-		}
-		out.Allowlist = al
+	for _, e := range rule.NotDeclaringEntries() {
+		out.NotDeclaring = append(out.NotDeclaring, declOut{Marker: e.Marker, Holders: e.Holders})
 	}
 	// Both params renderings are guarded HERE, before the format branch, so
 	// neither format can ever print a rule with silently-missing params — a
@@ -338,24 +368,17 @@ func renderExplain(w io.Writer, paramsYAML string, out explainOut) int {
 			}
 		}
 	}
+	if len(out.NotDeclaring) > 0 {
+		fmt.Fprintln(w, "  not_declaring:")
+		for _, e := range out.NotDeclaring {
+			fmt.Fprintf(w, "    - {marker: %q, holders: %d}\n", e.Marker, e.Holders)
+		}
+	}
 	// Omitted when unset, like every other optional field this renderer prints
 	// (the JSON field is omitempty for the same reason): `min_files: 0` is the
 	// absence of a floor, and a line saying so would read as a configured one.
 	if out.MinFiles > 0 {
 		fmt.Fprintf(w, "  min_files: %d\n", out.MinFiles)
-	}
-	if len(out.ExceptPaths) > 0 || out.Marker || out.Allowlist != nil {
-		fmt.Fprintln(w, "except:")
-		if len(out.ExceptPaths) > 0 {
-			fmt.Fprintln(w, "  paths:")
-			for _, p := range out.ExceptPaths {
-				fmt.Fprintf(w, "    - %s\n", p)
-			}
-		}
-		fmt.Fprintf(w, "  marker: %v\n", out.Marker)
-		if out.Allowlist != nil {
-			fmt.Fprintf(w, "  allowlist: %s (%d entries)\n", out.Allowlist.File, len(out.Allowlist.Entries))
-		}
 	}
 	if paramsYAML != "" {
 		fmt.Fprintln(w, "params:")
@@ -400,9 +423,16 @@ func fixtureDirs(root, id string) ([]string, error) {
 	return out, nil
 }
 
-func listStrings(w, stderr io.Writer, format string, names []string) int {
+// namesDoc is `list types` or `list preprocessors` JSON output: the one
+// member the listing fills.
+type namesDoc struct {
+	Types         []string `json:"types,omitempty"`
+	Preprocessors []string `json:"preprocessors,omitempty"`
+}
+
+func listStrings(w, stderr io.Writer, format string, doc namesDoc, names []string) int {
 	if format == "json" {
-		return emitJSON(w, stderr, names)
+		return emitJSON(w, stderr, doc)
 	}
 	for _, n := range names {
 		fmt.Fprintln(w, n)

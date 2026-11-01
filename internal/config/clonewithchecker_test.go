@@ -16,7 +16,7 @@ func (fakeChecker) CheckFile(*scan.File) ([]rules.Match, error) { return nil, ni
 func TestCloneWithChecker(t *testing.T) {
 	a, b := fakeChecker{"a"}, fakeChecker{"b"}
 	r, err := config.New("r1", "forbidden-pattern", finding.SeverityError, "cure",
-		[]string{"**/*.go"}, []string{"**/*_test.go"}, nil, a)
+		[]string{"**/*.go"}, []string{"**/*_test.go"}, a)
 	if err != nil {
 		t.Fatal(err)
 	}

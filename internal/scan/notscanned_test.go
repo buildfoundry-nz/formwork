@@ -25,7 +25,7 @@ func TestNotScannedByAttributesAtWalkOrder(t *testing.T) {
 	}
 
 	// Built-in shallower than a deeper glob match: builtin wins.
-	v = scan.NotScannedBy(".formwork/rules/gen/x.yaml", scan.Opts{Ignore: []string{"**/gen/**"}})
+	v = scan.NotScannedBy(".formwork/fixtures/r/gen/x.yaml", scan.Opts{Ignore: []string{"**/gen/**"}})
 	if !v.Hidden() || !v.Builtin {
 		t.Fatalf("builtin above glob: %+v, want builtin", v)
 	}

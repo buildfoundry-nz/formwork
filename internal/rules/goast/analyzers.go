@@ -243,6 +243,9 @@ func (c *callOrder) Finalize() []rules.Match {
 // matched", which is non-monotonic under file removal (spec §8).
 func (c *callOrder) WholeTreeInvariant() bool { return true }
 
+// ScopeBound is true: the anchors are matched in in-scope files in CheckFile.
+func (c *callOrder) ScopeBound() bool { return true }
+
 // ---------------------------------------------------------------------------
 // go/guard-precedes-call
 // ---------------------------------------------------------------------------
@@ -508,6 +511,9 @@ func (c *countRelation) Finalize() []rules.Match {
 // "no in-scope file matched" is non-monotonic under file removal, while the
 // per-func relation itself stays range-scopeable (spec §8).
 func (c *countRelation) WholeTreeInvariant() bool { return c.funcs != nil || c.reqSym != "" }
+
+// ScopeBound is true: the anchors are matched in in-scope files in CheckFile.
+func (c *countRelation) ScopeBound() bool { return true }
 
 // ---------------------------------------------------------------------------
 

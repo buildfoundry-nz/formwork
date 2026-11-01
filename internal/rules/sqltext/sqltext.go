@@ -68,11 +68,10 @@ type params struct {
 	Unread  string   `yaml:"unread"`
 }
 
-// unreadCensus is the value of params.unread that lists SQL the rule cannot read
-// in the lint census instead of failing on it. It is for a rule whose scope holds
-// statements composed at run time on purpose, where failing would demand a
-// rewrite the statement cannot take. The default fails: the part the rule cannot
-// read may be the table it selects on.
+// The values of params.unread. Fail is the default: the part the rule cannot read
+// may be the table it selects on. Census lists that SQL in the lint census
+// instead, for a rule whose scope holds statements composed at run time on
+// purpose, where failing would demand a rewrite the statement cannot take.
 const (
 	unreadFail   = "fail"
 	unreadCensus = "census"

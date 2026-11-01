@@ -935,7 +935,8 @@ function whose parameters and result are all `string` and whose body is one
 `return` — is read too: a call with constant arguments reads as what it builds,
 and the definition is judged once per argument set its callers pass.
 
-**`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
+**`sql/parses` and `sql/statement-predicate` fail closed**, unless a
+`sql/statement-predicate` rule names `unread: census`. A Go composition
 that carries SQL (a statement, a clause, or a SQL-only token such as a cast or
 `$1`) and has an operand that is not a constant — a variable, a call, a field —
 is a finding: `SQL could not be read (…), so this rule cannot judge it`. The

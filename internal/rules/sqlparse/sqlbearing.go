@@ -138,7 +138,7 @@ func opensWithClause(s string, token bool) bool {
 	for i < len(s) && isAlpha(s[i]) {
 		i++
 	}
-	if i == 0 || (i < len(s) && isWordChar(s[i])) {
+	if i == 0 || (i < len(s) && isWordChar(s[i])) || isLabel(s[i:]) {
 		return false
 	}
 	word := s[:i]
@@ -150,6 +150,13 @@ func opensWithClause(s string, token bool) bool {
 		return token
 	}
 	return word == up || token
+}
+
+// isLabel reports whether rest, what follows a word, makes that word a label:
+// "FROM: " is a cell caption. SQL writes neither a keyword's colon nor a label;
+// a cast is two colons, and a psql variable's sits after a space.
+func isLabel(rest string) bool {
+	return strings.HasPrefix(rest, ":") && !strings.HasPrefix(rest, "::")
 }
 
 // hasSQLToken reports whether s holds a token only SQL spells: a type cast

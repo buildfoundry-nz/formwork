@@ -11,6 +11,20 @@
   occurrence of the anchored symbol/sink) fail the arm and the rule, exit 1, by
   default. A corpus with such fixtures that passed before fails now; fix the
   fixture so it exercises the rule (#49).
+- **`sql/parses` and `sql/statement-predicate` read an integer hole.** A `%d`
+  verb, `strconv.Itoa`, `strconv.FormatInt` and `strconv.FormatUint` read as a
+  number, because an integer cannot carry statement text. A composition with no
+  other non-constant operand is now judged rather than reported as unread. A
+  hole that could carry text (`%s`, `%v`, `strconv.Quote`) stays unread. The
+  locking types' reassembly keeps its placeholder.
+- **`sql/parses` and `sql/statement-predicate` read a constant local and a
+  constant `strings.Join`.** A local declared with a value and never written
+  again reads as that value, and so does `strings.Join` over a `[]string` literal,
+  or a local holding one that nothing else uses. Any other write, `&x`, a range
+  target or a non-constant element stays unread. The locking types' reassembly
+  keeps its own fold.
+- **A keyword followed by a colon is a label, not SQL.** `"FROM: " + name` is no
+  longer reported as SQL the rule could not read.
 
 ### Added
 

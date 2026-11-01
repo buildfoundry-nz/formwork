@@ -186,7 +186,9 @@ func AccountedForByTheCensus(ruleType string) bool {
 // finding: the types sourcing through FromGo, which read only what they can
 // fold. The census lists unread SQL for the others alone — the locking pair,
 // which reads a composition through placeholder reassembly and declines only
-// the shapes the fold cannot follow.
+// the shapes the fold cannot follow. This is the type's answer: a
+// sql/statement-predicate rule can name `unread: census`, and its checker's
+// FailsOnUnread decides for that rule.
 func FailsClosed(ruleType string) bool { return fromGoTypes[ruleType] }
 
 // UnreadableMatch is the finding a SQL rule reports for SQL in its scope that

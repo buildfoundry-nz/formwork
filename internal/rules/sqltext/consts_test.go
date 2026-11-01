@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 )
 
@@ -88,5 +89,40 @@ func TestARuleScopedToATemplatesPackageJudgesItsInstances(t *testing.T) {
 	ms := check(t, c, walked(t, "store/frag.go", files))
 	if len(ms) != 1 || ms[0].Line != 4 || strings.Contains(ms[0].Message, "could not be read") {
 		t.Fatalf("want the instance judged at the definition (line 4): %+v", ms)
+	}
+}
+
+// A rule whose statements are composed at run time on purpose can name that:
+// unread SQL then stays out of its findings, and the lint census lists it. What
+// the rule can read, it still judges.
+func TestUnreadCensusStillJudgesWhatItCanRead(t *testing.T) {
+	files := map[string]string{
+		"go.mod": "module example.com/m\n\ngo 1.22\n",
+		"db/q.go": "package db\n\n" +
+			"func Dynamic(tbl string) string { return \"SELECT id FROM \" + tbl + \" WHERE org_id = $1\" }\n\n" +
+			"func Readable() string { return \"SELECT id FROM takeoffqs.boqs\" }\n",
+	}
+	strict := check(t, mustChecker(t, "table: 'takeoffqs\\.boqs'\nrequire:\n  - 'org_id'\n"), walked(t, "db/q.go", files))
+	if len(strict) != 2 {
+		t.Fatalf("the default fails on the unread composition and the readable statement: %+v", strict)
+	}
+	census := check(t, mustChecker(t, "table: 'takeoffqs\\.boqs'\nrequire:\n  - 'org_id'\nunread: census\n"), walked(t, "db/q.go", files))
+	if len(census) != 1 || census[0].Line != 5 || strings.Contains(census[0].Message, "could not be read") {
+		t.Fatalf("want only the readable statement's finding (line 5): %+v", census)
+	}
+	explicit := check(t, mustChecker(t, "table: 'takeoffqs\\.boqs'\nrequire:\n  - 'org_id'\nunread: fail\n"), walked(t, "db/q.go", files))
+	if len(explicit) != 2 {
+		t.Fatalf("unread: fail is the default: %+v", explicit)
+	}
+}
+
+func TestUnreadRefusesAnyOtherValue(t *testing.T) {
+	factory, ok := rules.Lookup("sql/statement-predicate")
+	if !ok {
+		t.Fatal(`type "sql/statement-predicate" not registered`)
+	}
+	_, err := factory(paramsNode(t, "table: 't'\nrequire:\n  - 'x'\nunread: ignore\n"))
+	if err == nil || !strings.Contains(err.Error(), "params.unread") {
+		t.Fatalf("an unknown unread mode must be refused, err = %v", err)
 	}
 }

@@ -65,13 +65,28 @@ type params struct {
 	Table   string   `yaml:"table"`
 	Require []string `yaml:"require"`
 	Forbid  []string `yaml:"forbid"`
+	Unread  string   `yaml:"unread"`
 }
 
+// The values of params.unread. Fail is the default: the part the rule cannot read
+// may be the table it selects on. Census lists that SQL in the lint census
+// instead, for a rule whose scope holds statements composed at run time on
+// purpose, where failing would demand a rewrite the statement cannot take.
+const (
+	unreadFail   = "fail"
+	unreadCensus = "census"
+)
+
 type predicate struct {
-	table   *regexp.Regexp
-	require []*regexp.Regexp
-	forbid  []*regexp.Regexp
+	table      *regexp.Regexp
+	require    []*regexp.Regexp
+	forbid     []*regexp.Regexp
+	listUnread bool
 }
+
+// FailsOnUnread reports whether this rule fails on SQL it cannot read. The lint
+// census lists the sites of a rule that does not.
+func (c *predicate) FailsOnUnread() bool { return !c.listUnread }
 
 func compileAll(kind string, pats []string) ([]*regexp.Regexp, error) {
 	out := make([]*regexp.Regexp, 0, len(pats))
@@ -111,7 +126,12 @@ func newPredicate(node *yaml.Node) (rules.Checker, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &predicate{table: table, require: require, forbid: forbid}, nil
+	switch p.Unread {
+	case "", unreadFail, unreadCensus:
+	default:
+		return nil, fmt.Errorf("sql/statement-predicate: params.unread is %q, want %q or %q", p.Unread, unreadFail, unreadCensus)
+	}
+	return &predicate{table: table, require: require, forbid: forbid, listUnread: p.Unread == unreadCensus}, nil
 }
 
 // statement is one candidate SQL statement plus the source line it starts on.
@@ -149,8 +169,10 @@ func (c *predicate) CheckFile(f *scan.File) ([]rules.Match, error) {
 	// SQL the extractor could not read is a finding whatever table it names:
 	// the part it could not read may be the table, so no `table` pattern can
 	// clear it, and a statement the rule cannot select is one it cannot judge.
-	for _, s := range unread {
-		matches = append(matches, sqlparse.UnreadableMatch(s))
+	if !c.listUnread {
+		for _, s := range unread {
+			matches = append(matches, sqlparse.UnreadableMatch(s))
+		}
 	}
 	for _, s := range stmts {
 		if !c.table.MatchString(s.text) {

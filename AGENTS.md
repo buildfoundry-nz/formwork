@@ -74,7 +74,7 @@ or filter these rules. Full `check` is unchanged.
 **Self-testing.** `formwork test` (fire/pass fixtures, `want:` markers, `.want`
 manifests) and `formwork lint` (rules-present, fixture coverage, empty scope,
 lane reachability, command-trigger-armable, and more). Both take `--rule <id>`
-and fail closed on an unknown id — exit 2, never a vacuous pass.
+(`test` accepts several: repeated or comma-separated) and fail closed on an unknown id — exit 2, never a vacuous pass.
 
 **Introspection.** `formwork explain <rule-id>`, `formwork list
 rules|lanes|types|preprocessors`, `formwork rules-for <path>...`. Types and

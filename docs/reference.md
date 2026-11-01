@@ -978,6 +978,13 @@ regexes over the statement, and at least one of them is required. A `.go`
 composition it cannot read is a finding whatever its text names: the part it
 cannot read may be the table (see above).
 
+`unread` sets what happens to such a composition. `census` lists it in `formwork
+lint` instead of failing on it, and the rule still judges every statement it can read. It is for a rule whose
+scope holds statements composed at run time on purpose, such as a broad scope over
+a catalogue query whose guards a constant spelling would defeat. A statement hidden
+behind a hole is then not judged, so name it on a broad rule only when you accept
+that. `fail` is the default.
+
 `table` is an unanchored RE2 regex matched against the whole
 **statement text**, so it selects statements rather than naming a relation: a
 schema-qualified `app\.projects` works here, and matches any statement

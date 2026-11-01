@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- **`sql/statement-predicate` takes `unread: census`.** A rule naming it lists SQL
+  it cannot read in `formwork lint` instead of failing on it, and still judges
+  every statement it can read. The default stays `unread: fail`.
+
 ## 0.17.0
 
 ### Changed (breaking)

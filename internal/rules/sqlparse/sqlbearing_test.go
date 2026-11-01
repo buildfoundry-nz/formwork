@@ -35,6 +35,8 @@ func TestSQLBearingTellsComposedSQLFromProse(t *testing.T) {
 		"$1fw_expr",
 	}
 	prose := []string{
+		"FROM: fw_expr",
+		"SELECT: fw_expr",
 		"could not reach fw_expr: fw_expr",
 		"Nearly ready — fw_expr",
 		"fw_expr/works?filter=fw_expr&select=DOI,abstract&rows=fw_expr",

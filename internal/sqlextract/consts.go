@@ -352,6 +352,9 @@ func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, env map[stri
 		if inConst {
 			return "", false
 		}
+		if isIntegerFormat(v) {
+			return integerHole, true
+		}
 		return e.callTemplate(v, cf, env, depth)
 	}
 	return "", false

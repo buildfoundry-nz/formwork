@@ -259,8 +259,8 @@ func totalBanConfinement(allowedFunc string) bool {
 
 // AnchorHits recompiles r with override applied to its params and returns how
 // many findings the real engine produces over fs.
-// scope.exclude and except.paths are left as written: a symbol surviving only
-// in a path the rule excludes is invisible TO THE RULE.
+// scope.exclude is left as written: a symbol surviving only in a path the rule
+// excludes is invisible TO THE RULE.
 func AnchorHits(r *config.Rule, fs *scan.FileSet, override map[string]string) (int, error) {
 	checker, err := recompileWith(r, override)
 	if err != nil {

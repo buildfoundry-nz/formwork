@@ -121,6 +121,58 @@ func TestNotVacuousWhenTheRuleReachesAFile(t *testing.T) {
 	wantVerdict(t, v, vacuity.KindJudged, "")
 }
 
+// loadProductionRule is loadRule for a rule that says scope.subject: production,
+// which the loader refuses unless formwork.yaml declares the repository's test
+// code.
+func loadProductionRule(t *testing.T) *config.Rule {
+	t.Helper()
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		".formwork/formwork.yaml": "version: 1\ntests: ['**/*_test.go']\n",
+		".formwork/rules/r.yaml": `rules:
+  - id: production-ban
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include: ['**/*.go']
+      subject: production
+    params: { pattern: 'BANNED' }
+`,
+	})
+	cfg, err := config.Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Rules) != 1 {
+		t.Fatalf("want one rule, got %d", len(cfg.Rules))
+	}
+	return cfg.Rules[0]
+}
+
+// A production-subject rule reads no test code, so a clean fixture of only test
+// files is one it never looks at.
+func TestVacuousWhenAProductionRuleSeesOnlyCleanTestCode(t *testing.T) {
+	v, err := vacuity.Judge(loadProductionRule(t), walk(t, map[string]string{
+		"a_test.go": "package a\n\nvar y = fine\n",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantVerdict(t, v, vacuity.KindVacuous, vacuity.CodeVacuous)
+}
+
+// A real violation parked in test code holds scope.subject in place, exactly as
+// one parked at an excluded path holds an exclude.
+func TestNotVacuousWhenParkingAViolationInTestCodeUnderAProductionRule(t *testing.T) {
+	v, err := vacuity.Judge(loadProductionRule(t), walk(t, map[string]string{
+		"a_test.go": "package a\n\nvar y = BANNED\n",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantVerdict(t, v, vacuity.KindJudged, "")
+}
+
 // --- PASS-FIXTURE-BLIND (ported from the downstream census's passblind_test.go) ---
 
 const confinement = `

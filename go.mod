@@ -6,13 +6,13 @@ toolchain go1.26.4
 
 require gopkg.in/yaml.v3 v3.0.1
 
-require github.com/bmatcuk/doublestar/v4 v4.10.2
+require github.com/bmatcuk/doublestar/v4 v4.10.4
 
 require github.com/dlclark/regexp2 v1.12.0
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
-	github.com/pganalyze/pg_query_go/v6 v6.2.2
+	github.com/pganalyze/pg_query_go/v6 v6.2.5
 	github.com/wasilibs/go-pgquery v0.0.0-20260728010200-155ebad2880e
 )
 

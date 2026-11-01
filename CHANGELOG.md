@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`sql/parses` and `sql/statement-predicate` read an integer hole.** A `%d`
+  verb, `strconv.Itoa`, `strconv.FormatInt` and `strconv.FormatUint` read as a
+  number, because an integer cannot carry statement text. A composition with no
+  other non-constant operand is now judged rather than reported as unread. A
+  hole that could carry text (`%s`, `%v`, `strconv.Quote`) stays unread. The
+  locking types' reassembly keeps its placeholder.
+- **A keyword followed by a colon is a label, not SQL.** `"FROM: " + name` is no
+  longer reported as SQL the rule could not read.
+
 ## 0.16.0
 
 ### Added

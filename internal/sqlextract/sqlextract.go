@@ -246,6 +246,9 @@ func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate
 func stringValue(expr ast.Expr) (string, bool) {
 	switch v := expr.(type) {
 	case *ast.CallExpr:
+		if isIntegerFormat(v) {
+			return integerHole, true
+		}
 		return sprintValue(v)
 	case *ast.BasicLit:
 		if v.Kind != token.STRING {
@@ -273,6 +276,31 @@ func stringValue(expr ast.Expr) (string, bool) {
 		return l + r, true
 	}
 	return "", false
+}
+
+// integerHole is the text read for an operand that can only hold an integer: a
+// d verb, or a strconv integer format. An integer cannot carry statement text,
+// so the query around it parses as it will at run time and no predicate can have
+// a table hidden in it. A hole that could carry text stays unread: reading one
+// would let a table hide where a predicate believes it judged.
+const integerHole = "1"
+
+// isIntegerFormat reports whether call is strconv's Itoa, FormatInt or
+// FormatUint, on the package and not a local of that name.
+func isIntegerFormat(call *ast.CallExpr) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	if !ok || pkg.Name != "strconv" || pkg.Obj != nil {
+		return false
+	}
+	switch sel.Sel.Name {
+	case "Itoa", "FormatInt", "FormatUint":
+		return true
+	}
+	return false
 }
 
 // fwExprPlaceholder is the synthetic identifier FromGoReassembled substitutes
@@ -537,7 +565,7 @@ func reassembleSprintf(call *ast.CallExpr) (string, bool) {
 		return "", false
 	}
 	if name == "Sprintf" {
-		text, _ := formatVerbs(first, call.Args[1:])
+		text, _ := formatVerbs(first, call.Args[1:], "")
 		return text, true
 	}
 	sep := ""
@@ -571,7 +599,7 @@ func sprintValue(call *ast.CallExpr) (string, bool) {
 		if !ok {
 			return "", false
 		}
-		return formatVerbs(format, call.Args[1:])
+		return formatVerbs(format, call.Args[1:], integerHole)
 	}
 	parts := make([]string, len(call.Args))
 	for i, a := range call.Args {
@@ -592,8 +620,9 @@ func sprintValue(call *ast.CallExpr) (string, bool) {
 // is true when every verb took a value and every argument was used — the text
 // is then what fmt.Sprintf returns. An explicit argument index or a '*' width
 // puts the arguments out of step with the verbs, so each verb from there on
-// is a placeholder.
-func formatVerbs(format string, args []ast.Expr) (text string, exact bool) {
+// is a placeholder. integer is the text a d verb reads as; empty leaves it a
+// placeholder, which is what reassembly wants.
+func formatVerbs(format string, args []ast.Expr, integer string) (text string, exact bool) {
 	exact = true
 	next, inStep := 0, true
 	text = verbPattern.ReplaceAllStringFunc(format, func(m string) string {
@@ -605,6 +634,9 @@ func formatVerbs(format string, args []ast.Expr) (text string, exact bool) {
 		}
 		i := next
 		next++
+		if integer != "" && inStep && strings.HasSuffix(m, "d") && i < len(args) {
+			return integer
+		}
 		if inStep && (m == "%s" || m == "%v") && i < len(args) {
 			if s, ok := stringValue(args[i]); ok {
 				return s

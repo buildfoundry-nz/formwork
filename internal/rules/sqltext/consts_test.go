@@ -126,3 +126,56 @@ func TestUnreadRefusesAnyOtherValue(t *testing.T) {
 		t.Fatalf("an unknown unread mode must be refused, err = %v", err)
 	}
 }
+
+// A rule banning hand-written text cannot tell it from the same text folded out
+// of the one package meant to mint it. seam_constants names that package: its
+// constant reads as a hole, the rest of the statement is still judged, and the
+// same text anywhere else still fires.
+func TestSeamConstantsReadAsAHoleAndNothingElseDoes(t *testing.T) {
+	files := map[string]string{
+		"go.mod":      "module example.com/m\n\ngo 1.22\n",
+		"seam/s.go":   "package seam\n\nconst Approve = \"status = 'approved'\"\n",
+		"other/o.go":  "package other\n\nconst Approve = \"status = 'approved'\"\n",
+		"db/mint.go":  "package db\n\nimport \"example.com/m/seam\"\n\nconst minted = \"UPDATE t SET \" + seam.Approve + \" WHERE id = $1\"\n",
+		"db/alias.go": "package db\n\nimport \"example.com/m/other\"\n\nconst aliased = \"UPDATE t SET \" + other.Approve + \" WHERE id = $1\"\n",
+		"db/hand.go":  "package db\n\nconst hand = \"UPDATE t SET status = 'approved' WHERE id = $1\"\n",
+		"db/rest.go":  "package db\n\nimport \"example.com/m/seam\"\n\nconst rest = \"UPDATE t SET \" + seam.Approve + \", note = 'x' WHERE id = $1\"\n",
+		"seam/t.go":   "package seam\n\nfunc Tuple(a string) string { return a + \" = 'approved'\" }\n",
+		"other/t.go":  "package other\n\nfunc Tuple(a string) string { return a + \" = 'approved'\" }\n",
+		"db/tmpl.go":  "package db\n\nimport \"example.com/m/seam\"\n\nfunc tmpl() string { return \"UPDATE t SET \" + seam.Tuple(\"status\") + \" WHERE id = $1\" }\n",
+		"db/tmpl2.go": "package db\n\nimport \"example.com/m/other\"\n\nfunc tmpl2() string { return \"UPDATE t SET \" + other.Tuple(\"status\") + \" WHERE id = $1\" }\n",
+	}
+	const params = "table: 'UPDATE t'\nforbid:\n  - \"status = 'approved'\"\n  - \"note = 'x'\"\n"
+	seamed := params + "seam_constants: [seam]\n"
+	for _, tc := range []struct {
+		file          string
+		plain, withIt int
+	}{
+		{"db/mint.go", 1, 0},
+		{"db/alias.go", 1, 1},
+		{"db/hand.go", 1, 1},
+		{"db/rest.go", 1, 1},
+		{"db/tmpl.go", 1, 0},
+		{"db/tmpl2.go", 1, 1},
+	} {
+		if got := check(t, mustChecker(t, params), walked(t, tc.file, files)); len(got) != tc.plain {
+			t.Errorf("%s without a seam: want %d finding(s), got %+v", tc.file, tc.plain, got)
+		}
+		if got := check(t, mustChecker(t, seamed), walked(t, tc.file, files)); len(got) != tc.withIt {
+			t.Errorf("%s with the seam named: want %d finding(s), got %+v", tc.file, tc.withIt, got)
+		}
+	}
+}
+
+func TestSeamConstantsRefuseAPathThatIsNotACleanRelativeDirectory(t *testing.T) {
+	factory, ok := rules.Lookup("sql/statement-predicate")
+	if !ok {
+		t.Fatal(`type "sql/statement-predicate" not registered`)
+	}
+	for _, dir := range []string{"''", "'.'", "/abs", "'../up'", "'a/../b'", "'a/'"} {
+		_, err := factory(paramsNode(t, "table: 't'\nrequire:\n  - 'x'\nseam_constants: ["+dir+"]\n"))
+		if err == nil || !strings.Contains(err.Error(), "seam_constants") {
+			t.Errorf("seam_constants [%s] must be refused, err = %v", dir, err)
+		}
+	}
+}

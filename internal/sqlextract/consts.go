@@ -4,7 +4,9 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,16 +53,31 @@ import (
 // not a fact the extractor has. Without a tree (scan.NewMemFile) only the
 // file's own constants are read.
 //
+// A SEAM IS THE EXCEPTION A RULE NAMES. A rule banning hand-written text cannot
+// tell it from the same text folded out of the one package meant to mint it, so
+// FromGoSeams reads an exported constant or SQL template of a named package as
+// seamHole. The statement stays whole and judged. The same text in any other package still
+// reads, and still fires.
+//
 // RESIDUAL: go.work, a vendor directory and a module outside the tree are not
 // read, so their constants stay operands the extractor cannot read. That
 // fails toward the census, which lists the composition, never toward a pass.
 
-// constEnvKey is the scan.FileSet.Memo key of a walk's constEnv.
-type constEnvKey struct{}
+// constEnvKey is the scan.FileSet.Memo key of a walk's constEnv. Seam packages
+// change what a constant folds to, so each distinct set has its own env.
+type constEnvKey struct{ seams string }
+
+// seamHole is what a constant from a seam package folds to. It is plain text, so
+// the statement around it stays whole and is judged, and no pattern a rule
+// writes about the seam's own text can match it.
+const seamHole = " fw_seam "
 
 // constEnv is one walk's constant tables, built per package as first needed.
 type constEnv struct {
 	tree *scan.FileSet
+	// seams are the package directories whose exported constants read as
+	// seamHole (FromGoSeams).
+	seams map[string]bool
 
 	mu    sync.Mutex
 	pkgs  map[pkgKey]*pkgEntry
@@ -116,12 +133,17 @@ type constFile struct {
 	locals         map[*ast.Object]ast.Expr // constant_locals.go; nil outside the file being folded
 }
 
-func envFor(tree *scan.FileSet) *constEnv {
+func envFor(tree *scan.FileSet, seams []string) *constEnv {
 	if tree == nil {
 		return nil
 	}
-	return tree.Memo(constEnvKey{}, func() any {
-		return &constEnv{tree: tree, pkgs: map[pkgKey]*pkgEntry{}, mods: map[string]*goMod{}, names: map[string]string{}}
+	set := map[string]bool{}
+	for _, dir := range seams {
+		set[dir] = true
+	}
+	sorted := slices.Sorted(maps.Keys(set))
+	return tree.Memo(constEnvKey{seams: strings.Join(sorted, "\x00")}, func() any {
+		return &constEnv{tree: tree, seams: set, pkgs: map[pkgKey]*pkgEntry{}, mods: map[string]*goMod{}, names: map[string]string{}}
 	}).(*constEnv)
 }
 
@@ -346,7 +368,11 @@ func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, env map[stri
 			return "", false
 		}
 		if t := e.importTable(cf, x.Name); t != nil {
-			return e.foldIn(t, v.Sel.Name, depth)
+			text, ok := e.foldIn(t, v.Sel.Name, depth)
+			if ok && e.seams[cf.importDirs[x.Name]] {
+				return seamHole, true
+			}
+			return text, ok
 		}
 	case *ast.CallExpr:
 		if v.Ellipsis != token.NoPos {
@@ -462,8 +488,8 @@ func within(e ast.Expr, spans []span) bool {
 // arguments are constants, wherever it stands (templates.go). tree may be nil.
 // readLocals reads constant locals too (constant_locals.go); reassembly leaves
 // them to its own assignment-flow fold.
-func foldConstants(tree *scan.FileSet, p string, fset *token.FileSet, file *ast.File, readLocals bool) folded {
-	e := envFor(tree)
+func foldConstants(tree *scan.FileSet, seams []string, p string, fset *token.FileSet, file *ast.File, readLocals bool) folded {
+	e := envFor(tree, seams)
 	cf := newConstFile(p, file)
 	if readLocals {
 		cf.locals = constantLocals(file)

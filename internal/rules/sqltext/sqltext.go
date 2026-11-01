@@ -50,6 +50,7 @@ package sqltext
 import (
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
 	"strings"
 
@@ -66,6 +67,10 @@ type params struct {
 	Require []string `yaml:"require"`
 	Forbid  []string `yaml:"forbid"`
 	Unread  string   `yaml:"unread"`
+	// SeamConstants names the package directories, relative to the repository
+	// root, whose exported constants and SQL templates read as an opaque hole in this rule's
+	// statements: the packages meant to mint the text the rule bans elsewhere.
+	SeamConstants []string `yaml:"seam_constants"`
 }
 
 // The values of params.unread. Fail is the default: the part the rule cannot read
@@ -82,6 +87,7 @@ type predicate struct {
 	require    []*regexp.Regexp
 	forbid     []*regexp.Regexp
 	listUnread bool
+	seams      []string
 }
 
 // FailsOnUnread reports whether this rule fails on SQL it cannot read. The lint
@@ -131,7 +137,12 @@ func newPredicate(node *yaml.Node) (rules.Checker, error) {
 	default:
 		return nil, fmt.Errorf("sql/statement-predicate: params.unread is %q, want %q or %q", p.Unread, unreadFail, unreadCensus)
 	}
-	return &predicate{table: table, require: require, forbid: forbid, listUnread: p.Unread == unreadCensus}, nil
+	for _, dir := range p.SeamConstants {
+		if dir == "" || dir == "." || path.IsAbs(dir) || path.Clean(dir) != dir || strings.HasPrefix(dir, "../") {
+			return nil, fmt.Errorf("sql/statement-predicate: params.seam_constants entry %q is not a clean directory relative to the repository root", dir)
+		}
+	}
+	return &predicate{table: table, require: require, forbid: forbid, listUnread: p.Unread == unreadCensus, seams: p.SeamConstants}, nil
 }
 
 // statement is one candidate SQL statement plus the source line it starts on.
@@ -156,7 +167,7 @@ func (c *predicate) CheckFile(f *scan.File) ([]rules.Match, error) {
 		if err != nil {
 			return nil, err
 		}
-		stmts, unread, err = goStatements(f.Tree(), f.Path(), content)
+		stmts, unread, err = goStatements(f.Tree(), c.seams, f.Path(), content)
 		if err != nil {
 			return nil, err
 		}
@@ -464,8 +475,8 @@ func sqlIdentStartByte(c byte) bool {
 // statement passed `check` unjudged, and a `require` or `forbid` held only for
 // SQL that happened to be written readably. The extractor reads every Go
 // constant (consts.go), so what is left unread has text decided at run time.
-func goStatements(tree *scan.FileSet, path string, src []byte) ([]statement, []sqlextract.Site, error) {
-	cands, sites, err := sqlextract.FromGoIn(tree, path, src)
+func goStatements(tree *scan.FileSet, seams []string, path string, src []byte) ([]statement, []sqlextract.Site, error) {
+	cands, sites, err := sqlextract.FromGoSeams(tree, seams, path, src)
 	if err != nil {
 		return nil, nil, fmt.Errorf("sql/statement-predicate: %w", err)
 	}

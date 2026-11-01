@@ -986,6 +986,15 @@ a catalogue query whose guards a constant spelling would defeat. A statement hid
 behind a hole is then not judged, so name it on a broad rule only when you accept
 that. `fail` is the default.
 
+`seam_constants` names package directories, relative to the repository root,
+whose exported constants and SQL templates read as an opaque hole in this rule's
+statements. It is
+for a rule banning text that one package exists to mint: `status = 'approved'`
+folded out of the approval package is not the hand-written copy the rule is
+about. The statement stays whole and judged, and the same text in any other
+package still fires. A directory that names no package changes nothing, so a
+mistake leaves the rule firing.
+
 `table` is an unanchored RE2 regex matched against the whole
 **statement text**, so it selects statements rather than naming a relation: a
 schema-qualified `app\.projects` works here, and matches any statement

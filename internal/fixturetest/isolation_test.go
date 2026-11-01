@@ -20,6 +20,7 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/fixturetest"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/command"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/pattern"
 )
 
 // gitCleanEnv is the ambient environment minus the pointers that would send
@@ -81,6 +82,42 @@ func TestFixtureForAProcessRuleIsItsOwnRepository(t *testing.T) {
 	}
 	if failed != 0 {
 		t.Fatalf("the pass fixture answered with a repository that is not itself — git discovery climbed out of the fixture:\n%s", sb.String())
+	}
+}
+
+// forbidden-pattern census mode shells out through the same runner, so a
+// fixture that names its tree with a token is its own repository too. A
+// pattern-shaped rule would be evaluated in place and git would climb out.
+func TestCensusFixtureIsItsOwnRepository(t *testing.T) {
+	root := writeRepo(t, map[string]string{
+		".formwork/formwork.yaml": "version: 1\n",
+		".formwork/rules/r.yaml": `rules:
+  - id: census-toplevel-is-the-fixture
+    type: forbidden-pattern
+    scope:
+      include: ["**/*.txt"]
+    params:
+      census:
+        cmd: [sh, -c, 'test "$(git rev-parse --show-toplevel)" = "$(cd {{root}} && pwd -P)"']
+        expect:
+          exit: 0
+    cure: the detector must see the tree under evaluation as its repository.
+`,
+		".formwork/fixtures/census-toplevel-is-the-fixture/pass-1/a.txt": "a\n",
+	})
+	gitInitCommitted(t, root)
+
+	cfg, err := config.Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sb strings.Builder
+	failed, err := fixturetest.Run(cfg, fullIDs(cfg), root, 2, &sb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed != 0 {
+		t.Fatalf("the census pass fixture answered with a repository that is not itself:\n%s", sb.String())
 	}
 }
 

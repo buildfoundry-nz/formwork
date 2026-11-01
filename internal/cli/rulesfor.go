@@ -32,10 +32,6 @@ type govRule struct {
 	Preprocess string `json:"preprocess,omitempty"`
 	Cure       string `json:"cure,omitempty"`
 	Origin     string `json:"origin,omitempty"`
-	// SuppressedBy carries a path-exact allowlist exemption in the engine's
-	// own finding.SuppressedBy shape ("allowlist:<file>:<line>"): the path
-	// is governed, but every finding on it is suppressed.
-	SuppressedBy string `json:"suppressed_by,omitempty"`
 }
 
 // notScannedOut says why the walk never visits this path: the answer to a
@@ -57,6 +53,12 @@ type notScannedOut struct {
 }
 
 // pathRules groups governing rules under one queried path.
+// rulesForDoc is `rules-for` JSON output: each asked path's answer, in the
+// order asked.
+type rulesForDoc struct {
+	Paths []pathRules `json:"paths"`
+}
+
 type pathRules struct {
 	Path       string         `json:"path"`
 	Rules      []govRule      `json:"rules"`
@@ -306,31 +308,16 @@ func runRulesFor(args []string, stdout, stderr io.Writer) int {
 			if !r.Applies(p) {
 				continue
 			}
-			g := govRule{
+			pr.Rules = append(pr.Rules, govRule{
 				ID: r.ID, Type: r.Type, Severity: string(r.Severity),
 				Cost: string(r.Cost()), Preprocess: r.Preprocess,
 				Cure: r.Cure, Origin: r.Origin,
-			}
-			// Allowlist exemption is path-exact and knowable pre-hoc: the
-			// path IS governed, but every finding on it is suppressed —
-			// display carries the suppression in the engine's own
-			// SuppressedBy shape rather than reporting bare governance
-			// (#119 review finding 4; except.paths differs on purpose —
-			// there Applies() is false and no finding ever exists).
-			if r.Allowlist != nil {
-				for _, e := range r.Allowlist.Entries {
-					if e.Path == p {
-						g.SuppressedBy = fmt.Sprintf("allowlist:%s:%d", r.Allowlist.File, e.Line)
-						break
-					}
-				}
-			}
-			pr.Rules = append(pr.Rules, g)
+			})
 		}
 		out = append(out, pr)
 	}
 	if *format == "json" {
-		return emitJSON(stdout, stderr, out)
+		return emitJSON(stdout, stderr, rulesForDoc{Paths: out})
 	}
 	for _, pr := range out {
 		fmt.Fprintf(stdout, "%s:\n", pr.Path)
@@ -361,11 +348,7 @@ func runRulesFor(args []string, stdout, stderr io.Writer) int {
 			continue
 		}
 		for _, g := range pr.Rules {
-			line := fmt.Sprintf("  %s\t%s\t%s", g.ID, g.Severity, g.Type)
-			if g.SuppressedBy != "" {
-				line += "  (suppressed: " + g.SuppressedBy + ")"
-			}
-			fmt.Fprintln(stdout, line)
+			fmt.Fprintf(stdout, "  %s\t%s\t%s\n", g.ID, g.Severity, g.Type)
 			if g.Cure != "" && !*brief {
 				fmt.Fprintf(stdout, "    cure: %s\n", g.Cure)
 			}

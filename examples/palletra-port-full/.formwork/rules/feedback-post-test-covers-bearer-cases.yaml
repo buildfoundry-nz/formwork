@@ -23,18 +23,14 @@
 # branch is not modelled.
 rules:
   - id: feedback-post-test-covers-bearer-cases
-    type: forbidden-pattern
+    type: required-pattern
     severity: error
     scope:
       include:
         - "packages/plt_core/test/network/raw_http_client_auth_token_test.dart"
     params:
-      # Origin: the adapter test must carry BOTH assertions and not be skip:'d.
-      # all_of holds the present-token assertion (the context that must be live);
-      # none_of holds the null-token assertion whose absence is the fired regression.
-      all_of:
-        - "'Bearer staff-token-321'"
-      none_of:
-        - '\[null, null\]'
+      # A requirement, not an excusal (formwork 0.9): the test that covers the present-token case must also cover the null-token case.
+      when: "'Bearer staff-token-321'"
+      pattern: '\[null, null\]'
     cure: "Keep both live assertions in raw_http_client_auth_token_test.dart — the present-token 'Bearer staff-token-321' case and the null-token [null, null] no-header case — and do not skip: the test (#1898)."
     origin: scripts/check-feedback-submission-bearer-auth.sh

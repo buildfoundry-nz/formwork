@@ -44,6 +44,6 @@ rules:
         - '(?:Map|List|Set)<[^>]*>\s+build\('
         - 'ref\.(?:watch|read)\((?:[A-Za-z]+(?:Repository|Source|Loader)Provider|httpClientProvider|wireClientProvider)'
       require_absent:
-        - '(?:pinInProjectCache|pinInSessionCache)'
+        - {evidence: '(?:pinInProjectCache|pinInSessionCache)', within: 30}
     cure: "Register the keep-alive server cache in the session-cache registry — pinInProjectCache(projectId) / pinInSessionCache() in the build — so it can be flushed. A bare keepAlive cache can never be evicted (cross-user leak + OOM). See packages/plt_page_raster/lib/providers/page_raster_providers.dart."
     origin: scripts/check-dart-keepalive-caches-must-register-invalidation.sh

@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-one-sku-fold.sh (#2413 PH-4).
 # Three coupled invariants for the single-source-of-truth sku fold. Split
 # into three rules (the .sh's Rule A / B / C) because forbidden and required are
@@ -25,9 +28,6 @@ rules:
     preprocess: decomment-go
     params:
       pattern: '^func +\(?[^)]*\)? *(dedupe|group|fold|collapse|merge)[A-Za-z]*Skus?\b'
-    except:
-      paths:
-        - "**/internal/skucanon/canonicalise.go"
     cure: "Call skugroup.Assign instead of declaring a private sku fold (#2413 PH-4 Rule A)."
     origin: scripts/check-one-sku-fold.sh
 

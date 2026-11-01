@@ -47,8 +47,6 @@ const validRules = `rules:
       exclude: ["**/*_test.go"]
     params:
       pattern: 'pgxpool\.New\('
-    except:
-      paths: ["src/db/**"]
     cure: "Use internal/db."
   - id: has-readme-marker
     type: required-pattern
@@ -191,7 +189,7 @@ func TestLoadRulesUsesSameEnvelopeBytesAsGate(t *testing.T) {
 	}
 }
 
-func TestAppliesHonorsIncludeExcludeExcept(t *testing.T) {
+func TestAppliesHonorsIncludeExclude(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		".formwork/formwork.yaml":   validRoot,
 		".formwork/rules/main.yaml": validRules,
@@ -207,7 +205,7 @@ func TestAppliesHonorsIncludeExcludeExcept(t *testing.T) {
 	}{
 		{"src/api/handler.go", true},
 		{"src/api/handler_test.go", false}, // exclude
-		{"src/db/pool.go", false},          // except.paths
+		{"src/db/pool.go", true},           // nothing subtracts it
 		{"cmd/main.go", false},             // outside include
 	}
 	for _, c := range cases {

@@ -30,7 +30,7 @@ import (
 func runCLI(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	code := cli.Run(args, &stdout, &stderr)
+	code := cli.Run(args, bytes.NewReader(nil), &stdout, &stderr)
 	return code, stdout.String(), stderr.String()
 }
 
@@ -64,31 +64,6 @@ func TestCheckCleanRepoExitsZero(t *testing.T) {
 	}
 	if !strings.Contains(out, "[no-banana] OK") {
 		t.Fatalf("missing OK line:\n%s", out)
-	}
-}
-
-func TestCheckSummaryAppendsSuppressedCount(t *testing.T) {
-	// G1b: a suppressed finding never affects the exit code or the per-rule
-	// verdict, but the summary line must still show it happened.
-	root := t.TempDir()
-	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
-	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"),
-		"rules:\n  - id: no-banana\n    type: forbidden-pattern\n"+
-			"    scope: {include: ['**/*.txt']}\n    params: {pattern: banana}\n"+
-			"    except: {allowlist: allowlists/legacy.txt}\n")
-	mustWrite(t, filepath.Join(root, ".formwork", "allowlists", "legacy.txt"), "hit.txt\n")
-	mustWrite(t, filepath.Join(root, "hit.txt"), "banana\n")
-	code, out, _ := runCLI(t, "check", "-C", root)
-	if code != 0 {
-		t.Fatalf("exit = %d, want 0\noutput:\n%s", code, out)
-	}
-	for _, want := range []string{
-		"[no-banana] OK",
-		"formwork: 1/1 rules passed, 0 finding(s), 1 suppressed",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("output missing %q\noutput:\n%s", want, out)
-		}
 	}
 }
 
@@ -206,40 +181,25 @@ func TestLintFlagsProblemsExitsOne(t *testing.T) {
 	}
 }
 
-func TestCheckMarkerSuppressionExitsZero(t *testing.T) {
+// A reasoned `formwork:allow` comment on the violating line exempts nothing:
+// the run fails on it like on any other violation.
+func TestCheckFormworkAllowCommentStillFails(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
 	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"),
 		"rules:\n  - id: no-banana\n    type: forbidden-pattern\n"+
-			"    scope: {include: ['**']}\n    params: {pattern: banana}\n"+
-			"    except: {marker: true}\n")
+			"    scope: {include: ['**']}\n    params: {pattern: banana}\n")
 	mustWrite(t, filepath.Join(root, "f.txt"), "banana // formwork:allow no-banana legacy data\n")
 	code, out, _ := runCLI(t, "check", "-C", root)
-	if code != 0 {
-		t.Fatalf("exit = %d, want 0\noutput:\n%s", code, out)
-	}
-	for _, want := range []string{"[no-banana] OK", "0 finding(s)"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("output missing %q\noutput:\n%s", want, out)
-		}
+	if code != 1 || !strings.Contains(out, "[no-banana] FAIL — 1 finding(s)") {
+		t.Fatalf("exit = %d, want 1 with the finding\noutput:\n%s", code, out)
 	}
 }
 
-func TestCheckReasonlessMarkerStillFails(t *testing.T) {
-	root := t.TempDir()
-	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
-	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"),
-		"rules:\n  - id: no-banana\n    type: forbidden-pattern\n"+
-			"    scope: {include: ['**']}\n    params: {pattern: banana}\n"+
-			"    except: {marker: true}\n")
-	mustWrite(t, filepath.Join(root, "f.txt"), "banana // formwork:allow no-banana\n")
-	code, out, _ := runCLI(t, "check", "-C", root)
-	if code != 1 || !strings.Contains(out, "[no-banana] FAIL") {
-		t.Fatalf("exit = %d\noutput:\n%s", code, out)
-	}
-}
-
-func TestCheckAllowlistSuppressionExitsZero(t *testing.T) {
+// A corpus still declaring an except: block is a config error, never a run
+// with the excusal quietly ignored: the finding it used to forgive would
+// otherwise surface as a surprise FAIL instead of naming the removed key.
+func TestCheckExceptBlockExits2(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
 	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"),
@@ -248,9 +208,9 @@ func TestCheckAllowlistSuppressionExitsZero(t *testing.T) {
 			"    except: {allowlist: allowlists/legacy.txt}\n")
 	mustWrite(t, filepath.Join(root, ".formwork", "allowlists", "legacy.txt"), "f.txt\n")
 	mustWrite(t, filepath.Join(root, "f.txt"), "banana\n")
-	code, out, _ := runCLI(t, "check", "-C", root)
-	if code != 0 || !strings.Contains(out, "[no-banana] OK") {
-		t.Fatalf("exit = %d\noutput:\n%s", code, out)
+	code, _, errOut := runCLI(t, "check", "-C", root)
+	if code != 2 || !strings.Contains(errOut, "field except not found") {
+		t.Fatalf("exit = %d, want 2 naming the except key\nstderr:\n%s", code, errOut)
 	}
 }
 

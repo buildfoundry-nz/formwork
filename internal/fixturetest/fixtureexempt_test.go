@@ -41,7 +41,7 @@ func TestContentFreeFixtureExemptIsNotADeclaredExemption(t *testing.T) {
 	root := writeRepo(t, nil)
 
 	r, err := config.New("heavy-blank", "command", finding.SeverityError, "",
-		[]string{"**"}, nil, nil, heavyChecker{})
+		[]string{"**"}, nil, heavyChecker{})
 	if err != nil {
 		t.Fatal(err)
 	}

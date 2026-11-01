@@ -7,59 +7,22 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/config"
 )
 
-const exemptRules = `rules:
-  - id: no-secret
-    type: forbidden-pattern
-    scope:
-      include: ["**/*.go"]
-    preprocess: decomment-go
-    params:
-      pattern: 'SECRET'
-    except:
-      paths: ["vendor/**"]
-      marker: true
-      allowlist: allowlists/legacy.txt
-`
-
-func TestLoadPreprocessAndExcept(t *testing.T) {
+func TestLoadPreprocess(t *testing.T) {
 	root := writeRepo(t, map[string]string{
-		".formwork/formwork.yaml":         validRoot,
-		".formwork/rules/r.yaml":          exemptRules,
-		".formwork/allowlists/legacy.txt": "# grandfathered\n\nsrc/old.go\ndocs/gone.md\n",
+		".formwork/formwork.yaml": validRoot,
+		".formwork/rules/r.yaml": "rules:\n  - id: no-secret\n    type: forbidden-pattern\n" +
+			"    scope: {include: ['**/*.go']}\n    preprocess: decomment-go\n    params: {pattern: SECRET}\n",
 	})
 	cfg, err := config.Load(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := cfg.Rules[0]
-	if r.Preprocess != "decomment-go" {
-		t.Fatalf("Preprocess = %q", r.Preprocess)
-	}
-	if !r.Marker {
-		t.Fatal("Marker not set")
-	}
-	if got := r.ExceptPaths; len(got) != 1 || got[0] != "vendor/**" {
-		t.Fatalf("ExceptPaths = %v", got)
-	}
-	al := r.Allowlist
-	if al == nil || al.File != "allowlists/legacy.txt" {
-		t.Fatalf("Allowlist = %+v", al)
-	}
-	want := []config.AllowlistEntry{
-		{Path: "src/old.go", Line: 3},
-		{Path: "docs/gone.md", Line: 4},
-	}
-	if len(al.Entries) != len(want) {
-		t.Fatalf("Entries = %+v", al.Entries)
-	}
-	for i := range want {
-		if al.Entries[i] != want[i] {
-			t.Fatalf("Entries[%d] = %+v, want %+v", i, al.Entries[i], want[i])
-		}
+	if got := cfg.Rules[0].Preprocess; got != "decomment-go" {
+		t.Fatalf("Preprocess = %q", got)
 	}
 }
 
-func TestLoadDefaultsAreRawAndUnexempted(t *testing.T) {
+func TestLoadDefaultsAreRaw(t *testing.T) {
 	root := writeRepo(t, map[string]string{
 		".formwork/formwork.yaml": validRoot,
 		".formwork/rules/r.yaml": "rules:\n  - id: plain\n    type: forbidden-pattern\n" +
@@ -69,9 +32,8 @@ func TestLoadDefaultsAreRawAndUnexempted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := cfg.Rules[0]
-	if r.Preprocess != "" || r.Marker || r.Allowlist != nil {
-		t.Fatalf("defaults wrong: preprocess=%q marker=%v allowlist=%+v", r.Preprocess, r.Marker, r.Allowlist)
+	if got := cfg.Rules[0].Preprocess; got != "" {
+		t.Fatalf("Preprocess = %q, want raw", got)
 	}
 }
 
@@ -87,15 +49,28 @@ func TestLoadUnknownPreprocessorErrors(t *testing.T) {
 	}
 }
 
-func TestLoadMissingAllowlistErrors(t *testing.T) {
-	root := writeRepo(t, map[string]string{
-		".formwork/formwork.yaml": validRoot,
-		".formwork/rules/r.yaml": "rules:\n  - id: bad\n    type: forbidden-pattern\n" +
-			"    scope: {include: ['**']}\n    params: {pattern: x}\n" +
-			"    except: {allowlist: allowlists/nope.txt}\n",
-	})
-	_, err := config.Load(root)
-	if err == nil || !strings.Contains(err.Error(), "allowlists/nope.txt") {
-		t.Fatalf("missing allowlist accepted: %v", err)
+// There is no except: block. Each of its former keys excused code from a rule
+// (a path list, an inline-comment opt-in, an allowlist file), and a rule
+// declaring any of them is refused at load, so a corpus carrying one exits 2
+// rather than running with the excusal silently ignored.
+func TestLoadRefusesTheExceptBlock(t *testing.T) {
+	for name, except := range map[string]string{
+		"paths":     "{paths: ['vendor/**']}",
+		"marker":    "{marker: true}",
+		"allowlist": "{allowlist: allowlists/legacy.txt}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := writeRepo(t, map[string]string{
+				".formwork/formwork.yaml": validRoot,
+				".formwork/rules/r.yaml": "rules:\n  - id: bad\n    type: forbidden-pattern\n" +
+					"    scope: {include: ['**']}\n    params: {pattern: x}\n" +
+					"    except: " + except + "\n",
+				".formwork/allowlists/legacy.txt": "src/old.go\n",
+			})
+			_, err := config.Load(root)
+			if err == nil || !strings.Contains(err.Error(), "field except not found") {
+				t.Fatalf("except.%s accepted: %v", name, err)
+			}
+		})
 	}
 }

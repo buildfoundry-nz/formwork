@@ -1,9 +1,11 @@
 package config
 
 import (
+	"crypto/sha256"
 	"fmt"
 	iofs "io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -33,6 +35,14 @@ func (e *Envelope) LoadRules() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
 	}
+	generation, err := compileGenerated(e.root.Generated)
+	if err != nil {
+		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
+	}
+	testCode, err := compileTests(e.root.Tests)
+	if err != nil {
+		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
+	}
 
 	ruleFiles, err := filepath.Glob(filepath.Join(e.dir, "rules", "*.yaml"))
 	if err != nil {
@@ -44,7 +54,14 @@ func (e *Envelope) LoadRules() (*Config, error) {
 		return nil, fmt.Errorf("config: formwork.yaml: %w", err)
 	}
 
-	cfg := &Config{Version: e.Version, Engine: e.Engine, EngineConstraint: e.EngineConstraint, Lanes: lanes, Scope: scope, Ignore: ignore, Gitignore: gitignore, Library: append([]string(nil), e.root.Library...), RuleFiles: len(ruleFiles)}
+	cfg := &Config{Version: e.Version, Engine: e.Engine, EngineConstraint: e.EngineConstraint, Lanes: lanes, Scope: scope, Ignore: ignore, Gitignore: gitignore, Library: append([]string(nil), e.root.Library...), RuleFiles: len(ruleFiles), Generation: generation, Tests: testCode}
+	corpus := sha256.New()
+	hashBytes := func(source string, data []byte) {
+		fmt.Fprintf(corpus, "formwork-corpus-v1\x00%s\x00%d\x00", source, len(data))
+		corpus.Write(data)
+		corpus.Write([]byte{0})
+	}
+	hashBytes(".formwork/formwork.yaml", e.rootBytes)
 	seen := map[string]string{} // rule id -> file it was defined in
 	index := map[string]int{}   // rule id -> slot in cfg.Rules
 
@@ -67,7 +84,8 @@ func (e *Envelope) LoadRules() (*Config, error) {
 				return nil, fmt.Errorf("config: library %s: reading %s: %w", pack, name, err)
 			}
 			src := "library:" + pack + "/" + name
-			if err := loadRuleFile(cfg, seen, index, src, data, e.dir, pack); err != nil {
+			hashBytes(src, data)
+			if err := loadRuleFile(cfg, seen, index, src, data, pack); err != nil {
 				return nil, err
 			}
 		}
@@ -78,11 +96,28 @@ func (e *Envelope) LoadRules() (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("config: reading %s: %w", rf, err)
 		}
-		if err := loadRuleFile(cfg, seen, index, rf, data, e.dir, ""); err != nil {
+		hashBytes(path.Join(".formwork", "rules", filepath.Base(rf)), data)
+		if err := loadRuleFile(cfg, seen, index, rf, data, ""); err != nil {
 			return nil, err
 		}
 	}
+	cfg.CorpusHash = fmt.Sprintf("sha256:%x", corpus.Sum(nil))
 	sort.Slice(cfg.Rules, func(i, j int) bool { return cfg.Rules[i].ID < cfg.Rules[j].ID })
+	// A proven_by that names no loaded rule is NOT refused here. Tools load
+	// pruned corpora beside the repository's formwork.yaml (one rule and its
+	// fixtures, a mutation-proof scratch tree), and a load error there made
+	// every such run unevaluable. Whether each proving rule exists is a fact
+	// about the whole corpus, so `formwork lint` (generated-definition) reports
+	// it over the whole corpus instead.
+	for _, r := range cfg.Rules {
+		r.generation = generation
+		r.testCode = testCode
+		// A production subject with no definition of test code would read
+		// every test while claiming to read none.
+		if r.productionOnly && testCode == nil {
+			return nil, fmt.Errorf("config: rule %s: scope.subject: production needs formwork.yaml `tests:`, the one definition of test code it leaves out", r.ID)
+		}
+	}
 	return cfg, nil
 }
 
@@ -104,20 +139,27 @@ func validateLibraryNames(names []string) error {
 // name when the bytes came from a stdlib pack, empty when they came from the
 // adopting repo. Local duplicate ids fail; a local id that already exists on
 // a library rule replaces it (local wins).
-func loadRuleFile(cfg *Config, seen map[string]string, index map[string]int, src string, data []byte, dir, library string) error {
+func loadRuleFile(cfg *Config, seen map[string]string, index map[string]int, src string, data []byte, library string) error {
 	var spec fileSpec
 	if err := strictUnmarshal(data, &spec); err != nil {
 		return fmt.Errorf("config: %s: %w", src, err)
 	}
 	for _, rs := range spec.Rules {
-		if library != "" && rs.Except.Allowlist != "" {
-			return fmt.Errorf("config: %s: library rule %s: except.allowlist is repo-local; redeclare the rule locally to bind an allowlist", src, rs.ID)
-		}
-		rule, err := compile(rs, dir)
+		rule, err := compile(rs)
 		if err != nil {
 			return fmt.Errorf("config: %s: %w", src, err)
 		}
 		rule.Library = library
+		if library == "" {
+			rule.File = path.Join(".formwork", "rules", filepath.Base(src))
+		}
+		// A credential's holder count is a fact about the consuming repo, which a
+		// pack cannot know. The consumer declares such a rule locally (local wins
+		// by id), where the count is its own.
+		if h, ok := rule.Checker.(interface{ HasCredentials() bool }); library != "" && ok && h.HasCredentials() {
+			return fmt.Errorf("config: %s: library rule %s: a library rule cannot carry a credential (require_absent or none_of "+
+				"{credential, holders}): its holder count belongs to the consuming repo, so declare the rule locally", src, rule.ID)
+		}
 		if prev, dup := seen[rule.ID]; dup {
 			if library == "" && strings.HasPrefix(prev, "library:") {
 				cfg.Rules[index[rule.ID]] = rule

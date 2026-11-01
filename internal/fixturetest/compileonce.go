@@ -92,9 +92,6 @@ func parseGoRunShape(cmd []string) (goRunShape, bool) {
 }
 
 func ruleCommandCmd(r *config.Rule) ([]string, bool) {
-	if r.Type != "command" {
-		return nil, false
-	}
 	raw, err := r.Params()
 	if err != nil || raw == nil {
 		return nil, false
@@ -103,12 +100,29 @@ func ruleCommandCmd(r *config.Rule) ([]string, bool) {
 	if !ok {
 		return nil, false
 	}
-	c, ok := m["cmd"].([]any)
-	if !ok || len(c) == 0 {
+	switch r.Type {
+	case "command":
+		return cmdStrings(m["cmd"])
+	case "forbidden-pattern":
+		// census mode nests the command params. Isolation and compile-once
+		// key off this argv, the same way they do for type: command.
+		nested, ok := m["census"].(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		return cmdStrings(nested["cmd"])
+	default:
 		return nil, false
 	}
-	out := make([]string, 0, len(c))
-	for _, v := range c {
+}
+
+func cmdStrings(c any) ([]string, bool) {
+	list, ok := c.([]any)
+	if !ok || len(list) == 0 {
+		return nil, false
+	}
+	out := make([]string, 0, len(list))
+	for _, v := range list {
 		s, ok := v.(string)
 		if !ok {
 			return nil, false

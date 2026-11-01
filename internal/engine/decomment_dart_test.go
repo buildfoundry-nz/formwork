@@ -27,7 +27,7 @@ func TestDartCommentProjectionThroughEngine(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			checker := checkerWithParams(t, "forbidden-pattern", "pattern: FORBIDDEN\n")
 			rule, err := config.New("dart-comment-probe", "forbidden-pattern", finding.SeverityError,
-				"remove the forbidden operation", []string{"**/*.dart"}, nil, nil, checker)
+				"remove the forbidden operation", []string{"**/*.dart"}, nil, checker)
 			if err != nil {
 				t.Fatal(err)
 			}

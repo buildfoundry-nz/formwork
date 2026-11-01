@@ -92,7 +92,7 @@ func sourcesIn(dir string, paths []string) []string {
 // same choice countGlobMatches makes, and for the same reason (#10083: the shell
 // cannot expand `**`, and 133 false zeros came of assuming it could). Matching
 // the include globs ALONE is deliberate: the marker is a claim about the include
-// list, so a rule's exclude/except entries must not be able to retire a source
+// list, so a rule's exclude entries must not be able to retire a source
 // from it silently.
 func sourceListVerdicts(gm *globMeasure, paths []string) map[string][]verdict {
 	out := map[string][]verdict{}
@@ -118,7 +118,7 @@ func sourceListVerdicts(gm *globMeasure, paths []string) map[string][]verdict {
 		missing := sources
 		if len(d.globs) > 0 {
 			r, err := config.New("sourcelist", "forbidden-pattern", finding.SeverityError, "",
-				d.globs, nil, nil, nil)
+				d.globs, nil, nil)
 			if err != nil {
 				// Unreachable through the real loader — config.Load builds every rule
 				// through this same constructor, so an invalid glob fails the census

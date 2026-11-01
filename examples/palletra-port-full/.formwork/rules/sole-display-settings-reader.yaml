@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-sole-display-settings-reader.sh
 # (sweep-2 #11 / DD-7). The standalone view_settings_snapshot reader (the
 # per-job hidden annotation-type overlay as a lone JSON blob) lives ONCE, in
@@ -22,9 +25,6 @@ rules:
         - "freightworks/**/*.go"
       exclude:
         - "**/*_test.go"
-    except:
-      paths:
-        - "freightworks/services/core-api/internal/workflow/data/project.go"
     params:
       pattern: 'SELECT\s+COALESCE\(\s*view_settings_snapshot'
     cure: "Call workflowdata.ReadProjectViewSettingsSnapshot(ctx, tx, projectID) — the single canonical reader of the project's display-settings overlay (sweep-2 #11)."

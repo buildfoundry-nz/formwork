@@ -208,3 +208,16 @@ func TestWholeTreeInvariant(t *testing.T) {
 		t.Fatal("baseline must be a whole-tree invariant")
 	}
 }
+
+// The baseline file is an input no scope glob names: a commit that edits only
+// baseline.txt moves the verdict. Declaring ScopeBound would let a changeset
+// that touches nothing else skip the rule, so it must never be declared.
+func TestIsNotScopeBound(t *testing.T) {
+	c := build(t, exactParams)
+	if !rules.IsWholeTreeInvariant(c) {
+		t.Fatal("baseline must stay a whole-tree invariant")
+	}
+	if rules.IsScopeBound(c) {
+		t.Fatal("baseline reads its baseline file, which no scope admits, so it must not be ScopeBound")
+	}
+}

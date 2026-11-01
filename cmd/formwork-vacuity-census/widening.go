@@ -130,15 +130,14 @@ func revHasPath(root, rev, path string) bool {
 }
 
 // policyMembers are the members of the exported tree its readers actually open,
-// relative to the exported path: config.Load reads the envelope, the rules and
-// the allowlists those rules name; loadRuleMeta and existsDeclarations glob the
-// rules alone.
+// relative to the exported path: config.Load reads the envelope and the rules;
+// loadRuleMeta and existsDeclarations glob the rules alone.
 //
 // fixtures/ and mutations/ are deliberately NOT here. They are 18,392 of the
-// corpus's 20,048 files — 67.2 MB of tar against 5.4 MB for the three members
-// below — and nothing in the loading path opens one. scripts/ci/rulereach
-// narrows the same subtree to the same three members for the same reason.
-var policyMembers = []string{"formwork.yaml", "rules", "allowlists"}
+// corpus's 20,048 files — 67.2 MB of tar against 5.4 MB for the members below —
+// and nothing in the loading path opens one. scripts/ci/rulereach narrows the
+// same subtree for the same reason.
+var policyMembers = []string{"formwork.yaml", "rules"}
 
 // maxEntryBytes bounds one extracted entry, so an archive claiming an
 // implausible size cannot fill the disk before the read fails.
@@ -189,8 +188,8 @@ func exportPath(root, rev, path, dst string) error {
 // presentMembers returns the policy members that exist at rev, as pathspecs
 // under path. Probing first is not defensive tidiness: git archive treats a
 // pathspec matching nothing as FATAL, so a fixed member list would refuse every
-// rev predating any one of them — the commit that introduces allowlists among
-// them, and every synthetic corpus the census's own tests build.
+// rev predating any one of them — every synthetic corpus the census's own tests
+// build among them.
 func presentMembers(root, rev, path string) []string {
 	var out []string
 	for _, m := range policyMembers {

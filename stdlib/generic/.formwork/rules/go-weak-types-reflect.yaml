@@ -6,12 +6,7 @@ rules:
     scope:
       include:
         - "**/*.go"
-      exclude:
-        - ".formwork/**"
-        - "**/*_test.go"
-        - "**/vendor/**"
-        - "**/generated/**"
-        - "**/*.pb.go"
+      subject: production
     params:
       pattern: '\breflect\.[A-Z][A-Za-z0-9_]*\b'
     cure: >-

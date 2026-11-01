@@ -92,36 +92,6 @@ func TestLintGitignoreCensusDistinguishesUnknownFromNone(t *testing.T) {
 	}
 }
 
-// The scan.gitignore twin of TestLintAllowlistEntryUnderScanIgnoreSaysSoNot-
-// DoesNotExist. An allowlist entry naming a path the walk pruned is inert
-// either way, but the two channels are cured in different files — narrow a
-// glob in .formwork/ vs. edit .gitignore — so a reader told the wrong one
-// learns nothing. "does not exist" would also be a lie: the file is on disk.
-func TestLintAllowlistEntryUnderGitignoreSaysSoNotDoesNotExist(t *testing.T) {
-	failed, out := lintTracked(t, map[string]string{
-		".formwork/formwork.yaml":                   gitignoreCfg,
-		".formwork/rules/r.yaml":                    exemptLintRule,
-		".formwork/allowlists/legacy.txt":           "build/gen.txt\nhit.txt\n",
-		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
-		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
-		".gitignore":    "build/\n",
-		"build/gen.txt": "banana\n", // on disk, pruned by git's own refusal
-		"hit.txt":       "banana\n", // keeps the allowlist otherwise live
-	}, ".formwork", ".gitignore", "hit.txt")
-	if failed == 0 {
-		t.Fatalf("want hygiene failure: allowlisted path can never fire\n%s", out)
-	}
-	if !strings.Contains(out, "build/gen.txt hidden by scan.gitignore (.gitignore:1:build/)") {
-		t.Fatalf("want the gitignore channel named with its responsible rule, got:\n%s", out)
-	}
-	if strings.Contains(out, "build/gen.txt does not exist") {
-		t.Fatalf("misleading does-not-exist diagnosis for an on-disk file:\n%s", out)
-	}
-	if strings.Contains(out, "build/gen.txt hidden by scan.ignore") {
-		t.Fatalf("gitignore prune reported as the scan.ignore channel:\n%s", out)
-	}
-}
-
 // The clean-repo contract: a repo that never declares the key gets no scan
 // lines at all, so "escape hatches: none" still holds.
 func TestLintCensusUnaffectedWhenGitignoreUnset(t *testing.T) {

@@ -41,7 +41,7 @@ func pkgSeedCensus(t *testing.T, src string) int {
 	if ms := matches(t, c, file("b.go", src)); len(ms) != 0 {
 		t.Fatalf("premise: the rule is supposed to report nothing here: %+v", ms)
 	}
-	sites, ok, err := sqlparse.CensusSites("sql/locking-select-order", "b.go", []byte(src))
+	sites, ok, err := sqlparse.CensusSites(nil, "sql/locking-select-order", "b.go", []byte(src))
 	if err != nil || !ok {
 		t.Fatalf("CensusSites: ok=%v err=%v", ok, err)
 	}

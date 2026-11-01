@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
+	"github.com/buildfoundry-nz/formwork/internal/declspan"
 	"github.com/buildfoundry-nz/formwork/internal/finding"
-	"github.com/buildfoundry-nz/formwork/internal/marker"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 )
@@ -106,18 +107,16 @@ func earlierVisit(aFile, aRule, bFile, bRule int) bool {
 }
 
 // Run evaluates every rule against every in-scope file, then finalizers.
-// workers <= 0 means GOMAXPROCS. Findings come back deterministically sorted
-// and include suppressed findings (spec §5 exemptions): callers that gate on
-// findings must filter with finding.Unsuppressed.
+// workers <= 0 means GOMAXPROCS. Findings come back deterministically sorted.
+// Every finding is a violation: there is no suppression channel.
 // Timing records per-rule total evaluation wall time: phase 1 sums the rule's
 // per-file evaluations, phase 2 adds its finalizer. It is observability, never
 // input to a verdict — no finding, sort order, or exit code reads it.
 type Timing map[string]time.Duration
 
 // Run evaluates every rule against every in-scope file, then finalizers.
-// workers <= 0 means GOMAXPROCS. Findings come back deterministically sorted
-// and include suppressed findings (spec §5 exemptions): callers that gate on
-// findings must filter with finding.Unsuppressed.
+// workers <= 0 means GOMAXPROCS. Findings come back deterministically sorted.
+// Every finding is a violation: there is no suppression channel.
 func Run(rls []*config.Rule, fset *scan.FileSet, workers int) ([]finding.Finding, error) {
 	findings, _, err := RunTimed(rls, fset, workers, nil)
 	return findings, err
@@ -158,10 +157,49 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 	if workers <= 0 {
 		workers = runtime.GOMAXPROCS(0)
 	}
-	// The walk reaches the suppression seam, because whether an allowlist entry
-	// and a finding name the same file is a question about the filesystem.
-	ex := newExemptions(fset)
-
+	// homeCount[r][i] counts the places that declare r's i-th not_declaring
+	// marker. Built before any worker starts, so the map is read-only while
+	// they run and only the counters move.
+	homeCount := map[*config.Rule][]*atomic.Int64{}
+	for _, r := range rls {
+		if n := len(r.NotDeclaringEntries()); n > 0 {
+			cs := make([]*atomic.Int64, n)
+			for i := range cs {
+				cs[i] = &atomic.Int64{}
+			}
+			homeCount[r] = cs
+		}
+	}
+	// Generated output (formwork.yaml generated:) is decided once per file and
+	// shared by every rule: the rules loaded from one config carry one
+	// definition, and a rule built with config.New carries none.
+	var gen *config.Generation
+	for _, r := range rls {
+		if g := r.Generation(); g != nil {
+			gen = g
+			break
+		}
+	}
+	genState := make([]atomic.Int32, len(fset.Files)) // 0 unknown, 1 authored, 2 generated
+	generated := func(fi int) bool {
+		switch genState[fi].Load() {
+		case 1:
+			return false
+		case 2:
+			return true
+		}
+		// An unreadable file is not called generated: that would drop it from
+		// every rule, the fail-open direction. evalFile reports the read error.
+		content, err := fset.Files[fi].Content()
+		_, ok := gen.Declares(content)
+		ok = ok && err == nil
+		if ok {
+			genState[fi].Store(2)
+		} else {
+			genState[fi].Store(1)
+		}
+		return ok
+	}
 	var (
 		mu       sync.Mutex
 		findings []finding.Finding
@@ -195,22 +233,31 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 						if !pr.rule.Applies(f.Path()) {
 							continue
 						}
+						if gen != nil && !pr.rule.JudgesGenerated() && generated(fi) {
+							continue
+						}
 						// scope.not_declaring is the one scope test a path
 						// cannot answer, so it is asked here where the bytes
-						// are. A read error is NOT treated as "declares
-						// nothing": that would silently evaluate a file whose
-						// declaration could not be seen, which is the
-						// fail-open direction. evalFile re-reads and reports
-						// the error through the ordinary path instead.
-						if len(pr.rule.NotDeclaring()) > 0 {
+						// are: each marker occurrence opens a home
+						// declaration, which is counted and masked out, and
+						// the rest of the file is judged. A read error is
+						// left to evalFile, which reports it through the
+						// ordinary path.
+						var homes []declspan.Span
+						if cs := homeCount[pr.rule]; cs != nil {
 							if content, cerr := f.Content(); cerr == nil {
-								if _, declined := pr.rule.DeclinedBy(content); declined {
-									continue
+								for _, h := range pr.rule.Homes(f.Path(), content) {
+									cs[h.Entry].Add(1)
+									homes = append(homes, h.Span)
+								}
+								if len(homes) > 0 {
+									// A home's imports cannot sit inside it.
+									homes = append(homes, declspan.Directives(f.Path(), content)...)
 								}
 							}
 						}
 						t0 := time.Now()
-						fds, err := evalFile(pr.rule, f, ex)
+						fds, err := evalFile(pr.rule, f, homes)
 						mu.Lock()
 						timing[pr.rule.ID] += time.Since(t0)
 						if err != nil {
@@ -354,7 +401,7 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 		t0 := time.Now()
 		switch fin := r.Checker.(type) {
 		case rules.ErrFinalizer:
-			matches, err = finalizeErr(r, fin, rules.FinalizeContext{Root: fset.Root, Repo: fset.Repo, Fixture: fset.Fixture})
+			matches, err = finalizeErr(r, fin, rules.FinalizeContext{Root: fset.Root, Repo: fset.Repo, Fixture: fset.Fixture, Changeset: fset.Changeset})
 		case rules.Finalizer:
 			matches, err = finalize(r, fin)
 		}
@@ -369,9 +416,7 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 			}
 		} else {
 			for _, m := range matches {
-				fd := toFinding(r, "", m)
-				suppressAllowlist(r, &fd, ex)
-				findings = append(findings, fd)
+				findings = append(findings, toFinding(r, "", m))
 			}
 		}
 		mu.Unlock()
@@ -458,6 +503,28 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 		return nil, timing, finErr
 	}
 
+	// The not_declaring holder counts, judged on a live tree only: a fixture
+	// tree proves the marker and the home, and cannot honestly hold the
+	// repository's number (the same reason a credential's count is live-only).
+	//
+	// A count of ZERO is not judged here. A tree that holds none of a marker's
+	// homes is either a pruned one (a synthetic or scratch tree carrying one
+	// rule beside the files its proof needs) or one where the marker is dead,
+	// and a check cannot tell which. `formwork lint` reports a marker no file
+	// declares over the whole tree (notDeclaringProblems), so the dead case
+	// still fails CI, and a pruned tree still runs. A count above zero that
+	// differs from the declaration is a home added or lost, judged here.
+	if !fset.Fixture {
+		for _, r := range rls {
+			for i, e := range r.NotDeclaringEntries() {
+				if got := homeCount[r][i].Load(); got != 0 && got != int64(e.Holders) {
+					findings = append(findings, toFinding(r, "", rules.Match{Message: fmt.Sprintf(
+						"scope.not_declaring %q is declared by %d place(s) across scope, declared holders %d: "+
+							"a marker sanctions the declaration it opens, so its holders are fixed", e.Marker, got, e.Holders)}))
+				}
+			}
+		}
+	}
 	finding.Sort(findings)
 	return findings, timing, nil
 }
@@ -499,13 +566,19 @@ func toFinding(r *config.Rule, fallbackPath string, m rules.Match) finding.Findi
 	}
 }
 
-// evalFile runs one rule over one file: picks the rule's preprocess variant,
-// checks it, and applies exemption suppression against the raw file (markers
-// live in comments, which preprocessors erase — phase-3a design §3).
-func evalFile(r *config.Rule, f *scan.File, ex *exemptions) ([]finding.Finding, error) {
+// evalFile runs one rule over one file: picks the rule's preprocess variant and
+// checks it.
+func evalFile(r *config.Rule, f *scan.File, homes []declspan.Span) ([]finding.Finding, error) {
 	work, err := f.Variant(r.Preprocess)
 	if err != nil {
 		return nil, fmt.Errorf("rule %s: %s: %w", r.ID, f.Path(), err)
+	}
+	if len(homes) > 0 {
+		content, err := work.Content()
+		if err != nil {
+			return nil, fmt.Errorf("rule %s: %s: %w", r.ID, f.Path(), err)
+		}
+		work = work.WithContent(declspan.Mask(content, homes))
 	}
 	matches, err := checkFile(r, work)
 	if err != nil {
@@ -513,75 +586,9 @@ func evalFile(r *config.Rule, f *scan.File, ex *exemptions) ([]finding.Finding, 
 	}
 	out := make([]finding.Finding, 0, len(matches))
 	for _, m := range matches {
-		fd := toFinding(r, f.Path(), m)
-		if err := suppress(r, f, &fd, ex); err != nil {
-			return nil, err
-		}
-		out = append(out, fd)
+		out = append(out, toFinding(r, f.Path(), m))
 	}
 	return out, nil
-}
-
-// suppress marks fd Suppressed when the rule's inline marker (same raw line,
-// reason mandatory — internal/marker owns the grammar) or allowlist (exact
-// path) exempts it. Scope-level findings (no path) are never exemptable.
-func suppress(r *config.Rule, raw *scan.File, fd *finding.Finding, ex *exemptions) error {
-	if fd.Path == "" {
-		return nil
-	}
-	if r.Marker && fd.Line > 0 && fd.Path == raw.Path() {
-		lines, err := raw.Lines()
-		if err != nil {
-			return fmt.Errorf("rule %s: marker scan of %s: %w", r.ID, raw.Path(), err)
-		}
-		if fd.Line <= len(lines) && marker.Classify(lines[fd.Line-1], r.ID) == marker.Reasoned {
-			fd.Suppressed = true
-			fd.SuppressedBy = "marker"
-			return nil
-		}
-	}
-	suppressAllowlist(r, fd, ex)
-	return nil
-}
-
-// suppressAllowlist applies allowlist suppression only; used directly for
-// finalizer findings, where there is no per-file raw content to marker-scan.
-//
-// Two arms, in this order and not the other. The EXACT arm is the contract —
-// an allowlist entry is a path, matched as written — and it stays first and
-// untouched, because it is the only arm that can answer for a finding whose
-// path this run's FileSet does not hold at all: a finalizer is free to report a
-// path it synthesized, and folding first would have quietly stopped suppressing
-// those.
-//
-// The FOLD arm is a fallback for the one case exact equality gets wrong: two
-// byte sequences that name one file. On macOS/APFS an editor saves the entry
-// NFC and readdir hands the walk the NFD bytes, so `e.Path == fd.Path` is false
-// for a file the operator plainly exempted — and the failure is silent, because
-// a finding that is merely NOT suppressed is indistinguishable from one nobody
-// exempted (#308's class at this seam). exemptions.folded owns the
-// resolution and asks scan.(*FileSet).Produced for it; the entry it returns is
-// the one attributed, so the operator is sent to the line they actually wrote.
-func suppressAllowlist(r *config.Rule, fd *finding.Finding, ex *exemptions) {
-	if fd.Suppressed || fd.Path == "" || r.Allowlist == nil {
-		return
-	}
-	for _, e := range r.Allowlist.Entries {
-		if e.Path == fd.Path {
-			allowlisted(fd, r.Allowlist, e)
-			return
-		}
-	}
-	if e, ok := ex.folded(r)[fd.Path]; ok {
-		allowlisted(fd, r.Allowlist, e)
-	}
-}
-
-// allowlisted marks fd exempt and attributes it to the entry that answered, so
-// both arms above render one attribution rather than two spellings of it.
-func allowlisted(fd *finding.Finding, al *config.Allowlist, e config.AllowlistEntry) {
-	fd.Suppressed = true
-	fd.SuppressedBy = fmt.Sprintf("allowlist:%s:%d", al.File, e.Line)
 }
 
 func checkFile(r *config.Rule, f *scan.File) (matches []rules.Match, err error) {

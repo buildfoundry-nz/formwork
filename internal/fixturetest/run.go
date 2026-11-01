@@ -212,20 +212,15 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 }
 
 // EvalIn evaluates one rule over the fixture tree rooted at dir, returning its
-// findings PRE-suppression together with the walked FileSet. The caller passes
+// findings together with the walked FileSet. The caller passes
 // a rule whose checker is already the one it wants exercised (see runFixture's
 // Fresh below); EvalIn owns only what a fixture run must not inherit from the
 // repo, so that policy lives in exactly one place rather than once per caller.
 //
-// Allowlists are repo-scoped: their entries are repo-relative paths, but
-// fixture trees have their own, unrelated path namespace (fixture-root-
-// relative). A colliding path must not be suppressed here. Markers stay
-// active — fixtures legitimately exercise marker suppression.
-//
-// scan.ignore is likewise repo-scoped: its globs are repo-root-relative, but
-// this walk's root is the fixture dir. Applying them here would be the same
-// namespace collision the allowlist nil exists to prevent — a fixture that
-// happens to contain vendor/ must still be checked. The same holds for
+// scan.ignore is repo-scoped: its globs are repo-root-relative, but this
+// walk's root is the fixture dir, an unrelated path namespace. Applying them
+// here would be a namespace collision — a fixture that happens to contain
+// vendor/ must still be checked. The same holds for
 // scan.gitignore, and more sharply: the paths a consumer's .gitignore covers
 // (build/, .dart_tool/, node_modules/) are exactly the ones fixture trees like
 // to use, so a repo-level prune would blind fire fixtures that live there — and
@@ -237,8 +232,6 @@ func Run(cfg *config.Config, allRuleIDs []string, root string, workers int, w io
 // It needs the identical walk semantics — a repo-level prune there would hide
 // exactly the fire fixture that proves a prefilter load-bearing.
 func EvalIn(r *config.Rule, dir, repo string, workers int) ([]finding.Finding, *scan.FileSet, error) {
-	r = r.CloneWithChecker(r.Checker) // never mutate the caller's rule
-	r.Allowlist = nil
 	fset, err := scan.Walk(dir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("fixture %s: %w", dir, err)
@@ -275,7 +268,6 @@ func runFixture(r *config.Rule, dir, src string, isFire bool, repo string, worke
 
 // judgeFixture compares findings against the fixture's declared expectations.
 func judgeFixture(r *config.Rule, dir, src string, isFire bool, findings []finding.Finding, fset *scan.FileSet) ([]string, error) {
-	findings = finding.Unsuppressed(findings)
 	expected, err := collectExpectations(fset, dir, src, r.ID)
 	if err != nil {
 		return nil, err
@@ -367,14 +359,27 @@ var commandOutputTail = regexp.MustCompile(
 // one, is left entirely to diff — which already reports the manifests that are
 // wrong for those reasons, and would be double-reported by a requirement that
 // asked the second question first.
+// ruleShellsOut reports whether this rule's verdict comes from a subprocess.
+// type: command does. forbidden-pattern census mode does too: it forwards
+// Argv from that same runner, and a bare '-' on its fire manifest accepts a
+// detector that failed to compile.
+func ruleShellsOut(r *config.Rule) bool {
+	if r.Type == "command" {
+		return true
+	}
+	type argvReader interface{ Argv() []string }
+	_, ok := r.Checker.(argvReader)
+	return ok
+}
+
 func commandPinProblems(r *config.Rule, findings []finding.Finding, expected []expectation) []string {
-	// Scoped to the rule type that shells out, deliberately. A declarative
+	// Scoped to the rule that shells out, deliberately. A declarative
 	// rule's scope-level message ("required pattern not found in any in-scope
 	// file") is just as talkative, but it is produced by a checker the engine
 	// compiled and the corpus spells those manifests `-` throughout; the
 	// newly-reachable hazard is a SUBPROCESS whose failure to run and whose
 	// verdict share an exit code.
-	if r.Type != "command" {
+	if !ruleShellsOut(r) {
 		return nil
 	}
 	printed := ""

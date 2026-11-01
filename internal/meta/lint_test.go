@@ -54,7 +54,7 @@ func TestLintExemptsExternalToolRulesFromFixturesAndScope(t *testing.T) {
 
 func TestLintSkipsFixtureCoverageForLibraryRules(t *testing.T) {
 	failed, out := lint(t, map[string]string{
-		".formwork/formwork.yaml":                   "version: 1\nlibrary: [generic]\n",
+		".formwork/formwork.yaml":                   "version: 1\nlibrary: [generic]\ntests: ['**/*_test.go', '**/*_test.dart']\n",
 		".formwork/rules/r.yaml":                    lintRule,
 		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
 		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
@@ -170,180 +170,25 @@ func TestLintFlagsMissingPassFixtureOnly(t *testing.T) {
 	}
 }
 
-const exemptLintRule = "rules:\n  - id: no-banana\n    type: forbidden-pattern\n" +
-	"    scope: {include: ['**/*.txt']}\n    params: {pattern: banana}\n" +
-	"    except: {marker: true, allowlist: allowlists/legacy.txt}\n"
-
-func TestLintFlagsStaleAllowlistEntries(t *testing.T) {
-	failed, out := lint(t, map[string]string{
-		".formwork/formwork.yaml":                   "version: 1\n",
-		".formwork/rules/r.yaml":                    exemptLintRule,
-		".formwork/allowlists/legacy.txt":           "# legacy\ngone.txt\nclean.txt\nhit.txt\n",
-		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
-		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
-		"clean.txt": "no fruit here\n",
-		"hit.txt":   "banana\n",
-	})
-	if failed != 1 {
-		t.Fatalf("failed=%d\n%s", failed, out)
-	}
-	for _, want := range []string{
-		"[exemption-hygiene] FAIL — 2 problem(s)",
-		"no-banana: allowlist allowlists/legacy.txt:2: gone.txt does not exist",
-		"no-banana: allowlist allowlists/legacy.txt:3: clean.txt no longer trips the rule (stale)",
-		"formwork lint: 4/5 checks passed",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in:\n%s", want, out)
-		}
-	}
-	if strings.Contains(out, "hit.txt no longer trips") {
-		t.Fatalf("live allowlist entry flagged stale:\n%s", out)
-	}
-}
-
-func TestLintFlagsReasonlessMarker(t *testing.T) {
-	failed, out := lint(t, map[string]string{
-		".formwork/formwork.yaml":                   "version: 1\n",
-		".formwork/rules/r.yaml":                    exemptLintRule,
-		".formwork/allowlists/legacy.txt":           "hit.txt\n",
-		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
-		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
-		"hit.txt":  "banana\n",
-		"lazy.txt": "banana // formwork:allow no-banana\n",
-	})
-	if failed != 1 {
-		t.Fatalf("failed=%d\n%s", failed, out)
-	}
-	for _, want := range []string{
-		"[exemption-hygiene] FAIL — 1 problem(s)",
-		"no-banana: lazy.txt:1: formwork:allow marker missing a reason",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in:\n%s", want, out)
-		}
-	}
-}
-
-func TestLintFlagsReasonlessMarkerCommentCloser(t *testing.T) {
-	// A block-comment closer directly after the id is not a real reason
-	// (marker package finding B1); lint must flag this now, where the old
-	// end-anchored regex missed it.
-	failed, out := lint(t, map[string]string{
-		".formwork/formwork.yaml":                   "version: 1\n",
-		".formwork/rules/r.yaml":                    exemptLintRule,
-		".formwork/allowlists/legacy.txt":           "hit.txt\n",
-		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
-		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
-		"hit.txt":  "banana\n",
-		"lazy.txt": "banana /* formwork:allow no-banana */\n",
-	})
-	if failed != 1 {
-		t.Fatalf("failed=%d\n%s", failed, out)
-	}
-	for _, want := range []string{
-		"[exemption-hygiene] FAIL — 1 problem(s)",
-		"no-banana: lazy.txt:1: formwork:allow marker missing a reason",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in:\n%s", want, out)
-		}
-	}
-}
-
-func TestLintFlagsReasonlessMarkerCRLF(t *testing.T) {
-	// A CRLF tail with no real reason after the id must also be flagged
-	// (marker package finding B1); the old end-anchored regex missed lines
-	// ending in '\r'.
-	failed, out := lint(t, map[string]string{
-		".formwork/formwork.yaml":                   "version: 1\n",
-		".formwork/rules/r.yaml":                    exemptLintRule,
-		".formwork/allowlists/legacy.txt":           "hit.txt\n",
-		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
-		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
-		"hit.txt":  "banana\n",
-		"lazy.txt": "banana // formwork:allow no-banana\r\n",
-	})
-	if failed != 1 {
-		t.Fatalf("failed=%d\n%s", failed, out)
-	}
-	for _, want := range []string{
-		"[exemption-hygiene] FAIL — 1 problem(s)",
-		"no-banana: lazy.txt:1: formwork:allow marker missing a reason",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in:\n%s", want, out)
-		}
-	}
-}
-
-func TestLintIgnoresReasonlessMarkerWhenNotOptedIn(t *testing.T) {
-	// A rule without `except: {marker: true}` hasn't opted markers in at all:
-	// a reasonless `formwork:allow` for it is misleading noise, not hygiene
-	// debt (adding a reason wouldn't make it exempt anything). It belongs to
-	// the deferred stale-marker bucket, not this check.
-	failed, out := lint(t, map[string]string{
-		".formwork/formwork.yaml":                   "version: 1\n",
-		".formwork/rules/r.yaml":                    lintRule,
-		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
-		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
-		"lazy.txt": "banana // formwork:allow no-banana\n",
-	})
-	if failed != 0 {
-		t.Fatalf("failed=%d\n%s", failed, out)
-	}
-	if strings.Contains(out, "formwork:allow marker missing a reason") {
-		t.Fatalf("reasonless marker flagged for rule without marker: true:\n%s", out)
-	}
-}
-
-func TestLintEnumeratesFinalizerOnlyMarkerAnnotation(t *testing.T) {
-	// required-pattern in exists mode only ever reports via Finalize (no
-	// per-file findings), so marker suppression can never apply to it
-	// (phase-3a carryover, finding B2). The enumeration must say so.
-	failed, out := lint(t, map[string]string{
-		".formwork/formwork.yaml": "version: 1\n",
-		".formwork/rules/r.yaml": "rules:\n  - id: has-license\n    type: required-pattern\n" +
-			"    scope: {include: ['**/*.txt']}\n    params: {pattern: LICENSE, mode: exists}\n" +
-			"    except: {marker: true}\n",
-		".formwork/fixtures/has-license/fire-1/f.txt": "no license here\n",
-		".formwork/fixtures/has-license/pass-1/f.txt": "LICENSE\n",
-		"notes.txt": "in scope, has LICENSE\n",
-	})
-	if failed != 0 {
-		t.Fatalf("failed=%d\n%s", failed, out)
-	}
-	if !strings.Contains(out, "  has-license: marker enabled (finalizer findings: allowlist-only)") {
-		t.Fatalf("missing finalizer-marker annotation in:\n%s", out)
-	}
-}
-
 func TestLintEnumeratesEscapeHatches(t *testing.T) {
 	failed, out := lint(t, map[string]string{
 		".formwork/formwork.yaml": "version: 1\n",
 		".formwork/rules/r.yaml": "rules:\n  - id: no-banana\n    type: forbidden-pattern\n" +
-			"    scope: {include: ['**/*.txt']}\n    params: {pattern: banana}\n" +
-			"    except: {paths: ['vendor/**'], marker: true, allowlist: allowlists/legacy.txt}\n",
-		".formwork/allowlists/legacy.txt":           "hit.txt\n",
+			"    scope: {include: ['**/*.txt'], not_declaring: [{marker: GENERATED, holders: 1}]}\n    params: {pattern: banana}\n",
 		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
 		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
-		"hit.txt": "banana\n",
+		"gen.txt": "GENERATED banana\n",
 	})
 	if failed != 0 {
 		t.Fatalf("failed=%d\n%s", failed, out)
 	}
 	for _, want := range []string{
 		"escape hatches:",
-		// The count is part of the assertion on purpose. Asserting only the
-		// declared glob is satisfied by the declaration-only line this channel
-		// used to print (#138) — the new line CONTAINS the old one, so the
-		// weaker form could not tell the two apart. `vendor/**` matches nothing
-		// in this repo, so 0 is the honest answer and a fossil entry is exactly
-		// what it should read as.
-		"  no-banana: except.paths: vendor/**: 0 file(s) removed",
-		"  no-banana: marker enabled",
-		"  no-banana: allowlist allowlists/legacy.txt (1 entries)",
-		"formwork lint: 5/5 checks passed",
+		// The count is part of the assertion on purpose: a declaration-only
+		// line would satisfy a check for the marker alone. `gen.txt` declares
+		// the marker and holds a banana, so the marker removed one file the
+		// rule would have fired on.
+		`  no-banana: scope.not_declaring: "GENERATED": 1 declaration(s) removed from this rule's evaluation, 1 would fire`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
@@ -588,7 +433,7 @@ func TestLintEnumeratesScanIgnoreWithMatchCounts(t *testing.T) {
 	// a pruned dir are deliberately never counted. zz-nothing/** matches
 	// nothing: the census must expose the dead glob, not hide it.
 	for _, want := range []string{
-		"engine: never scans directories named .formwork, .git (any depth)",
+		"engine: never scans directories named .git (any depth) and the root's .formwork/fixtures",
 		"scan.ignore: vendor/** — 1 dirs pruned (subtrees not scanned), 0 files ignored (vendored source)",
 		"scan.ignore: zz-nothing/** — 0 matches (reserved for future noise)",
 	} {
@@ -620,27 +465,6 @@ func TestLintCensusUnaffectedWhenScanIgnoreUnset(t *testing.T) {
 	}
 	if !strings.Contains(out, "escape hatches: none") {
 		t.Fatalf("clean-repo census contract broken:\n%s", out)
-	}
-}
-
-func TestLintAllowlistEntryUnderScanIgnoreSaysSoNotDoesNotExist(t *testing.T) {
-	failed, out := lintTracked(t, map[string]string{
-		".formwork/formwork.yaml":                   "version: 1\nscan:\n  ignore:\n    - glob: 'vendor/**'\n      reason: vendored\n",
-		".formwork/rules/r.yaml":                    exemptLintRule,
-		".formwork/allowlists/legacy.txt":           "vendor/gen.txt\nhit.txt\n",
-		".formwork/fixtures/no-banana/fire-1/f.txt": "banana want: no-banana\n",
-		".formwork/fixtures/no-banana/pass-1/f.txt": "clean\n",
-		"vendor/gen.txt":                            "banana\n", // exists on disk, hidden by the ignore
-		"hit.txt":                                   "banana\n", // keeps the allowlist otherwise live
-	}, ".formwork", "hit.txt") // vendor/gen.txt stays untracked: this test is about the hygiene diagnosis, not #90
-	if failed == 0 {
-		t.Fatalf("want hygiene failure: allowlisted path can never fire\n%s", out)
-	}
-	if !strings.Contains(out, "vendor/gen.txt hidden by scan.ignore (vendor/**)") {
-		t.Fatalf("want truthful ignore diagnosis, got:\n%s", out)
-	}
-	if strings.Contains(out, "vendor/gen.txt does not exist") {
-		t.Fatalf("misleading does-not-exist diagnosis for an on-disk file:\n%s", out)
 	}
 }
 

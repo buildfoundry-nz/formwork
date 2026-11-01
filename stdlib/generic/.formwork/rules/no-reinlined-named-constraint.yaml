@@ -5,7 +5,6 @@ rules:
   severity: error
   scope:
     include: ['**/*.go']
-    exclude: ['**/*_test.go']
   preprocess: decomment-go
   params:
     pattern: '\[[^\]]*(interface\s*\{[^}]*comparable[^}]*\})'

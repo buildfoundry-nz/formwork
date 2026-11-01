@@ -138,3 +138,30 @@ func exprString(e ast.Expr) string {
 		return "T"
 	}
 }
+
+// Unit is the exported view of one same-func unit, for instruments that must
+// reason about the engine's OWN unit geometry rather than re-derive it — the
+// consumer's vacuity census asks, per companion, which unit holds it, and a
+// second walker there would drift from this one (#51's fix is the measured
+// case: the census's Dart approximation disagreed with the engine).
+type Unit struct {
+	Name  string
+	Start int // byte offset of the unit's first byte
+	End   int // byte offset one past the unit's last byte
+	Line  int // 1-based line of the unit's first byte
+}
+
+// SameFuncUnits returns path's function-grain units exactly as where:
+// same-func evaluates them: .go, .dart and .proto, and none for any other
+// extension.
+func SameFuncUnits(path string, content []byte) ([]Unit, error) {
+	us, err := sameFuncUnits(path, content)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Unit, len(us))
+	for i, u := range us {
+		out[i] = Unit{Name: u.name, Start: u.start, End: u.end, Line: u.line}
+	}
+	return out, nil
+}

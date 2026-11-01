@@ -39,7 +39,7 @@ grammar), and enumerating those exceptions would be a list that itself rots.
 Prose accuracy inside an entry is likewise not mechanically checkable; a
 handful of facts too easy to get wrong are pinned individually.
 
-Counts at the time of writing: **27 rule types, 15 preprocessors.** If your
+Counts at the time of writing: **29 rule types, 15 preprocessors.** If your
 binary reports different numbers, believe your binary and file an issue against
 this document.
 
@@ -55,6 +55,11 @@ a release than get wrong.
 | `0` | pass — every selected rule ran and none found a violation |
 | `1` | violations found |
 | `2` | engine or configuration error — the run did not reach a verdict |
+
+`check-content` applies this contract to its eligible single-file rules only.
+Its JSON says which rules were deferred or out of scope and distinguishes zero
+eligible rules from a clean evaluated set; exit 0 there is not a repository-wide
+pass. See [Single-content checks](#single-content-checks).
 
 The distinction that matters is `1` versus `2`. A crashed, panicking, or
 misconfigured rule must **never** read as a pass. Collapsing the two
@@ -105,8 +110,7 @@ and list the known packs.
 
 Library rules load first. A local `.formwork/rules/` file that restates the same
 `id` replaces the library rule — that is how a mixed binding (generic logic,
-repo-specific globs or allowlist) is expressed. Library rules cannot carry
-`except.allowlist` (that path is repo-local); redeclare locally to bind one.
+repo-specific globs) is expressed.
 
 `formwork lint` does not demand local fixtures or a non-empty scope for a
 library-sourced rule. Those proofs live in the pack: `formwork test -C
@@ -161,10 +165,6 @@ rules:
       min_files: 5              # optional floor; see below
     params:                     # type-specific; strictly decoded
       pattern: "TODO"
-    except:                     # optional; see Exemptions
-      paths: ["legacy/**"]
-      marker: true
-      allowlist: allowlists/legacy.txt
     cure: "Delete the TODO or file an issue and link it."
     origin: "#412"              # what wound this rule closed
     tags: [fast, go]
@@ -187,8 +187,36 @@ reaches the engine as `converted call sites consume the accessor (audit-1`. The
 ### `scope`
 
 `include` and `exclude` are doublestar globs, matched against repo-relative
-paths. A file is in scope when it matches an `include`, no `exclude`, and no
-`except.paths`.
+paths. A file is in scope when it matches an `include` and no `exclude`.
+
+**The walk reads every file but two kinds:** `.git` directories, at any depth,
+and the root's `.formwork/fixtures` — each fixture is its own rule's proof,
+judged by `formwork test` and by no other rule. The rest of the root's
+`.formwork` — `formwork.yaml`, the rule YAML, the mutation specs — is scanned,
+and a rule reaches it **only through an include glob rooted at `.formwork/`**:
+`**` and `**/*.yaml` do not descend into it, because a rule written for
+application code was not written for the corpus that defines it, and would
+fire on every rule YAML that spells its forbidden token. A rule over the
+corpus names the corpus (`.formwork/rules/*.yaml`).
+
+`scope.not_declaring` lists `{marker, holders}` entries. Each place a marker
+(a literal) occurs opens a HOME: the declaration that begins on that line, with
+the same extents a credential uses. The engine masks each home before the rule
+reads the file and judges every other line. `holders` is the exact number of
+places in scope that declare the marker; a different count is a finding,
+judged on the live tree only, and a rule declaring the key runs over the whole
+tree under `--staged`/`--range`. A count of zero is `formwork lint`'s, not the
+check's (0.14.3): a pruned or synthetic tree carrying one rule holds none of
+the repository's homes, which a check cannot tell from a dead marker, and lint
+reports a marker no file declares over the whole tree. A bare-string entry is
+refused at load.
+
+`scope.subject: production` makes the rule read no file the repository's
+`tests:` names (see Test code and production subjects); the default, `all`,
+reads tests.
+
+`scope.generated: true` makes the rule judge files a declared generator wrote
+(see Generated output); every other rule never reads them.
 
 `scope.min_files: N` (default 0 = off) turns a shrunken scope from a disclosure
 into a verdict: fewer than N in-scope files is an error-severity, path-less
@@ -221,7 +249,7 @@ are enumerated by the escape-hatch census with their reason.
 
 ## Rule types
 
-27 registered rule types. Parameters below are the strictly-decoded set — an unknown one is
+29 registered rule types. Parameters below are the strictly-decoded set — an unknown one is
 exit 2. Each entry gives what the type asserts, every parameter it decodes, and
 a worked example.
 
@@ -245,14 +273,74 @@ Reports files matching a pattern.
 |---|---|
 | `pattern` | the regex to forbid |
 | `all_of` | co-occurrence: violate only if EVERY pattern appears in the file |
-| `none_of` | with `all_of`: and none of these appear |
+| `none_of` | with `all_of`: excusals, same shape and rules as `require_absent` |
 | `require_present` | file-level guard on `pattern`: report only if the file contains ALL of these |
-| `require_absent` | file-level guard: report only if the file contains NONE of these |
+| `require_absent` | excusals: each entry is a credential or evidence (see below) |
+| `credential` | in a `require_absent`/`none_of` entry: a line pattern anchored with `^` naming the owner declaration |
+| `holders` | with `credential`: the exact number of lines in scope that hold it |
+| `evidence` | in a `require_absent`/`none_of` entry: a pattern that discharges a trigger it sits near |
+| `within` | with `evidence`: how many lines from the trigger it may sit, 0–100 |
 | `prefilter` | literal substring gate — a pure optimization (see below) |
 | `syntax` | regex flavour |
 | `multiline` | match across line boundaries |
 | `window` | bounded multiline window |
 | `denied_by` | literal markers that SUPPRESS a match whose text denies the topic (see below) |
+| `census` | a command detector (`cmd`, `when`, `expect`, `output`) whose verdict is the finding. Exactly one of `pattern`, `all_of`, or `census`. The rule stays fast, so `--skip-escapes` runs it. `cost` inside `census` is refused |
+
+**Excusals are credentials or evidence, never a bare string (0.9).** A bare
+`require_absent` entry used to excuse any file containing its text anywhere: a
+copy inside a string earned it, any number of files could hold it, and it
+excused triggers it had nothing to do with. Each entry now says which of two
+things it is.
+
+```yaml
+params:
+  pattern: '"auto_policy"'
+  require_absent:
+    # CREDENTIAL: the one declaration of the constant may spell it.
+    - {credential: '^const SourceAutoPolicy = "auto_policy"', holders: 1}
+```
+
+A **credential** names an owner. It must be anchored at the start of a line
+(`^...`, optionally after a flag group such as `(?i)^`), and `holders` is the
+exact number of lines in the rule's scope that match it. The count is taken
+over every in-scope file, prefiltered or not, and a run whose count differs is
+a finding: the set of owners is fixed, and changing it is a reviewed edit to a
+number. A count of zero is `formwork lint`'s (0.14.3), as for a not_declaring
+marker: lint reports a credential no in-scope line holds.
+
+**A credential sanctions the declaration its line opens, never the file
+(0.14).** The engine masks that declaration and judges every other line of the
+file, so a second violation beside the owner fires. The extent is read from
+the source as written: in Go, the statement the line's first token begins (a
+func or method through its closing brace, a const/var/type spec through its
+value), with a `package` clause covering the whole file; in Dart and proto, the
+declaration through the close of its first top-level block or a top-level
+semicolon, with comments and strings blanked. A credential on a comment line
+sanctions only that line. A non-code file (Markdown, YAML, SQL) has no
+declaration structure, so its credential line declares the document. A file's
+import directives (Go `import`; Dart `import`, `export`, `part`, `library`)
+serve every declaration in it and cannot sit inside one, so a file that holds
+a home owns its directives with it. The count is judged on the live tree only: a fixture proves
+the trigger and the excusal, and cannot honestly hold the repository's number,
+so prove the count on the real tree (a mutation that duplicates a holder line). A rule carrying a credential is evaluated over the whole tree
+even under `--staged`/`--range`. A library rule cannot carry one: its holder
+count is a fact about the consuming repo, so declare the rule locally.
+
+```yaml
+params:
+  pattern: 'INSERT INTO'
+  require_absent:
+    # EVIDENCE: this INSERT runs against a disposable database.
+    - {evidence: 'ephemeralDB\(', within: 5}
+```
+
+**Evidence** names a discharge. It excuses only a trigger it starts within
+`within` lines of (before or after), at most 100; every trigger needs its own.
+Evidence elsewhere in the file excuses nothing, so it cannot become a
+file-wide opt-out. A proof that really is file-wide ("a file that does X must
+contain Y") is a requirement, not an excusal: write it as `required-pattern`
+with `when:`.
 
 **`denied_by` answers polarity, which no pattern can carry.** A
 forbidden-pattern matches TOPIC. Whether the matched text asserts that topic or
@@ -306,11 +394,50 @@ that passes.
   cure: "Resolve the item now or track it in an issue; marker comments rot."
 ```
 
+**`census` is the command runner under this type.** A hand-built document is
+not a line: it is folded across literals, calls, and files, and a pattern that
+tries to see that fold false-fires on the composite literals beside it. The
+detector that already folds those shapes stays the detector. `census` takes
+that detector's params (`cmd`, `when`, `expect`, `output` — the same keys
+`command` decodes, except `cost`). The rule does not declare a cost, so it is
+fast and `check --skip-escapes` runs it. A `cost` key inside `census` is
+refused at load: declaring a slower class would drop the detector at
+pre-commit, which is the hole this mode closes. In a changeset mode a census
+runs only when the changeset reaches its scope, like every other
+forbidden-pattern rule, so its scope must name the files its detector judges
+(see File-set modes).
+
+`{{root}}`, `{{repo}}`, the parent-segment lint, the `when.paths_changed`
+lint, and fixture isolation apply, because the checker is that runner. A
+census cannot combine with `pattern`, `all_of`, `multiline`, `prefilter`,
+`window`, `syntax`, `denied_by`, `require_present`, `require_absent`, or
+`none_of`.
+
+```yaml
+- id: no-hand-built-json
+  type: forbidden-pattern
+  severity: error
+  scope:
+    include: ["**/*.go"]
+  params:
+    census:
+      cmd: ["go", "-C", "{{repo}}/scripts/dev/gojsoncensus", "run", ".", "--root", "{{root}}"]
+      expect:
+        exit: 0
+      output: findings-v1
+  cure: "Build the body as the declared message. Do not type a JSON document into source."
+```
+
 #### `required-pattern`
 Requires a pattern to be present. `pattern` is the regex, `syntax` its flavour
 (as above), and `mode` chooses the unit: `every-file` (the default) reports
 each in-scope file that lacks the pattern, `exists` reports once, at the end,
-if no in-scope file carried it.
+if no in-scope file carried it. `when` (every-file mode only) applies the
+requirement only to files that match it: "a file that does X must contain Y".
+It takes one pattern or a list, and a list applies only where every entry
+matches.
+`multiline` matches `pattern` and `when` over the whole file, so the required
+shape may span lines.
 
 ```yaml
 - id: spec-exists
@@ -662,6 +789,32 @@ tallies.
     require_used: right
 ```
 
+#### `go/marked-single-home`
+Holds every top-level declaration whose doc comment carries `marker` to one
+declaration across the scope. The marker declares the home; any second func,
+method, type, const or var of the same identity in scope is a finding, marked
+or not. Identity is the kind and name, plus the receiver type for a method, so
+a var named like a marked func is a different declaration. A grouped `const` or
+`var` block's own doc covers none of its specs; mark the spec. A marker that
+documents no top-level declaration is itself a finding. Unmarked duplicates are
+not judged.
+
+It replaces a `pattern-count` rule per name (`'^func offerFor\('`, `n: 1`): a
+new home is one comment at its declaration.
+
+| param | meaning |
+|---|---|
+| `marker` | required: the literal a declaration's doc comment carries |
+
+```yaml
+- id: go-single-homes
+  type: go/marked-single-home
+  scope:
+    include: ["internal/**/*.go"]
+  params:
+    marker: 'formwork:single-home'
+```
+
 ### Dart analyzers (`internal/rules/dartscan`)
 
 #### `dart/method-delegates`
@@ -677,6 +830,30 @@ of the body.
   params:
     method: '^\s*void dispose\('
     must_call: 'super\.dispose\('
+```
+
+#### `dart/marked-single-home`
+The Dart form of `go/marked-single-home`. A top-level declaration whose
+`//` or `///` comment run, read upward past any annotations, carries `marker`
+is the one declaration of its identity across the scope. Any second
+declaration of it, marked or not, is a finding that names the home. A
+top-level declaration is a column-0 line outside every string and block
+comment, so members are never counted. Identity is the kind (type,
+function, getter, setter, variable) and the name; a library-private name
+(`_Body`) is also keyed on its file. A marker that reaches no top-level
+declaration is itself a finding.
+
+| param | meaning |
+|---|---|
+| `marker` | required: the literal the declaration's comment run carries |
+
+```yaml
+- id: dart-single-homes
+  type: dart/marked-single-home
+  scope:
+    include: ["lib/**/*.dart"]
+  params:
+    marker: 'formwork:single-home'
 ```
 
 #### `dart/ref-after-await`
@@ -750,12 +927,27 @@ no naive `;` split, so a semicolon inside a string literal does not truncate a
 statement.
 
 `internal/sqlextract` reassembles SQL from Go string literals, so these rules
-see queries composed in Go as well as `.sql` files.
+see queries composed in Go as well as `.sql` files. A Go string constant is read
+as its value wherever the module declares it — in the file, elsewhere in its
+package, or in an imported package of the module — so a query composed of
+literals and named constants is read whole. A SQL template — a package-level
+function whose parameters and result are all `string` and whose body is one
+`return` — is read too: a call with constant arguments reads as what it builds,
+and the definition is judged once per argument set its callers pass.
+
+**`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
+that carries SQL (a statement, a clause, or a SQL-only token such as a cast or
+`$1`) and has an operand that is not a constant — a variable, a call, a field —
+is a finding: `SQL could not be read (…), so this rule cannot judge it`. The
+rule cannot vouch for text decided at run time. The cure is to compose the
+statement from constants and bind what varies as a parameter. A composition
+that is not SQL — a log line, a path — is not one.
 
 #### `sql/parses`
 Takes **no parameters**. Flags SQL that fails to parse. For `.sql` every
 failure is reported; for `.go` only SQL-shaped candidates are, so an ordinary
-string literal never fires.
+string literal never fires. A `.go` composition it cannot read is a finding
+(see above).
 
 ```yaml
 - id: sql-parses
@@ -782,7 +974,9 @@ A locking `SELECT` without a deterministic `ORDER BY` is a deadlock shape.
 
 #### `sql/statement-predicate`
 Per-statement assertions scoped to a table. `require` and `forbid` are lists of
-regexes over the statement, and at least one of them is required.
+regexes over the statement, and at least one of them is required. A `.go`
+composition it cannot read is a finding whatever its text names: the part it
+cannot read may be the table (see above).
 
 `table` is an unanchored RE2 regex matched against the whole
 **statement text**, so it selects statements rather than naming a relation: a
@@ -926,9 +1120,9 @@ programs above, because to this rule they are one program. Read the callee it
 names:
 
 - If it **CALLS** the closure, every real path orders this query and the
-  finding reports a hazard the code does not have. Clear it with a
-  `formwork:allow` marker, which `formwork lint` keeps enumerated so the
-  suppression stays visible; do not reshape the query to please the analyzer.
+  finding reports a hazard the code does not have. No comment exempts it:
+  append the ORDER BY where the query is composed instead of through a closure
+  this pass cannot follow.
 - If it only **STORES** the closure, nothing runs those appends, the unordered
   locking `SELECT` is the real value, and the finding is the deadlock hazard.
 
@@ -1019,6 +1213,15 @@ it mandatory in CI — without it the detector either dies on the missing ref or
 skips the range everywhere, which is a gate that fails open. Nothing is ever
 removed from the environment (see the refusal above); this is added.
 
+A `--staged` or `--range` run sets **`FORMWORK_FILES`** to the path of a file
+listing, one root-relative path per line, the changed files this rule's scope
+admits: the files the engine handed it. A detector whose verdict for a file
+depends only on that file can judge those and parse nothing else, which turns
+a whole-root scan per commit into a scan of the commit. An empty listing is an
+empty file, never an unset variable. A whole-tree run sets nothing, so the
+detector judges the root there; that run is the backstop every changeset skip
+names. A detector that ignores the variable behaves exactly as before.
+
 Isolation arrives **with** the migration, not ahead of it. A rule still naming
 paths relative to its caller is asking for the arm-inside-the-repository
 layout, and its detector commonly resolves a repo-resident helper by walking up
@@ -1106,43 +1309,75 @@ code-only projection. `decomment-go` implements Go quoting, not Dart quoting.
 
 ## Exemptions
 
-Three channels. All three are enumerated by `formwork lint`'s escape-hatch
-census, and none of them is silent.
+There is no exemption channel inside a rule's evaluation. No comment, marker,
+allowlist or path carve-out forgives a finding: a file the rule covers is
+judged, and every error-severity finding fails the run. The `except:` block is
+refused at load (exit 2), whichever of its former keys (`paths`, `marker`,
+`allowlist`) it carries.
 
-### Inline markers
+What remains is scope itself — `scope.include`, `scope.exclude`,
+`scope.not_declaring` and the repository's generated-output definition — and
+every subtraction is enumerated by `formwork lint`'s escape-hatch census, so
+none is silent. `scope.not_declaring` reports, per marker, how many home
+declarations it removed and how many of those the rule would have fired inside,
+so a marker protecting nothing reads `0 would fire` rather than printing like a
+live one.
 
-Enabled per rule with `except: {marker: true}`.
+### Generated output
 
-```
-formwork:allow <rule-id> <reason>
-```
-
-The id is a single whitespace-delimited token; everything after it is the
-reason. `formwork lint`'s `exemption-hygiene` check reports a marker with no
-reason.
-
-Suppressed findings are **enumerated, not counted** — every renderer names
-which findings were suppressed and by which channel, so the exemption surface
-can be audited:
-
-```
-suppressed (exempted, not failures):
-  [no-todo] a.go:2: forbidden pattern matched: TODO (marker)
+```yaml
+generated:
+  - {marker: 'Code generated by protoc-gen-go. DO NOT EDIT.', proven_by: [proto-regen-fresh]}
+  - {marker: 'GENERATED CODE - DO NOT MODIFY BY HAND', proven_by: [dart-codegen-fresh]}
 ```
 
-### Allowlist files
+A rule about hand-written code does not judge what a generator wrote; the
+generator's output is right when it reproduces from its input. The repository
+declares each generator's header once, here, instead of every rule carrying its
+own list of output globs. A file is generated when a declared marker appears in
+its LEADING comment block (the lines before its first line that is neither
+blank nor a comment); a marker in a string, or in a comment after code,
+declares nothing. Generated files are outside every rule that does not declare
+`scope.generated: true`.
 
-`except: {allowlist: allowlists/legacy.txt}`, relative to `.formwork/`. One
-repo-relative path per line. Ratchets: entries are meant to be removed, and
-`exemption-hygiene` reports an entry that no longer trips the rule.
+`proven_by` is required and names the rules that prove a file carrying the
+header reproduces from its generator. That proof is what keeps the header from
+being a self-granted exemption: a hand-written file that copies it fails the
+freshness gate, because regenerating does not produce it. `formwork lint`'s
+`generated-definition` check fails a proven_by id that names no rule in the
+corpus, a proving rule no CI lane selects, and a marker no scanned file
+carries, and the census counts each marker's files on every run. A missing
+proving rule is a lint finding rather than a load error so that a pruned corpus
+— one rule and its fixtures beside the repository's `formwork.yaml` — still
+loads.
 
-### `except.paths`
+### Test code and production subjects (0.15)
 
-Globs carved out of the rule's scope. Distinct from the other two: it is a
-scope **subtraction**, so the rule never evaluates the file and there is no
-finding to suppress. The census reports how many in-scope files each entry
-actually **removed**, so a dead entry reads `0 file(s)` rather than printing
-like a live one.
+```yaml
+tests:
+  - '**/*_test.go'
+  - 'packages/*/test/**'
+```
+
+Every rule reads tests by default: a test is code. `tests:` declares the
+repository's test code once, by path, the way its toolchains define it (`go
+build` leaves `*_test.go` out). A rule whose subject only production code can
+have — a production import of a testing package, reflection in shipped code, a
+request message no production handler consumes — says so:
+
+```yaml
+scope:
+  include: ['**/*.go']
+  subject: production
+```
+
+A production subject reads no file `tests:` names; `subject: all` (the
+default) reads everything its include reaches. This replaces a per-rule
+`scope.exclude` of test globs, which could not be told from an exclude that
+forgives a violation. The census prints, for each production-subject rule, how
+many test files its subject leaves out, and `formwork lint` refuses a
+production subject that leaves out none. A production subject with no `tests:`
+definition is refused at load.
 
 ---
 
@@ -1166,6 +1401,11 @@ lanes:
 `formwork check --lane <name>` runs only that lane. `formwork lint` reports a
 lane selecting **zero** rules, and a rule reachable by no CI lane.
 
+Lanes do not select rules for `check-content`, in either single-path or batch
+mode. Cost classes likewise do not determine eligibility there: only the
+path-aware `ContentOnly` opt-in and the explicit tree-context deferrals below
+apply. `check-content` has no `--lane` or `--cost-max` flag.
+
 ### File-set modes
 
 | invocation | what is scanned |
@@ -1179,6 +1419,17 @@ that the scan did not produce is **refused** rather than skipped. Whole-tree
 invariant rules (`where: same-dir`, `set-relation`, `baseline`) still evaluate
 over the tracked tree in changeset modes, because a verdict about the
 repository cannot be reached from a diff.
+
+**A rule whose inputs the changeset never reached is not run.** Two kinds of
+rule judge more than the changed files: a whole-tree invariant, and a
+forbidden-pattern `census`, whose detector reads the whole root. In a changeset
+mode each runs only when the changeset adds, edits, deletes or renames a path
+its scope admits, or a path under `.formwork/`, where every rule definition
+lives. Otherwise its verdict cannot have moved,
+so the rule is named in the scan block's `rules_not_run` on the `changeset`
+channel, and it is neither rendered as `OK` nor counted as passed. `baseline`
+always runs, because its baseline file is an input no scope names. The
+whole-tree `check` never gates on a changeset and judges every rule.
 
 `--range` is **one string, tokenized shell-style** — not a list of arguments.
 It carries the revisions and, optionally, a `-- <pathspec>` tail, and formwork
@@ -1249,6 +1500,130 @@ no timings), or the flag combined with `--staged`/`--range`.
 
 ---
 
+## Single-content checks
+
+```sh
+formwork check-content [-C <root>] --path <file> [--all-findings] < <file>
+```
+
+This evaluates the **complete stdin bytes** as one file under the configuration
+at `-C`; it never substitutes the target path's disk contents. Empty stdin is
+valid empty content. `--path` is required, positional operands are refused, and
+stdin/flag/config/engine failures are exit 2. The path uses `rules-for`
+normalization and walk-reachability rules: an intended file that does not exist
+yet is valid, a directory or out-of-root path is exit 2, and an ignored or
+nonregular path produces `status: "not_scanned"` rather than a clean evaluated
+result. `scan.ignore` and `scan.gitignore` retain their ordinary meaning.
+
+The ordinary engine runs over one `scan.NewMemFile` with one worker, so
+preprocessors, finding ordering, cures, and analyzer errors are unchanged.
+There is no second matcher, daemon, MCP server, or replay store.
+
+### Eligible and deferred rules
+
+Eligibility is an explicit, path-aware checker opt-in, not `cost: fast`. The
+current file-local families are:
+
+- `binary-content`, `file-naming`, `file-size`, `ordering`, and
+  `forbidden-pattern` without census or credentials;
+- `go/expected-derives-from-actual`, `go/func-line-budget`,
+  `go/call-confined-to-func-name`, and `go/guard-precedes-call`;
+- `dart/ref-after-await`, `dart/numeric-field-validated`, and
+  `dart/gate-reads-are-listened`;
+- `sql/parses`, `sql/statement-predicate`, `sql/locking-select-order`, and
+  `sql/locking-target` **only for `.sql` paths**, with the analyzers'
+  case-insensitive extension classification (`.SQL`, `.Sql`, and so on). On
+  `.go` these rules defer: their extraction can read siblings, package
+  constants, and templates.
+
+Every `Finalizer`/`ErrFinalizer` is deferred, including a wrapped finalizer, as
+are whole-tree/cross-file rules, `scope.min_files`, `scope.not_declaring`,
+generated-only scopes, external commands, git-diff, census/credential forms,
+and other tree readers. Unknown checkers default to ineligible. Running only a
+finalizing rule's per-file half would not be its full-check verdict.
+
+`not_evaluated` gives each applicable but unevaluated rule a stable reason.
+Rules the path scope does not select are counted in `out_of_scope` without
+per-rule entries, and a `not_scanned` result carries its path attribution rather
+than enumerating the whole corpus:
+
+| reason | meaning | counted as |
+|---|---|---|
+| `generated_excluded` | declared generated content is outside an ordinary rule's scope | `out_of_scope` |
+| `scope_min_files` | the floor is a repository-corpus assertion | `deferred` |
+| `scope_not_declaring` | holder counting/masking needs tree context | `deferred` |
+| `generated_only_scope` | generated-only evaluation depends on repository proof context | `deferred` |
+| `finalizer` | any finalization phase exists, even behind a wrapper | `deferred` |
+| `whole_tree_invariant` | the verdict is not file-local | `deferred` |
+| `content_only_not_supported` | the checker has no path-specific opt-in | `deferred` |
+
+### JSON contract (schema 1)
+
+Stdout is one object with these fields:
+
+- `schema_version` (`1`), `engine_version`, normalized `path`, and `status`.
+- `corpus_hash`: `sha256:` followed by the digest of the exact loaded
+  `formwork.yaml`, embedded-library, and local rule bytes, including library
+  files later overridden locally. `content_hash` is the same digest form over
+  the exact stdin bytes.
+- `coverage`: `rules_total`, `in_scope`, `eligible`, `evaluated`, `deferred`,
+  and `out_of_scope`. `evaluated_rule_ids` lists the eligible rules actually
+  handed to the engine. `not_evaluated` contains `{rule, reason}` entries as
+  above.
+- `findings`: `{rule, severity, path, line, message, cure, explain}` entries.
+  `explain` is `formwork explain <rule-id>`. Empty cures and line zero remain
+  explicit. `findings_total` counts all engine findings and
+  `findings_omitted` counts those beyond the default first three.
+  `--all-findings` returns the complete array over the same evaluation.
+- `replay_handle`: a deterministic SHA-256 fingerprint of the
+  schema/engine/corpus/path/content identity and reachability classification.
+  A `not_scanned` result's deciding channel and glob/gitignore rule are included,
+  so a findings result and a newly ignored or nonregular path cannot share a
+  handle. It does not identify stored server state. `elapsed_ms` is
+  observational and is not part of that identity.
+- `not_scanned`, when applicable, carries the same attribution shape as
+  `rules-for` (`by`, relevant glob/gitignore rule and reason, and any external
+  tool rules that may re-scan independently).
+
+`evaluated_rule_ids`, `not_evaluated`, and `findings` are always arrays, never
+`null`. `status` is `clean` (eligible rules evaluated with no findings),
+`findings` (including warn-only findings), `no_eligible_rules`, or
+`not_scanned`. There is intentionally no `rules_passed` field: zero eligible
+rules cannot become a vacuous pass count.
+
+Exit 0 means no error-severity findings among eligible rules, exit 1 means at
+least one, and exit 2 means input/config/engine failure. Severity is evaluated
+before output truncation, so an omitted error still exits 1. Any single-content
+result — including `clean` — is only a verdict about the supplied bytes and the
+eligible rule set, never a whole-repository green.
+
+### Batch mode
+
+```sh
+formwork check-content [-C <root>] --batch [--all-findings] < records.jsonl
+```
+
+Each stdin line is one JSON object with required `path` and `content` fields;
+`content` may be `""`. Unknown fields, missing/null fields, malformed or blank
+lines, and multiple JSON values on one line are exit 2. `--path` and `--batch`
+are mutually exclusive. An empty batch is exit 2 rather than a vacuous pass.
+
+Output is newline-delimited JSON: one compact object with the exact schema above
+per input record, in input order. Configuration is loaded once for the whole
+invocation. Every record independently normalizes its path, checks reachability,
+plans generated/scope eligibility, and runs the singleton evaluator. Content
+hashes and replay handles are independent, `not_scanned` affects only its own
+record, and finalizer/cross-file rules never run. `--all-findings` applies per
+record.
+
+Results are emitted only after every record has evaluated successfully, so a
+later malformed record or engine error cannot leave a partial batch looking
+complete. JSON write errors are exit 2. The aggregate exit is 1 if any record
+has an error-severity finding, 0 otherwise, and 2 for input/config/engine/output
+failure. No batch-wide status replaces each record's `status` and `coverage`.
+
+---
+
 ## Introspection
 
 Four commands answer questions **about** a configuration instead of judging a
@@ -1274,6 +1649,13 @@ formwork scope [-format human|json] [--staged | --range A..B]       # the same, 
 `list types` and `list preprocessors` read the registries, so a pinned binary
 cannot misreport its own vocabulary — which is why they, and not this document,
 are the authority.
+
+Every `-format json` answer is one object, and a list is a named member of it:
+`list rules` answers `rules`, `list lanes` answers `lanes`, `list types` and
+`list preprocessors` answer `types` and `preprocessors`, and `rules-for`
+answers `paths`, one entry per asked path in the order asked. A consumer
+decodes the answer as one declared document; nothing it reads is a bare
+top-level array.
 
 `TestReferenceManualIntrospectionCommandsTakeTheFormatFlag` (in `internal/meta`)
 runs each of these lines against the binary, so the two promises above are

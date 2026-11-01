@@ -97,10 +97,8 @@
 # value the loader stores as a reason, or stays silent on one the loader
 # refuses. Widen the pattern past the loader and that test goes red by name.
 #
-# NO MARKER EXEMPTION, deliberately. `except: {marker: true}` would let a
-# `formwork:allow` comment silence this rule, and a marker carries a reason
-# that nothing here checks for content — the same vacuity one level up. A
-# declaration that declares nothing gets fixed or gets deleted.
+# A declaration that declares nothing gets fixed or gets deleted; the engine
+# has no channel that could excuse one.
 rules:
   - id: fixture-exempt-declares-nothing
     type: forbidden-pattern

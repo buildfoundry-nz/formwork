@@ -268,15 +268,13 @@ func TestExportPathNeedsNoTarBinary(t *testing.T) {
 
 // The export must carry what its readers open, and nothing else.
 //
-// config.Load reads .formwork/formwork.yaml, .formwork/rules/*.yaml and the
-// allowlists those rules name; loadRuleMeta and existsDeclarations glob
-// .formwork/rules/*.yaml. Nothing in that path opens a fixture or a mutation
+// config.Load reads .formwork/formwork.yaml and .formwork/rules/*.yaml;
+// loadRuleMeta and existsDeclarations glob .formwork/rules/*.yaml. Nothing in that path opens a fixture or a mutation
 // spec — yet on the real corpus those are 18,392 of the 20,048 files the export
 // writes to disk. The function's own comment ("~1500 small files") is an
 // accurate description of the WORKING SET; it is the export that outgrew it.
 func TestExportPathCarriesOnlyWhatItsReadersOpen(t *testing.T) {
 	files := wideSources()
-	files[".formwork/allowlists/widened-relation.txt"] = "# no entries\n"
 	files[".formwork/fixtures/widened-relation/pass-1/src/base.go"] = "package a\n"
 	files[".formwork/mutations/widened-relation.yaml"] = "spec: {}\n"
 	root := writeCorpus(t, baseRules, files)
@@ -290,7 +288,6 @@ func TestExportPathCarriesOnlyWhatItsReadersOpen(t *testing.T) {
 	for _, opened := range []string{
 		filepath.Join(".formwork", "formwork.yaml"),
 		filepath.Join(".formwork", "rules", "test.yaml"),
-		filepath.Join(".formwork", "allowlists", "widened-relation.txt"),
 	} {
 		if _, err := os.Stat(filepath.Join(dst, opened)); err != nil {
 			t.Fatalf("%s is absent from the exported tree — config.Load, loadRuleMeta or existsDeclarations reads it: %v", opened, err)
@@ -306,22 +303,25 @@ func TestExportPathCarriesOnlyWhatItsReadersOpen(t *testing.T) {
 	}
 }
 
-// A corpus with no allowlists/ must still export.
+// A corpus missing a member must still export.
 //
 // The trap in narrowing the pathspec: `git archive` treats a pathspec matching
 // nothing as FATAL (exit 128), so a hardcoded member list refuses every rev that
-// lacks one member — including the commit that introduces allowlists, and every
-// corpus writeCorpus builds. Each member is probed before it is asked for.
-func TestExportPathToleratesACorpusWithoutAllowlists(t *testing.T) {
+// lacks one member — a corpus with no rules/ of its own, binding only library
+// packs, is one. Each member is probed before it is asked for.
+func TestExportPathToleratesACorpusMissingAMember(t *testing.T) {
 	root := writeCorpus(t, baseRules, wideSources())
-	gitInit(t, root)
-	rev := commitAll(t, root, "a corpus with no allowlists")
-
-	if _, err := os.Stat(filepath.Join(root, ".formwork", "allowlists")); !os.IsNotExist(err) {
-		t.Fatalf("this fixture must have NO allowlists dir or the trap is untested: %v", err)
+	if err := os.RemoveAll(filepath.Join(root, ".formwork", "rules")); err != nil {
+		t.Fatal(err)
 	}
+	gitInit(t, root)
+	rev := commitAll(t, root, "a corpus with no rules dir")
+
 	dst := t.TempDir()
 	if err := exportPath(root, rev, ".formwork", dst); err != nil {
-		t.Fatalf("a corpus without allowlists/ was refused: %v", err)
+		t.Fatalf("a corpus without rules/ was refused: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, ".formwork", "formwork.yaml")); err != nil {
+		t.Fatalf("the present member is absent from the exported tree: %v", err)
 	}
 }

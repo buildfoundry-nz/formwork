@@ -1,3 +1,6 @@
+# formwork 0.13 removed except: (except.paths and except.marker). Any carve-out
+# or marker opt-in this port describes below is gone: its home file is judged
+# by this rule like every other file.
 # Ported from Palletra scripts/check-classification-edit-token-confined-to-owner-files.sh.
 # The token `ClassificationOverride` (the K13 user-edit-lock bypass sentinel) may
 # appear ONLY in its definition file (markupwrite/mutbase/mutbase.go) and
@@ -18,10 +21,6 @@ rules:
         - "freightworks/**/*.go"
       exclude:
         - "**/*_test.go"
-    except:
-      paths:
-        - "freightworks/services/core-api/internal/markupwrite/mutbase/mutbase.go"
-        - "freightworks/services/core-api/internal/markupwrite/partitiontypemut/**"
     params:
       pattern: 'ClassificationOverride'
     cure: "Only mutbase/mutbase.go (defn) and partitiontypemut/ (sole user) may name ClassificationOverride — classification is exempt from the K13 lock for partition_type ONLY. Route the edit through partitiontypemut.RecordAndUpdatePartitionType."

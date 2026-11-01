@@ -7,8 +7,6 @@ rules:
     params:
       pattern: '//\s*(TODO|FIXME|HACK)\b'
     cure: "Resolve the item now or track it in an issue; marker comments rot."
-    except:
-      marker: true
   - id: spec-exists
     type: required-pattern
     scope:

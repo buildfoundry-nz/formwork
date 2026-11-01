@@ -25,11 +25,6 @@
 //	                           above is blind to it by construction).
 //	class 1  SOURCE-LIST-      that declaration names a directory holding no
 //	         VACUOUS           non-test Go source, so it gates nothing.
-//	class 1  DEAD-EXCEPT-GLOB  an except.paths entry names a literal path that is
-//	                           not in the repository (#12178 — see below).
-//	class 1  INERT-EXCEPT      an except.paths entry names a literal path that IS
-//	                           there and in scope, but which the rule does not
-//	                           fire on, so it suppresses nothing (#10777).
 //	class 2  SELF-SATISFIED    the rule's evidence is not the thing it guards —
 //	                           it is a comment, its own detector, or a token so
 //	                           generic that any fragment of the file supplies it.
@@ -64,7 +59,7 @@
 // with `# glob-dead: <reason>` on the line above it — the reviewed escape,
 // never a separate allowlist file.
 //
-// scope.exclude and except.paths globs are GATED (#12178), on the half of them
+// scope.exclude globs are GATED (#12178), on the half of them
 // that discriminates. Two things were wrong with reporting and never gating.
 //
 // First the DENOMINATOR. The defensive entries were partly "dead" because they
@@ -95,36 +90,6 @@
 // This measures glob-vs-tree, not glob-vs-intent: a glob that matches the
 // WRONG files (too broad, or the right count for the wrong reason) is
 // invisible here. That is class 2's territory.
-//
-// # The inert except.paths entry (#10777)
-//
-// DEAD-EXCEPT-GLOB above asks whether the path is still THERE. INERT-EXCEPT
-// asks the next question — whether an entry whose path IS there still suppresses
-// anything — and it is a question only an except.paths entry raises, because
-// except.paths is a scope SUBTRACTION rather than a suppression. config.Rule.
-// Applies returns false for a matched path, so the rule never evaluates the
-// file, no finding is produced to be suppressed, and formwork lint's
-// escape-hatch census keeps printing the entry as a live, accounted-for
-// exception no matter what happened to the code underneath it. An allowlist
-// entry cannot rot this way — lint's exemption-hygiene compares it against real
-// findings — which is why the same rot living one level over went unseen.
-//
-// It was found by accident during #10346: dart-measure-active-step named
-// measure_type_filter_providers.dart as the home of a resolver that issue had
-// turned into a projection off the server's resolution, and the only thing that
-// ever noticed was a human running the rule's own regex across two revisions.
-// The cost is governance rather than tidiness — once the list stops saying which
-// entries are load-bearing, an honest amendment to an ownership manifest reads
-// exactly like an allowlist widening.
-//
-// Answered by evaluating the rule over a one-file tree with ExceptPaths CLEARED
-// (probe.go, exceptExcuses); probing the rule as written would drop the file at
-// Applies and report every entry in the corpus inert. Literal paths only, same
-// isClassGuard split as the DEAD arm and for the same reason. A file that can
-// never be a violator — the declaration home of the very field a rule is written
-// against — is declared in place with `# except-declaration: <reason>`, distinct
-// vocabulary from `# glob-dead:` because "matches nothing" and "matches a file
-// the rule cannot fire on" are different claims with different cures.
 //
 // # The live-include inventory (#10876)
 //
@@ -420,7 +385,7 @@ func run(root string, full, writeInv bool, stdout, stderr io.Writer) int {
 
 	declared := declaredFuncNames(fset)
 
-	rows, err := classify(cfg, root, fset, scopes, meta, gm, declared)
+	rows, err := classify(cfg, root, scopes, meta, gm, declared)
 	if err != nil {
 		fmt.Fprintf(stderr, "%s FAIL: %v\n", tag, err)
 		return 2

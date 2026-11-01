@@ -32,7 +32,7 @@ func (plainChecker) CheckFile(*scan.File) ([]rules.Match, error) { return nil, n
 
 func rule(t *testing.T, id string, c rules.Checker) *config.Rule {
 	t.Helper()
-	r, err := config.New(id, "command", finding.SeverityError, "", []string{"**"}, nil, nil, c)
+	r, err := config.New(id, "command", finding.SeverityError, "", []string{"**"}, nil, c)
 	if err != nil {
 		t.Fatal(err)
 	}

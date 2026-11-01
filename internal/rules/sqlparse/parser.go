@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	pg "github.com/pganalyze/pg_query_go/v6"
@@ -73,6 +74,8 @@ func parseConcurrency() int {
 // the bound's test, which cannot otherwise tell a working semaphore from a
 // serialised workload that never reached the limit.
 var parseInFlight, parsePeak atomic.Int64
+var parserWarmup sync.Once
+var parserWarmupErr error
 
 // parse parses whole SQL text into its statement list. A syntax error is
 // returned as err (pg_query returns no partial result on error).
@@ -81,6 +84,12 @@ var parseInFlight, parsePeak atomic.Int64
 // mutex-guarded pool — but deliberately BOUNDED before entry, because that pool
 // sizes itself to peak concurrency and never gives the memory back.
 func parse(sql string) (*pg.ParseResult, error) {
+	parserWarmup.Do(func() {
+		_, parserWarmupErr = pgquery.Parse("SELECT 1;")
+	})
+	if parserWarmupErr != nil {
+		return nil, parserWarmupErr
+	}
 	parseSem <- struct{}{}
 	n := parseInFlight.Add(1)
 	for {

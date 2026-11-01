@@ -29,7 +29,7 @@ import (
 //     prefixes — a 6.5× reduction in candidate evaluations on the real
 //     corpus.
 //   - Scope-signature dedupe: rules with identical
-//     include/exclude/except.paths globs produce identical scopes by
+//     include/exclude globs produce identical scopes by
 //     construction, so one bucketed scan serves the whole group (2167
 //     rules → 1356 unique signatures on the real corpus). Members share
 //     the one result slice; every downstream consumer is read-only.
@@ -77,7 +77,7 @@ func buildScopeIndex(rules []*config.Rule, files []*scan.File) map[string][]*sca
 }
 
 // groupByScopeSignature buckets rules by their exact
-// include/exclude/except.paths glob lists: identical globs make Applies
+// include/exclude glob lists: identical globs make Applies
 // an identical predicate, so the scope is computed once per signature.
 func groupByScopeSignature(rules []*config.Rule) [][]*config.Rule {
 	bySig := make(map[string]int, len(rules))
@@ -102,11 +102,6 @@ func scopeSignature(r *config.Rule) string {
 	}
 	b.WriteByte(1)
 	for _, g := range r.Exclude() {
-		b.WriteString(g)
-		b.WriteByte(0)
-	}
-	b.WriteByte(1)
-	for _, g := range r.ExceptPaths {
 		b.WriteString(g)
 		b.WriteByte(0)
 	}

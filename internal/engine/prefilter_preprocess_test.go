@@ -123,7 +123,7 @@ func TestPrefilterAppliesToPreprocessedBytesNotRaw(t *testing.T) {
 			c := checkerWithParams(t, "forbidden-pattern", params)
 
 			r, err := config.New("prefilter-probe", "forbidden-pattern", finding.SeverityError,
-				"fix it", []string{"**/*"}, nil, nil, c)
+				"fix it", []string{"**/*"}, nil, c)
 			if err != nil {
 				t.Fatal(err)
 			}

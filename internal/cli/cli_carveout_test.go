@@ -60,12 +60,34 @@ func TestCheckStagedRegularFileNamedFormworkIsRefused(t *testing.T) {
 }
 
 // The other side of Fix A, and the reason the predicate is ancestor-only rather
-// than simply deleted: a path UNDER a .formwork directory is genuinely never
-// scannable, and every commit that edits formwork's own rules stages nothing
-// else. `TestCheckStagedOnlyFormworkStagedStaysExit0` pins the exit code; this
-// pins that the requested COUNT stays honest too, which is the half #160 got
-// wrong in the same way.
-func TestCheckStagedFormworkAncestorIsStillExcused(t *testing.T) {
+// than simply deleted: a path UNDER the root's fixtures is genuinely never
+// scannable, and a commit that adds a fixture stages nothing else.
+// `TestCheckStagedOnlyFormworkStagedStaysExit0` pins the exit code; this pins
+// that the requested COUNT stays honest too, which is the half #160 got wrong
+// in the same way.
+func TestCheckStagedFixtureAncestorIsStillExcused(t *testing.T) {
+	root := carveoutRepo(t)
+	mustWrite(t, filepath.Join(root, "src", "a.txt"), "clean\n")
+	gitInit(t, root)
+	gitRun(t, root, "add", "-A")
+	gitRun(t, root, "commit", "-qm", "init")
+	mustWrite(t, filepath.Join(root, ".formwork", "fixtures", "no-widget", "fire-2", "x.txt"), "WIDGET\n")
+	gitRun(t, root, "add", "-A")
+
+	code, out, errOut := runCLI(t, "check", "-C", root, "--staged")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+	}
+	if !strings.Contains(out, "0 path(s) requested") {
+		t.Errorf("a path under the root's fixtures was never scannable — counting it invents a gap:\n%s", out)
+	}
+}
+
+// Rule YAML is scanned since #24467 item 9, so staging it is a requested path
+// the walk produces, and a broad rule does not read it: `**` does not reach
+// .formwork, only a glob rooted there does, so the new rule's own pattern in
+// its own definition is no finding.
+func TestCheckStagedRuleYAMLIsCountedAndNotSelfMatched(t *testing.T) {
 	root := carveoutRepo(t)
 	mustWrite(t, filepath.Join(root, "src", "a.txt"), "clean\n")
 	gitInit(t, root)
@@ -77,10 +99,10 @@ func TestCheckStagedFormworkAncestorIsStillExcused(t *testing.T) {
 
 	code, out, errOut := runCLI(t, "check", "-C", root, "--staged")
 	if code != 0 {
-		t.Fatalf("exit = %d, want 0\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+		t.Fatalf("exit = %d, want 0 — a `**` rule must not read its own definition\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
 	}
-	if !strings.Contains(out, "0 path(s) requested") {
-		t.Errorf("a path under .formwork was never scannable — counting it invents a gap:\n%s", out)
+	if !strings.Contains(out, "1 path(s) requested by --staged, 1 file(s) scanned") {
+		t.Errorf("staged rule YAML is a scanned, requested path:\n%s", out)
 	}
 }
 
@@ -92,8 +114,10 @@ func TestCheckStagedFormworkAncestorIsStillExcused(t *testing.T) {
 // indicator silenced for the one path it had something to say about.
 func TestCheckStagedRegularFileNamedFormworkIsCounted(t *testing.T) {
 	root := carveoutRepo(t)
-	mustWrite(t, filepath.Join(root, "sub", ".formwork"), "clean\n")
 	gitInit(t, root)
+	gitRun(t, root, "add", "-A")
+	gitRun(t, root, "commit", "-qm", "corpus")
+	mustWrite(t, filepath.Join(root, "sub", ".formwork"), "clean\n")
 	gitRun(t, root, "add", "-A")
 
 	code, out, errOut := runCLI(t, "check", "-C", root, "--staged")

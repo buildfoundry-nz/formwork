@@ -5,9 +5,6 @@ rules:
   scope:
     include:
     - '**/*.go'
-    exclude:
-    - '**/*_test.go'
-    - '**/vendor/**'  # preventative: vendor trees are not always present on disk
   params:
     # Documented ghosts from audit-2 #13 (and common rename class).
     pattern: '//.*\b(geometry_handler|worker_types)\.go\b'

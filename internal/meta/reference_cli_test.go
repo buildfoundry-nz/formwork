@@ -180,7 +180,7 @@ func aRuleID(t *testing.T) string {
 func runDocumented(t *testing.T, argv []string) (int, string, string) {
 	t.Helper()
 	var stdout, stderr strings.Builder
-	code := cli.Run(argv, &stdout, &stderr)
+	code := cli.Run(argv, strings.NewReader(""), &stdout, &stderr)
 	return code, stdout.String(), stderr.String()
 }
 

@@ -173,6 +173,23 @@ truth. CI's clean whole-tree run remains the authority; the local hook is a
 fast approximation that sees working-tree content for tracked files (the
 developer's real state), which is acceptable for a pre-commit gate.
 
+**An invariant the changeset cannot reach is not run.** Evaluating over the
+tracked tree is what an invariant needs when it runs; it is not a reason to run
+every invariant on every change. A checker that declares `rules.ScopeBound` —
+its verdict reads nothing but the files its scope admits — runs in a changeset
+mode only when the any-status changeset (deletions and both ends of a rename
+included) touches a path its scope admits or a path under `.formwork/`.
+Otherwise the change cannot move its verdict, and the
+rule is named in `rules_not_run` on the `changeset` channel rather than run.
+The declaration is opt-in, so an invariant type that does not make it runs on
+every changeset as before; `baseline` must not make it, because its baseline
+file is an input no scope names. A forbidden-pattern `census`, whose detector
+reads the whole root, is gated the same way through `rules.SubjectScoped`: like
+any forbidden-pattern rule on a changeset, it judges only when the changeset
+reaches its scope. On a 4,300-rule adopter this took a one-file pre-commit from
+1,413 whole-tree invariants and nine whole-root detectors to the handful its
+change could reach.
+
 ## 6. Lint: unsatisfiable pairings
 
 Because `ci` runs everything, asking whether a rule is reachable at all is

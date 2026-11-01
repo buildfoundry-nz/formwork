@@ -5,11 +5,6 @@ rules:
     scope:
       include:
         - "**/*.go"
-      exclude:
-        - "**/*_test.go"
-        - "**/*.pb.go"
-        - "**/gcs/**"
-        - "**/blobstore/**"
     params:
       left: '\.Next$'
       right: '\.Err$'

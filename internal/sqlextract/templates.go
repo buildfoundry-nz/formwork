@@ -211,6 +211,9 @@ func anywhere(e *constEnv, cf *constFile, fset *token.FileSet, x ast.Expr, liter
 	if !report || out.inTemplate(x) || out.inUnread(x) {
 		return x
 	}
+	if e.inertFlow(cf.path).inert(cf.path, fset.Position(x.Pos()).Offset, fset.Position(x.End()).Offset) {
+		return x
+	}
 	fd, fcf := e.templateFunc(call.Fun, cf)
 	if fd == nil {
 		return x

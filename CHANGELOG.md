@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Text that only lands in a file is not an unread site.** A greatest fixpoint over
+  the module follows a composition through returns, locals, parameters, builders,
+  slices, struct fields and methods. It is inert when every path ends in a comparison,
+  a message, a file or a standard stream. A driver name, an unknown call, an `io.Writer`,
+  a closure, a package variable, a function used as a value, and a function nothing
+  calls all keep it a site. Program files are judged without their tests.
 - **A composition consumed where it is built is not an unread site.** Text compared
   with `==`, compiled as a regexp, passed to a `strings` predicate, or reported in an
   error, log line or test message ends there, so no driver can run it. A local counts

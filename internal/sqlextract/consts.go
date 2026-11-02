@@ -122,6 +122,7 @@ type constFile struct {
 	locals         map[*ast.Object]ast.Expr // constant_locals.go; nil outside the file being folded
 	packageVars    map[*ast.Object]bool     // package_vars.go
 	closed         *closedPass              // closed_helpers.go; nil outside the file being read
+	parsedUUIDs    map[*ast.Object]bool     // parsed_uuid.go; nil outside the file being read
 }
 
 func envFor(tree *scan.FileSet) *constEnv {
@@ -377,6 +378,9 @@ func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, env map[stri
 		if isIntegerFormat(v) {
 			return integerHole, true
 		}
+		if isParsedUUIDString(v, cf) {
+			return parsedUUIDText, true
+		}
 		if isStringsJoin(v) {
 			return e.foldJoin(v, cf, env, depth)
 		}
@@ -494,6 +498,7 @@ func foldConstants(tree *scan.FileSet, p string, fset *token.FileSet, file *ast.
 	e := envFor(tree)
 	cf := newConstFile(p, file)
 	cf.closed = pass
+	cf.parsedUUIDs = parsedUUIDs(file)
 	if readLocals {
 		cf.locals = constantLocals(file)
 	}

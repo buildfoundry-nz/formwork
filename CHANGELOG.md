@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Removed
+
+- **`sql/statement-predicate` no longer takes `unread`.** It let a rule stop failing
+  on SQL it cannot read, which is an exemption. Added in 0.17.1 and used by no
+  released corpus. A rule naming it is now refused: cure the composition instead.
+
 ## 0.17.2
 
 ### Added

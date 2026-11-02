@@ -269,15 +269,9 @@ func enumerateEscapeHatches(cfg *config.Config, root string, fset *scan.FileSet,
 		// A rule that FAILS CLOSED is skipped. sql/parses and
 		// sql/statement-predicate report each SQL composition they cannot read
 		// as a finding, so nothing unread is left unenforced and a line here
-		// would call "not analysed" the composition `check` just failed on. A
-		// sql/statement-predicate rule naming `unread: census` does not fail, so
-		// the census is where its sites stay visible.
-		failsClosed := sqlparse.FailsClosed(r.Type)
-		if policy, ok := r.Checker.(interface{ FailsOnUnread() bool }); ok {
-			failsClosed = policy.FailsOnUnread()
-		}
+		// would call "not analysed" the composition `check` just failed on.
 		for _, f := range fset.Files {
-			if failsClosed {
+			if sqlparse.FailsClosed(r.Type) {
 				break
 			}
 			if !strings.HasSuffix(f.Path(), ".go") || !r.Applies(f.Path()) {

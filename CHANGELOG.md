@@ -7,7 +7,8 @@
 - **SQL rules read a helper whose every return is a constant.** A package-level
   function with one string result, returning only constants, can produce nothing
   else, so a composition calling it reads once per value. Worlds are linear, never
-  multiplied: all-first, all-last, and each other value on its own.
+  multiplied: all-first, all-last, and each other value on its own. A helper that
+  returns another closed helper's result has that helper's values.
 
 ## 0.17.3
 

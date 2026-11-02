@@ -19,7 +19,7 @@ var backtrackBomb = strings.Repeat("a", 50) + "!"
 // per-line path must surface as an evaluation error (→ exit 2), never a silent
 // no-match that reads as a clean pass (#22).
 func TestForbiddenRegexp2TimeoutFailsClosed(t *testing.T) {
-	t.Parallel() // ~1s on the hardcoded 1s match timeout — overlap it with its siblings
+	t.Parallel() // ~11s: the 1s match timeout, then the patient 10s — overlap it with its siblings
 	c := mkForbidden(t, "pattern: '(a+)+$'\nsyntax: regexp2")
 	if _, err := c.CheckFile(scan.NewMemFile("a.txt", []byte(backtrackBomb+"\n"))); err == nil {
 		t.Fatal("regexp2 match timeout must surface as an error, got nil (silent no-match)")
@@ -29,7 +29,7 @@ func TestForbiddenRegexp2TimeoutFailsClosed(t *testing.T) {
 // TestForbiddenRegexp2MultilineTimeoutFailsClosed: same, on the whole-file
 // FindLine path used by multiline: true.
 func TestForbiddenRegexp2MultilineTimeoutFailsClosed(t *testing.T) {
-	t.Parallel() // ~1s on the hardcoded 1s match timeout — overlap it with its siblings
+	t.Parallel() // ~11s: the 1s match timeout, then the patient 10s — overlap it with its siblings
 	c := mkForbidden(t, "pattern: '(a+)+$'\nsyntax: regexp2\nmultiline: true")
 	if _, err := c.CheckFile(scan.NewMemFile("a.txt", []byte(backtrackBomb))); err == nil {
 		t.Fatal("regexp2 multiline match timeout must surface as an error, got nil")

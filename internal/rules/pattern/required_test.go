@@ -12,7 +12,7 @@ import (
 // (→ exit 2), not be swallowed as no-match (which in every-file mode would
 // masquerade as a legitimately-missing pattern) (#22).
 func TestRequiredRegexp2TimeoutFailsClosed(t *testing.T) {
-	t.Parallel() // ~1s on the hardcoded 1s match timeout — overlap it with its siblings
+	t.Parallel() // ~11s: the 1s match timeout, then the patient 10s — overlap it with its siblings
 	c := mustChecker(t, "required-pattern", "pattern: '(a+)+$'\nsyntax: regexp2\n")
 	if _, err := c.CheckFile(scan.NewMemFile("a.txt", []byte(backtrackBomb+"\n"))); err == nil {
 		t.Fatal("regexp2 match timeout must surface as an error, got nil (swallowed as no-match)")

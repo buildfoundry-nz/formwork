@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A regexp2 match that times out gets a second attempt before the run fails.** The 1 s
+  limit is a wall clock, so a stalled goroutine or a late clock tick could put a match of
+  a few milliseconds past it, and that one error discarded every rule's verdict. A timed
+  out match now runs once more with a 10 s limit (20 s hard bound). A pattern that runs
+  out of that too still fails closed with exit 2, after about 11 s instead of 1 s.
+
 ## 0.17.11
 
 ### Fixed

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.17.5
+
 ### Added
 
 - **An EXPLAIN wrapper is not an unread composition.** `"EXPLAIN (…) " + q` adds no

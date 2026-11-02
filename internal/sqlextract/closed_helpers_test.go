@@ -83,6 +83,27 @@ func TestClosedHelperInAnotherPackageIsRead(t *testing.T) {
 	}
 }
 
+// A helper that returns another closed helper's result, a wrapper among them, can
+// produce every value that helper can and nothing else.
+func TestClosedHelperMayDelegate(t *testing.T) {
+	full, sites := texts(t, map[string]string{
+		"filters/f.go": "package filters\n\nfunc Clause(n int) string {\n\tif n > 0 {\n\t\treturn \" AND b\"\n\t}\n\treturn \"\"\n}\n",
+		"db/q.go": "package db\n\nimport \"example.com/m/filters\"\n\n" +
+			"func wrapper(n int) string { return filters.Clause(n) }\n\n" +
+			"func outer(off bool, n int) string {\n\tif off {\n\t\treturn \" AND FALSE\"\n\t}\n\treturn wrapper(n)\n}\n\n" +
+			"func Q(off bool, n int) string { return \"SELECT id FROM t WHERE org_id = $1\" + outer(off, n) }\n",
+	}, "db/q.go")
+	if sites != 0 {
+		t.Errorf("composition reported unread %d times", sites)
+	}
+	const base = "SELECT id FROM t WHERE org_id = $1"
+	for _, want := range []string{base, base + " AND b", base + " AND FALSE"} {
+		if !full[want] {
+			t.Errorf("did not read %q: %v", want, full)
+		}
+	}
+}
+
 // The worlds are linear, as branch worlds are: three helpers of two values read in
 // five worlds, not eight, with every value judged and both all-on and all-off read.
 func TestClosedHelpersAreNeverMultiplied(t *testing.T) {
@@ -140,7 +161,9 @@ func TestOpenHelperStaysUnread(t *testing.T) {
 		"a call to something else":      "func filter(on bool) string {\n\tif on {\n\t\treturn pick()\n\t}\n\treturn \"\"\n}\n",
 		"a named result":                "func filter(on bool) (out string) {\n\tif on {\n\t\treturn \" AND a\"\n\t}\n\tout = pick()\n\treturn\n}\n",
 		"two results":                   "func filter(on bool) (string, error) {\n\treturn \" AND a\", nil\n}\n",
-		"a closed helper's own helper":  "func filter(on bool) string {\n\tif on {\n\t\treturn inner(on)\n\t}\n\treturn \"\"\n}\n\nfunc inner(on bool) string {\n\tif on {\n\t\treturn \" AND a\"\n\t}\n\treturn \"\"\n}\n",
+		"a concatenation with a helper": "func filter(on bool) string {\n\tif on {\n\t\treturn \" AND \" + inner(on)\n\t}\n\treturn \"\"\n}\n\nfunc inner(on bool) string {\n\tif on {\n\t\treturn \"a\"\n\t}\n\treturn \"b\"\n}\n",
+		"a helper that calls itself":    "func filter(on bool) string {\n\tif on {\n\t\treturn filter(!on)\n\t}\n\treturn filter(on)\n}\n",
+		"delegating to an open helper":  "func filter(on bool) string {\n\tif on {\n\t\treturn inner()\n\t}\n\treturn \"\"\n}\n\nfunc inner() string {\n\treturn pick()\n}\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			call := "func Q(on bool) string { return \"SELECT id FROM t WHERE org_id = $1\" + filter(on) }\n"

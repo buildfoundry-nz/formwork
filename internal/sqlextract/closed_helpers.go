@@ -2,6 +2,7 @@ package sqlextract
 
 import (
 	"go/ast"
+	"go/token"
 	"sort"
 )
 
@@ -15,8 +16,9 @@ import (
 //
 // A CLOSED HELPER is a package-level function, not a method, with one unnamed
 // string result, whose every return folds to a constant with nothing bound. Any
-// parameter types are fine: no return reads one. A return that reads a parameter, a
-// local or another function does not fold, so the helper is not closed and the
+// parameter types are fine: no return reads one. A return may also be the result of
+// another closed helper, whose values it then has. Any other return that reads a
+// parameter, a local or a function does not fold, so the helper is not closed and the
 // composition calling it stays one the rule cannot read.
 //
 // LINEAR WORLDS, NEVER MULTIPLIED. The file is read with every helper at its first
@@ -29,9 +31,9 @@ import (
 // that needs two particular clauses together may not see that pair; that is the
 // disclosed limit, the one the assignment fold already has.
 //
-// ONLY THE FILE BEING READ CHOOSES. A helper called from a package variable, or from
-// a template in another file, or from another helper, stays unread: the choice lives
-// on the file being read, and reading those at their first value would drop the rest
+// ONLY THE FILE BEING READ CHOOSES. A helper called from a package variable, from a
+// template in another file, or inside a concatenation in another helper's return,
+// stays unread: the choice lives on the file being read, and reading those at their first value would drop the rest
 // without saying so.
 //
 // PAST THE CAP, NOTHING IS READ. Dropping a world would silence it, so a file needing
@@ -133,9 +135,15 @@ func (e *constEnv) closedHelper(fun ast.Expr, cf *constFile) (funcDef, string, b
 	return def, def.file.dir + "." + name, true
 }
 
-// closedValues folds fd's returns, in source order and without repeats. ok is false
-// when any return does not fold, or a function literal hides what the body returns.
-func (e *constEnv) closedValues(def funcDef, depth int) ([]string, bool) {
+// closedValues is def's values, in source order and without repeats. ok is false
+// when any return is neither a constant nor another closed helper's result, or when
+// helpers call each other in a cycle, which no constant ends.
+func (e *constEnv) closedValues(def funcDef, depth int, visiting map[*ast.FuncDecl]bool) ([]string, bool) {
+	if visiting[def.decl] {
+		return nil, false
+	}
+	visiting[def.decl] = true
+	defer delete(visiting, def.decl)
 	var values []string
 	seen := map[string]bool{}
 	ok := true
@@ -148,19 +156,38 @@ func (e *constEnv) closedValues(def funcDef, depth int) ([]string, bool) {
 				ok = false
 				return false
 			}
-			s, folds := e.fold(v.Results[0], def.file, false, nil, depth+1)
+			returned, folds := e.returned(v.Results[0], def.file, depth+1, visiting)
 			if !folds {
 				ok = false
 				return false
 			}
-			if !seen[s] {
-				seen[s] = true
-				values = append(values, s)
+			for _, s := range returned {
+				if !seen[s] {
+					seen[s] = true
+					values = append(values, s)
+				}
 			}
 		}
 		return ok
 	})
 	return values, ok && len(values) > 0
+}
+
+// returned is what a closed helper's return can be: its constant, or every value of
+// the closed helper it returns the result of.
+func (e *constEnv) returned(result ast.Expr, cf *constFile, depth int, visiting map[*ast.FuncDecl]bool) ([]string, bool) {
+	if s, ok := e.fold(result, cf, false, nil, depth); ok {
+		return []string{s}, true
+	}
+	call, ok := result.(*ast.CallExpr)
+	if !ok || call.Ellipsis != token.NoPos {
+		return nil, false
+	}
+	def, _, ok := e.closedHelper(call.Fun, cf)
+	if !ok {
+		return nil, false
+	}
+	return e.closedValues(def, depth, visiting)
 }
 
 // callClosed reads call as the value this read's world holds its helper at.
@@ -172,7 +199,7 @@ func (e *constEnv) callClosed(call *ast.CallExpr, cf *constFile, depth int) (str
 	if !ok {
 		return "", false
 	}
-	values, ok := e.closedValues(def, depth)
+	values, ok := e.closedValues(def, depth, map[*ast.FuncDecl]bool{})
 	if !ok {
 		return "", false
 	}

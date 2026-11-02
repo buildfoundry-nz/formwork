@@ -2,6 +2,110 @@
 
 ## Unreleased
 
+## 0.17.10
+
+### Fixed
+
+- **A SQL rule with a `not_declaring` home keeps the file's imports.** The home's mask
+  took them too, so another package's constant in the file's other statements read as
+  unread and the rule failed a statement it could read. A pattern rule still has them
+  masked.
+
+## 0.17.9
+
+### Changed
+
+- **A helper that only returns its text is judged at each call.** A function whose
+  parameters reach nothing but its own return is summarised, so text given to it at one
+  call no longer comes back at every other. Methods, and functions with a builder, writer
+  or unnamed parameter, are not summarised.
+- **A selector whose receiver spells its struct uses that struct's own field.** The
+  spelling can come from a parameter, a variable, a literal, a same-package function's
+  result or a range over a spelled collection. Any other selector still reaches every
+  field of its name in reach.
+- **The inert flow reads more of Go exactly.** A recursive local closure, a `*os.File`
+  parameter, `pkg.Name` as no field read, a type in a parameter list as no value, and a
+  file outside any module reaching only what it can import. More pure standard-library
+  calls are known.
+
+### Fixed
+
+- **Text written by index into a slice or map parameter is now bad.** It read as ending
+  there, though the caller's slice holds it. A tree can gain sites from this.
+
+## 0.17.8
+
+### Changed
+
+- **The inert flow follows unexported package variables.** Only their package can touch
+  them, and every read is visible. An exported variable stays a site.
+- **An exported field's node belongs to its declaring package.** A selector reaches the
+  fields of its name in its own package or anything that package imports, so text in a
+  field no longer inherits what an unrelated package does with a field of that name.
+- **The inert flow follows three more shapes exactly.** A local closure only ever called,
+  a positional row of a struct the file spells, and an `io.Writer` parameter, which holds
+  what its callers hand it. Go's types also end text at anything but `+`, at `!`, `-`,
+  `+x` and `^x`, and at a field read from a value. More pure standard-library calls are known.
+
+### Fixed
+
+- **Four ways text read as inert when it could still reach a driver.** Each is now
+  followed or reported: text written to a struct field no module code read badly (a type
+  outside the tree, a generated message, another package's exported variable, a field
+  nothing in reach declares); text inside a call inside a consumed expression; a closed
+  helper's arguments; and a map key built from a composition. A tree can gain sites from these.
+
+## 0.17.7
+
+### Changed
+
+- **The inert flow follows more text to where it lands.** Map-literal values and comma-ok
+  map reads, a stream's or opened file's own write methods, `filepath.Join`,
+  `go/parser` calls. An unexported field now shares a node only within its package.
+
+## 0.17.6
+
+### Added
+
+- **Text that only lands in a file is not an unread site.** A greatest fixpoint over
+  the module follows a composition through returns, locals, parameters, builders,
+  slices, struct fields and methods. It is inert when every path ends in a comparison,
+  a message, a file or a standard stream. A driver name, an unknown call, an `io.Writer`,
+  a closure, a package variable, a function used as a value, and a function nothing
+  calls all keep it a site. Program files are judged without their tests.
+- **A composition consumed where it is built is not an unread site.** Text compared
+  with `==`, compiled as a regexp, passed to a `strings` predicate, or reported in an
+  error, log line or test message ends there, so no driver can run it. A local counts
+  when its one write is the composition and every read is such a use. Any other use
+  keeps it a site.
+- **`::name::` is not a cast.** A CI runner command such as `::add-mask::` no longer
+  makes a composition read as SQL.
+
+## 0.17.5
+
+### Added
+
+- **An EXPLAIN wrapper is not an unread composition.** `"EXPLAIN (…) " + q` adds no
+  statement of its own, and `q` is judged where it is built. Only EXPLAIN and its
+  options around one whole hole qualifies; anything more stays unread.
+
+## 0.17.4
+
+### Added
+
+- **SQL rules read the String of a parsed uuid.** A local whose one write is
+  `uuid.Parse` or `uuid.MustParse` from `github.com/google/uuid` renders as hex and
+  dashes, so it cannot carry statement text. A statement spelling one as a literal
+  reads the way a statement holding an integer does.
+
+- **SQL rules read a helper whose every return is a constant.** A package-level
+  function with one string result, returning only constants, can produce nothing
+  else, so a composition calling it reads once per value. Worlds are linear, never
+  multiplied: all-first, all-last, and each other value on its own. A helper that
+  returns another closed helper's result has that helper's values.
+
+## 0.17.3
+
 ### Added
 
 - **SQL rules read an unexported package variable nothing writes.** A `var` set

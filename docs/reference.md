@@ -936,6 +936,12 @@ function whose parameters and result are all `string` and whose body is one
 and the definition is judged once per argument set its callers pass.
 An unexported package variable with one value of its own, which no file of its
 package assigns, ranges into or takes the address of, reads as that value.
+A package-level function with one unnamed `string` result, whose every `return` is a
+constant, is read as those values whatever it is passed. The file is judged with every
+such call at its first value, with every one at its last, and once more per other value
+of each. Worlds are linear, never multiplied, so a rule that needs two particular
+clauses together in one statement may not see that pair. A file needing more than 256
+worlds stays unread.
 
 **`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
 that carries SQL (a statement, a clause, or a SQL-only token such as a cast or

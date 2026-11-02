@@ -69,6 +69,11 @@ type constEnv struct {
 
 	usesOnce sync.Once
 	uses     map[templateKey]*templateUse // template_index.go
+
+	flowOnce        sync.Once
+	flow            *flowGraph // inert_flow.go, with the tests
+	programFlowOnce sync.Once
+	programFlow     *flowGraph // inert_flow.go, without them
 }
 
 type pkgKey struct {
@@ -96,6 +101,8 @@ type pkgTable struct {
 	// initialiser (package_vars.go).
 	vars    map[string]constDef
 	written map[string]bool
+	// closed are the functions shaped like closed helpers (closed_helpers.go).
+	closed map[string]funcDef
 }
 
 type funcDef struct {
@@ -119,6 +126,8 @@ type constFile struct {
 	importsOnce    sync.Once
 	locals         map[*ast.Object]ast.Expr // constant_locals.go; nil outside the file being folded
 	packageVars    map[*ast.Object]bool     // package_vars.go
+	closed         *closedPass              // closed_helpers.go; nil outside the file being read
+	parsedUUIDs    map[*ast.Object]bool     // parsed_uuid.go; nil outside the file being read
 }
 
 func envFor(tree *scan.FileSet) *constEnv {
@@ -163,7 +172,7 @@ func (e *constEnv) table(k pkgKey) *pkgTable {
 }
 
 func (e *constEnv) build(k pkgKey) *pkgTable {
-	t := &pkgTable{decls: map[string]int{}, consts: map[string]constDef{}, strTypes: map[string]bool{}, templates: map[string]funcDef{}, vars: map[string]constDef{}, written: map[string]bool{}}
+	t := &pkgTable{decls: map[string]int{}, consts: map[string]constDef{}, strTypes: map[string]bool{}, templates: map[string]funcDef{}, vars: map[string]constDef{}, written: map[string]bool{}, closed: map[string]funcDef{}}
 	for _, f := range e.tree.Dir(k.dir) {
 		p := f.Path()
 		if !strings.HasSuffix(p, ".go") || (!k.tests && strings.HasSuffix(p, "_test.go")) {
@@ -186,6 +195,9 @@ func (e *constEnv) build(k pkgKey) *pkgTable {
 					t.decls[d.Name.Name]++
 					if isTemplate(d) {
 						t.templates[d.Name.Name] = funcDef{decl: d, file: cf}
+					}
+					if isClosedShape(d) {
+						t.closed[d.Name.Name] = funcDef{decl: d, file: cf}
 					}
 				}
 			case *ast.GenDecl:
@@ -371,10 +383,19 @@ func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, env map[stri
 		if isIntegerFormat(v) {
 			return integerHole, true
 		}
+		if isParsedUUIDString(v, cf) {
+			return parsedUUIDText, true
+		}
 		if isStringsJoin(v) {
 			return e.foldJoin(v, cf, env, depth)
 		}
-		return e.callTemplate(v, cf, env, depth)
+		if env != nil && isSprintf(v) {
+			return e.foldSprintf(v, cf, env, depth)
+		}
+		if s, ok := e.callTemplate(v, cf, env, depth); ok {
+			return s, true
+		}
+		return e.callClosed(v, cf, depth)
 	}
 	return "", false
 }
@@ -448,6 +469,8 @@ type folded struct {
 	instances   []Candidate
 	unread      []Site
 	unreadSpans []span
+	// closedArgs are the arguments of the closed helper calls this read folds away.
+	closedArgs []ast.Expr
 }
 
 type span struct{ lo, hi token.Pos }
@@ -478,13 +501,15 @@ func within(e ast.Expr, spans []span) bool {
 // arguments are constants, wherever it stands (templates.go). tree may be nil.
 // readLocals reads constant locals too (constant_locals.go); reassembly leaves
 // them to its own assignment-flow fold.
-func foldConstants(tree *scan.FileSet, p string, fset *token.FileSet, file *ast.File, readLocals bool) folded {
+func foldConstants(tree *scan.FileSet, p string, fset *token.FileSet, file *ast.File, readLocals bool, pass *closedPass) folded {
 	e := envFor(tree)
 	cf := newConstFile(p, file)
+	cf.closed = pass
+	cf.parsedUUIDs = parsedUUIDs(file)
 	if readLocals {
 		cf.locals = constantLocals(file)
 	}
-	out := folded{made: map[ast.Expr]bool{}}
+	out := folded{made: map[ast.Expr]bool{}, closedArgs: e.closedCallArgs(file, cf)}
 	for _, d := range file.Decls {
 		fd, ok := d.(*ast.FuncDecl)
 		if !ok || !isTemplate(fd) {
@@ -558,6 +583,12 @@ func foldConstants(tree *scan.FileSet, p string, fset *token.FileSet, file *ast.
 // isConversion reports whether call converts one argument to a string type.
 func (e *constEnv) isConversion(call *ast.CallExpr, cf *constFile) bool {
 	return len(call.Args) == 1 && e.namesStringType(call.Fun, cf)
+}
+
+// isSprintf reports whether call is fmt.Sprintf.
+func isSprintf(call *ast.CallExpr) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	return ok && sel.Sel.Name == "Sprintf" && isFmtSprint(call)
 }
 
 // isFmtSprint reports whether call is fmt.Sprint, fmt.Sprintf or fmt.Sprintln.

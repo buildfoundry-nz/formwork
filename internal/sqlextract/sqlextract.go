@@ -163,13 +163,21 @@ func FromGo(path string, src []byte) (resolved []Candidate, unresolved []Site, e
 // FromGoIn is FromGo reading the Go string constants a composition is made of
 // from tree, the walk path was found by (consts.go). A nil tree reads the
 // file's own constants only.
-func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate, unresolved []Site, err error) {
+func FromGoIn(tree *scan.FileSet, path string, src []byte) ([]Candidate, []Site, error) {
+	return withClosedWorlds(func(pass *closedPass) ([]Candidate, []Site, error) {
+		return fromGoWorld(tree, path, src, pass)
+	})
+}
+
+func fromGoWorld(tree *scan.FileSet, path string, src []byte, pass *closedPass) (resolved []Candidate, unresolved []Site, err error) {
 	fset := token.NewFileSet()
 	file, perr := parser.ParseFile(fset, path, src, 0)
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
-	fo := foldConstants(tree, path, fset, file, true)
+	inert := inertSpans(file) // before the fold, whose literals span whole calls
+	fo := foldConstants(tree, path, fset, file, true, pass)
+	flow := envFor(tree).inertFlow(path)
 	type rawCand struct {
 		text string
 		pos  token.Pos
@@ -178,12 +186,14 @@ func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate
 	}
 	var raws []rawCand
 	var partialSpans []span
+	visited := map[ast.Expr]bool{}
 
-	ast.Inspect(file, func(n ast.Node) bool {
+	visit := func(n ast.Node) bool {
 		expr, ok := n.(ast.Expr)
 		if !ok {
 			return true
 		}
+		visited[expr] = true
 		if fo.made[expr] {
 			return false // a constant's value: its declaration is the candidate
 		}
@@ -208,7 +218,7 @@ func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate
 			partialSpans = append(partialSpans, span{lo: expr.Pos(), hi: expr.End()})
 			// A template body the walk instantiates in full is judged per
 			// instance (template_index.go), not as a composition.
-			if !nested && !fo.judgedBody(expr) {
+			if !nested && !fo.judgedBody(expr) && !within(expr, inert) && !flow.inert(path, fset.Position(expr.Pos()).Offset, fset.Position(expr.End()).Offset) {
 				text, _ := reassemble(expr)
 				unresolved = append(unresolved, Site{
 					Path:   path,
@@ -221,7 +231,13 @@ func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate
 			// keep descending: nested resolvable literals are still collected
 		}
 		return true
-	})
+	}
+	ast.Inspect(file, visit)
+	for _, arg := range fo.closedArgs {
+		if !visited[arg] {
+			ast.Inspect(arg, visit)
+		}
+	}
 
 	for _, rc := range raws {
 		partial := false
@@ -373,12 +389,18 @@ func FromGoReassembled(path string, src []byte) ([]Candidate, []Site, error) {
 // FromGoReassembledIn is FromGoReassembled reading the Go string constants a
 // composition is made of from tree, as FromGoIn does.
 func FromGoReassembledIn(tree *scan.FileSet, path string, src []byte) ([]Candidate, []Site, error) {
+	return withClosedWorlds(func(pass *closedPass) ([]Candidate, []Site, error) {
+		return fromGoReassembledWorld(tree, path, src, pass)
+	})
+}
+
+func fromGoReassembledWorld(tree *scan.FileSet, path string, src []byte, pass *closedPass) ([]Candidate, []Site, error) {
 	fset := token.NewFileSet()
 	file, perr := parser.ParseFile(fset, path, src, 0)
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
-	fo := foldConstants(tree, path, fset, file, false)
+	fo := foldConstants(tree, path, fset, file, false, pass)
 	sink := newSiteSink(path, fset, src)
 	sink.readPackageSeeds(file)
 	// ONE traversal doing both jobs (#45). It used to be two full walks over the
@@ -665,7 +687,10 @@ func unresolvedReason(expr ast.Expr) (key, reason string, ok bool) {
 				switch sel.Sel.Name {
 				case "Sprintf", "Sprint", "Sprintln":
 					if len(v.Args) > 0 {
-						if _, ok := stringValue(v.Args[0]); ok {
+						if format, ok := stringValue(v.Args[0]); ok {
+							if isExplainWrapperFormat(sel.Sel.Name, format, v.Args) {
+								return "", "", false
+							}
 							return "sprintf-composed", "fmt." + sel.Sel.Name + "-composed string", true
 						}
 					}
@@ -674,8 +699,11 @@ func unresolvedReason(expr ast.Expr) (key, reason string, ok bool) {
 		}
 	case *ast.BinaryExpr:
 		if v.Op == token.ADD {
-			_, lok := stringValue(v.X)
+			left, lok := stringValue(v.X)
 			_, rok := stringValue(v.Y)
+			if lok && !rok && explainWrapper.MatchString(left) {
+				return "", "", false
+			}
 			// exactly one side folds to a string ⇒ a partial SQL composition
 			if lok != rok {
 				return "concat-nonliteral", "non-literal operand in string concatenation", true

@@ -159,6 +159,20 @@ func isLabel(rest string) bool {
 	return strings.HasPrefix(rest, ":") && !strings.HasPrefix(rest, "::")
 }
 
+// workflowCommandEnd is the offset of the "::" closing rest, what follows a "::", or -1:
+// "::add-mask::" is a CI runner's command. A cast's type name is followed by neither a
+// hyphen nor a second "::".
+func workflowCommandEnd(rest string) int {
+	i := 0
+	for i < len(rest) && (isWordChar(rest[i]) || rest[i] == '-') {
+		i++
+	}
+	if strings.HasPrefix(rest[i:], "::") {
+		return i
+	}
+	return -1
+}
+
 // hasSQLToken reports whether s holds a token only SQL spells: a type cast
 // (::name), a positional parameter in parameter position ($1 followed by a
 // cast, a comma, a closing parenthesis or the end; or a composed one cast,
@@ -170,7 +184,11 @@ func isLabel(rest string) bool {
 func hasSQLToken(s string) bool {
 	for i := 0; i+2 < len(s); i++ {
 		if s[i] == ':' && s[i+1] == ':' && (isAlpha(s[i+2]) || s[i+2] == '_') {
-			return true
+			end := workflowCommandEnd(s[i+2:])
+			if end < 0 {
+				return true
+			}
+			i += 2 + end + 1 // past the closing "::", whose text is the command's value
 		}
 	}
 	for i := 0; i < len(s); i++ {

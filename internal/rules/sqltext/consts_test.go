@@ -114,3 +114,22 @@ func TestSeamConstantsIsNotAParameter(t *testing.T) {
 		t.Fatal("params.seam_constants must be refused")
 	}
 }
+
+// A forbidden clause behind a helper's later return is judged, though the helper's
+// first value is clean: every value a closed helper can return is read.
+func TestAClosedHelpersEveryValueIsJudged(t *testing.T) {
+	files := map[string]string{
+		"go.mod": "module example.com/m\n\ngo 1.22\n",
+		"db/q.go": "package db\n\n" +
+			"func scope(all bool) string {\n\tif all {\n\t\treturn \"\"\n\t}\n\treturn \" WHERE deleted_at IS NULL\"\n}\n\n" +
+			"func Q(all bool) string { return \"SELECT id FROM takeoffqs.boqs\" + scope(all) }\n",
+	}
+	c := mustChecker(t, "table: 'takeoffqs\\.boqs'\nrequire:\n  - 'deleted_at'\n")
+	ms := check(t, c, walked(t, "db/q.go", files))
+	if len(ms) == 0 {
+		t.Fatal("the helper's value without the required clause was not judged")
+	}
+	if strings.Contains(ms[0].Message, "could not be read") {
+		t.Fatalf("the composition should be read, not refused: %+v", ms)
+	}
+}

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.17.10
+
+### Fixed
+
+- **A SQL rule with a `not_declaring` home keeps the file's imports.** The home's mask
+  took them too, so another package's constant in the file's other statements read as
+  unread and the rule failed a statement it could read. A pattern rule still has them
+  masked.
+
 ## 0.17.9
 
 ### Changed

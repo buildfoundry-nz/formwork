@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.17.3
+
 ### Removed
 
 - **`sql/statement-predicate` no longer takes `unread`.** It let a rule stop failing

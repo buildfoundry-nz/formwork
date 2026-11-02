@@ -2,12 +2,29 @@
 
 ## Unreleased
 
-## 0.17.7
+## 0.17.8
 
 ### Changed
 
 - **The inert flow follows unexported package variables.** Only their package can touch
   them, and every read is visible. An exported variable stays a site.
+- **An exported field's node belongs to its declaring package.** A selector reaches the
+  fields of its name in its own package or anything that package imports, so text in a
+  field no longer inherits what an unrelated package does with a field of that name.
+- **The inert flow follows three more shapes exactly.** A local closure only ever called,
+  a positional row of a struct the file spells, and an `io.Writer` parameter, which holds
+  what its callers hand it. Go's types also end text at anything but `+`, at `!`, `-`,
+  `+x` and `^x`, and at a field read from a value. More pure standard-library calls are known.
+
+### Fixed
+
+- **Four ways text read as inert when it could still reach a driver.** Each is now
+  followed or reported: text written to a struct field no module code read badly (a type
+  outside the tree, a generated message, another package's exported variable, a field
+  nothing in reach declares); text inside a call inside a consumed expression; a closed
+  helper's arguments; and a map key built from a composition. A tree can gain sites from these.
+
+## 0.17.7
 
 ### Changed
 

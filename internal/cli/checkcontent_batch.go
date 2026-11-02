@@ -10,6 +10,7 @@ import (
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/finding"
+	"github.com/buildfoundry-nz/formwork/internal/meta"
 )
 
 type checkContentBatchRecord struct {
@@ -40,7 +41,7 @@ func decodeCheckContentBatchRecord(line []byte) (checkContentBatchRecord, error)
 	return record, nil
 }
 
-func runCheckContentBatch(cfg *config.Config, root string, stdin io.Reader, stdout, stderr io.Writer, allFindings bool) int {
+func runCheckContentBatch(cfg *config.Config, gitIgnore meta.GitIgnoreResult, root string, stdin io.Reader, stdout, stderr io.Writer, allFindings bool) int {
 	reader := bufio.NewReader(stdin)
 	results := []checkContentDocument{}
 	records := 0
@@ -54,7 +55,7 @@ func runCheckContentBatch(cfg *config.Config, root string, stdin io.Reader, stdo
 				fmt.Fprintf(stderr, "formwork: check-content batch line %d: %v\n", lineNo, err)
 				return 2
 			}
-			doc, findings, err := evaluateCheckContent(cfg, root, record.Path, []byte(*record.Content), allFindings, time.Now())
+			doc, findings, err := evaluateCheckContent(cfg, gitIgnore, root, record.Path, []byte(*record.Content), allFindings, time.Now())
 			if err != nil {
 				fmt.Fprintf(stderr, "formwork: check-content batch line %d: %v\n", lineNo, err)
 				return 2

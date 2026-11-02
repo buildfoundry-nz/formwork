@@ -50,7 +50,6 @@ package sqltext
 import (
 	"errors"
 	"fmt"
-	"path"
 	"regexp"
 	"strings"
 
@@ -66,17 +65,12 @@ type params struct {
 	Table   string   `yaml:"table"`
 	Require []string `yaml:"require"`
 	Forbid  []string `yaml:"forbid"`
-	// SeamConstants names the package directories, relative to the repository
-	// root, whose exported constants and SQL templates read as an opaque hole in this rule's
-	// statements: the packages meant to mint the text the rule bans elsewhere.
-	SeamConstants []string `yaml:"seam_constants"`
 }
 
 type predicate struct {
 	table   *regexp.Regexp
 	require []*regexp.Regexp
 	forbid  []*regexp.Regexp
-	seams   []string
 }
 
 func compileAll(kind string, pats []string) ([]*regexp.Regexp, error) {
@@ -117,12 +111,7 @@ func newPredicate(node *yaml.Node) (rules.Checker, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, dir := range p.SeamConstants {
-		if dir == "" || dir == "." || path.IsAbs(dir) || path.Clean(dir) != dir || strings.HasPrefix(dir, "../") {
-			return nil, fmt.Errorf("sql/statement-predicate: params.seam_constants entry %q is not a clean directory relative to the repository root", dir)
-		}
-	}
-	return &predicate{table: table, require: require, forbid: forbid, seams: p.SeamConstants}, nil
+	return &predicate{table: table, require: require, forbid: forbid}, nil
 }
 
 // statement is one candidate SQL statement plus the source line it starts on.
@@ -147,7 +136,7 @@ func (c *predicate) CheckFile(f *scan.File) ([]rules.Match, error) {
 		if err != nil {
 			return nil, err
 		}
-		stmts, unread, err = goStatements(f.Tree(), c.seams, f.Path(), content)
+		stmts, unread, err = goStatements(f.Tree(), f.Path(), content)
 		if err != nil {
 			return nil, err
 		}
@@ -453,8 +442,8 @@ func sqlIdentStartByte(c byte) bool {
 // statement passed `check` unjudged, and a `require` or `forbid` held only for
 // SQL that happened to be written readably. The extractor reads every Go
 // constant (consts.go), so what is left unread has text decided at run time.
-func goStatements(tree *scan.FileSet, seams []string, path string, src []byte) ([]statement, []sqlextract.Site, error) {
-	cands, sites, err := sqlextract.FromGoSeams(tree, seams, path, src)
+func goStatements(tree *scan.FileSet, path string, src []byte) ([]statement, []sqlextract.Site, error) {
+	cands, sites, err := sqlextract.FromGoIn(tree, path, src)
 	if err != nil {
 		return nil, nil, fmt.Errorf("sql/statement-predicate: %w", err)
 	}

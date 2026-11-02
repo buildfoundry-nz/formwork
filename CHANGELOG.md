@@ -7,6 +7,10 @@
 - **`sql/statement-predicate` no longer takes `unread`.** It let a rule stop failing
   on SQL it cannot read, which is an exemption. Added in 0.17.1 and used by no
   released corpus. A rule naming it is now refused: cure the composition instead.
+- **`sql/statement-predicate` no longer takes `seam_constants`.** It told the parser
+  to skip text it could read, which is an exemption. Added in 0.17.2 and used by no
+  released corpus. A rule naming it is now refused: write the rule's patterns to
+  judge what the statement says.
 
 ## 0.17.2
 

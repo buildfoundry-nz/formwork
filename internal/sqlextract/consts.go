@@ -469,6 +469,8 @@ type folded struct {
 	instances   []Candidate
 	unread      []Site
 	unreadSpans []span
+	// closedArgs are the arguments of the closed helper calls this read folds away.
+	closedArgs []ast.Expr
 }
 
 type span struct{ lo, hi token.Pos }
@@ -507,7 +509,7 @@ func foldConstants(tree *scan.FileSet, p string, fset *token.FileSet, file *ast.
 	if readLocals {
 		cf.locals = constantLocals(file)
 	}
-	out := folded{made: map[ast.Expr]bool{}}
+	out := folded{made: map[ast.Expr]bool{}, closedArgs: e.closedCallArgs(file, cf)}
 	for _, d := range file.Decls {
 		fd, ok := d.(*ast.FuncDecl)
 		if !ok || !isTemplate(fd) {

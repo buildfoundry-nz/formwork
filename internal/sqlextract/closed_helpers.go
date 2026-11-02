@@ -190,6 +190,27 @@ func (e *constEnv) returned(result ast.Expr, cf *constFile, depth int, visiting 
 	return e.closedValues(def, depth, visiting)
 }
 
+// closedCallArgs is every argument of a call this read folds to a closed helper's
+// value. The call's value says nothing of what it was passed, so its arguments are
+// read where they stand: text given to a helper is still text in this file.
+func (e *constEnv) closedCallArgs(file *ast.File, cf *constFile) []ast.Expr {
+	if e == nil || cf.closed == nil || cf.closed.off {
+		return nil
+	}
+	var args []ast.Expr
+	ast.Inspect(file, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok {
+			if def, _, ok := e.closedHelper(call.Fun, cf); ok {
+				if _, ok := e.closedValues(def, 0, map[*ast.FuncDecl]bool{}); ok {
+					args = append(args, call.Args...)
+				}
+			}
+		}
+		return true
+	})
+	return args
+}
+
 // callClosed reads call as the value this read's world holds its helper at.
 func (e *constEnv) callClosed(call *ast.CallExpr, cf *constFile, depth int) (string, bool) {
 	if e == nil || cf == nil || cf.closed == nil || cf.closed.off {

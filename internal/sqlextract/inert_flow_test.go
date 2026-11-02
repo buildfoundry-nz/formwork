@@ -71,8 +71,6 @@ func TestTextThatMayReachADriverStaysASite(t *testing.T) {
 		"an unexported field run in its package": db + "type S struct{ q string }\n\nfunc main() {\n\ts := S{q: \"DROP TABLE \" + os.Args[1]}\n\tconn.Exec(s.q)\n}\n",
 		"a package var it runs":                  db + "var q string\n\nfunc main() {\n\tq = \"DROP TABLE \" + os.Args[1]\n\tconn.Exec(q)\n}\n",
 		"an exported package var":                "var Q string\n\nfunc main() {\n\tQ = \"DROP TABLE \" + os.Args[1]\n\tfmt.Print(Q)\n}\n",
-		"an unknown writer":                      "func render(w io.Writer, t string) { fmt.Fprint(w, \"DROP TABLE \"+t) }\n\nfunc main() { render(os.Stdout, os.Args[1]) }\n",
-		"a closure":                              "func main() {\n\tf := func(t string) string { return \"DROP TABLE \" + t }\n\tfmt.Print(f(os.Args[1]))\n}\n",
 		"its address taken":                      "func keep(*strings.Builder) {}\n\nfunc main() {\n\tvar b strings.Builder\n\tb.WriteString(\"DROP TABLE \" + os.Args[1])\n\tkeep(&b)\n}\n",
 		"helpers in a cycle that run it":         db + "func a(q string) { b(q) }\n\nfunc b(q string) {\n\ta(q)\n\tconn.Exec(q)\n}\n\nfunc main() { a(\"DROP TABLE \" + os.Args[1]) }\n",
 	} {

@@ -177,6 +177,7 @@ func fromGoWorld(tree *scan.FileSet, path string, src []byte, pass *closedPass) 
 	}
 	fo := foldConstants(tree, path, fset, file, true, pass)
 	inert := inertSpans(file)
+	flow := envFor(tree).inertFlow(path)
 	type rawCand struct {
 		text string
 		pos  token.Pos
@@ -215,7 +216,7 @@ func fromGoWorld(tree *scan.FileSet, path string, src []byte, pass *closedPass) 
 			partialSpans = append(partialSpans, span{lo: expr.Pos(), hi: expr.End()})
 			// A template body the walk instantiates in full is judged per
 			// instance (template_index.go), not as a composition.
-			if !nested && !fo.judgedBody(expr) && !within(expr, inert) {
+			if !nested && !fo.judgedBody(expr) && !within(expr, inert) && !flow.inert(path, fset.Position(expr.Pos()).Offset, fset.Position(expr.End()).Offset) {
 				text, _ := reassemble(expr)
 				unresolved = append(unresolved, Site{
 					Path:   path,

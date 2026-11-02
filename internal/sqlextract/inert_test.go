@@ -37,7 +37,7 @@ func TestCompositionThatMayReachADriverStaysASite(t *testing.T) {
 		"an unknown call":       "func run(string) {}\n\nfunc Q(t string) { run(\"DELETE FROM \" + t) }\n",
 		"a local also returned": "func Q(s, n string) string {\n\tq := \"DELETE FROM \" + n\n\tif strings.Contains(s, q) {\n\t\treturn \"\"\n\t}\n\treturn q\n}\n",
 		"a local reassigned":    "func run(string) {}\n\nfunc Q(s, n string) bool {\n\tq := \"DELETE FROM \" + n\n\trun(q)\n\treturn s == q\n}\n",
-		"a shadowed strings":    "type sx struct{}\n\nfunc (sx) Contains(a, b string) bool { return a == b }\n\nfunc Q(n string) bool {\n\tstrings := sx{}\n\treturn strings.Contains(\"a\", \"DELETE FROM \"+n)\n}\n",
+		"a shadowed strings":    "type sx struct{}\n\nfunc (sx) Contains(a, b string) bool { return Exec(b) }\n\nfunc Exec(string) bool { return true }\n\nfunc Q(n string) bool {\n\tstrings := sx{}\n\treturn strings.Contains(\"a\", \"DELETE FROM \"+n)\n}\n",
 		"a replacement result":  "func Q(s, n string) string { return strings.ReplaceAll(s, \"x\", \"DELETE FROM \"+n) }\n",
 	} {
 		t.Run(name, func(t *testing.T) {

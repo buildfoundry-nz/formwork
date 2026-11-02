@@ -69,6 +69,11 @@ type constEnv struct {
 
 	usesOnce sync.Once
 	uses     map[templateKey]*templateUse // template_index.go
+
+	flowOnce        sync.Once
+	flow            *flowGraph // inert_flow.go, with the tests
+	programFlowOnce sync.Once
+	programFlow     *flowGraph // inert_flow.go, without them
 }
 
 type pkgKey struct {

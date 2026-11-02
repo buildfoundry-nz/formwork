@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.17.3
+
 ### Added
 
 - **SQL rules read an unexported package variable nothing writes.** A `var` set

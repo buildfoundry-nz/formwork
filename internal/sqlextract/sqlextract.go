@@ -677,7 +677,10 @@ func unresolvedReason(expr ast.Expr) (key, reason string, ok bool) {
 				switch sel.Sel.Name {
 				case "Sprintf", "Sprint", "Sprintln":
 					if len(v.Args) > 0 {
-						if _, ok := stringValue(v.Args[0]); ok {
+						if format, ok := stringValue(v.Args[0]); ok {
+							if isExplainWrapperFormat(sel.Sel.Name, format, v.Args) {
+								return "", "", false
+							}
 							return "sprintf-composed", "fmt." + sel.Sel.Name + "-composed string", true
 						}
 					}
@@ -686,8 +689,11 @@ func unresolvedReason(expr ast.Expr) (key, reason string, ok bool) {
 		}
 	case *ast.BinaryExpr:
 		if v.Op == token.ADD {
-			_, lok := stringValue(v.X)
+			left, lok := stringValue(v.X)
 			_, rok := stringValue(v.Y)
+			if lok && !rok && explainWrapper.MatchString(left) {
+				return "", "", false
+			}
 			// exactly one side folds to a string ⇒ a partial SQL composition
 			if lok != rok {
 				return "concat-nonliteral", "non-literal operand in string concatenation", true

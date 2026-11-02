@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- **An EXPLAIN wrapper is not an unread composition.** `"EXPLAIN (…) " + q` adds no
+  statement of its own, and `q` is judged where it is built. Only EXPLAIN and its
+  options around one whole hole qualifies; anything more stays unread.
+
 ## 0.17.4
 
 ### Added

@@ -11,8 +11,6 @@
   dashes, so it cannot carry statement text. A statement spelling one as a literal
   reads the way a statement holding an integer does.
 
-### Added
-
 - **SQL rules read a helper whose every return is a constant.** A package-level
   function with one string result, returning only constants, can produce nothing
   else, so a composition calling it reads once per value. Worlds are linear, never

@@ -21,9 +21,13 @@ func TestGeneratedTextThatOnlyLandsInAFileIsNotASite(t *testing.T) {
 			"func main() { save(\"DROP TABLE \" + os.Args[1]) }\n",
 		"compared with the committed file": "func ddl(t string) string { return \"DROP TABLE \" + t }\n\n" +
 			"func check(want string) bool { return ddl(os.Args[1]) == want }\n\nfunc main() { check(\"x\") }\n",
-		"a method's result": "type G struct{}\n\nfunc (G) ddl(t string) string { return \"DROP TABLE \" + t }\n\nfunc main() { fmt.Print(G{}.ddl(os.Args[1])) }\n",
-		"a struct field":    "type S struct{ Q string }\n\nfunc main() {\n\ts := S{Q: \"DROP TABLE \" + os.Args[1]}\n\tfmt.Print(s.Q)\n}\n",
-		"a field assigned":  "type S struct{ Q string }\n\nfunc main() {\n\tvar s S\n\ts.Q = \"DROP TABLE \" + os.Args[1]\n\tfmt.Print(s.Q)\n}\n",
+		"a method's result":       "type G struct{}\n\nfunc (G) ddl(t string) string { return \"DROP TABLE \" + t }\n\nfunc main() { fmt.Print(G{}.ddl(os.Args[1])) }\n",
+		"a struct field":          "type S struct{ Q string }\n\nfunc main() {\n\ts := S{Q: \"DROP TABLE \" + os.Args[1]}\n\tfmt.Print(s.Q)\n}\n",
+		"a field assigned":        "type S struct{ Q string }\n\nfunc main() {\n\tvar s S\n\ts.Q = \"DROP TABLE \" + os.Args[1]\n\tfmt.Print(s.Q)\n}\n",
+		"a stream's write method": "func main() { os.Stdout.WriteString(\"DROP TABLE \" + os.Args[1]) }\n",
+		"an opened file's write":  "func main() {\n\tf, _ := os.Create(\"x.sql\")\n\tf.WriteString(\"DROP TABLE \" + os.Args[1])\n}\n",
+		"a map value written":     "func plant(files map[string]string) {\n\tfor name, body := range files {\n\t\tos.WriteFile(name, []byte(body), 0o644)\n\t}\n}\n\nfunc main() { plant(map[string]string{\"x.sql\": \"DROP TABLE \" + os.Args[1]}) }\n",
+		"a map read with ok":      "func use(m map[string]string) {\n\tv, ok := m[\"k\"]\n\tif ok {\n\t\tfmt.Print(v)\n\t}\n}\n\nfunc main() { use(map[string]string{\"k\": \"DROP TABLE \" + os.Args[1]}) }\n",
 		"a value with an error": "func ddl(t string) (string, error) { return \"DROP TABLE \" + t, nil }\n\n" +
 			"func main() {\n\tbody, err := ddl(os.Args[1])\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\tfmt.Print(body)\n}\n",
 	} {
@@ -52,20 +56,23 @@ func TestGeneratedTextIsFollowedAcrossPackages(t *testing.T) {
 func TestTextThatMayReachADriverStaysASite(t *testing.T) {
 	const db = "type DB struct{}\n\nfunc (DB) Exec(string) error { return nil }\n\nvar conn DB\n\n"
 	for name, body := range map[string]string{
-		"run directly":                    db + "func main() { conn.Exec(\"DROP TABLE \" + os.Args[1]) }\n",
-		"through a helper":                db + "func ddl(t string) string { return \"DROP TABLE \" + t }\n\nfunc main() { conn.Exec(ddl(os.Args[1])) }\n",
-		"written and run":                 db + "func ddl(t string) string { return \"DROP TABLE \" + t }\n\nfunc main() {\n\tbody := ddl(os.Args[1])\n\tfmt.Print(body)\n\tconn.Exec(body)\n}\n",
-		"from a builder":                  db + "func main() {\n\tvar b strings.Builder\n\tb.WriteString(\"DROP TABLE \" + os.Args[1])\n\tconn.Exec(b.String())\n}\n",
-		"a wrapper named like the driver": "func Exec(q string) { run(q) }\n\nfunc run(string) {}\n\nvar _ = run\n\nfunc main() { Exec(\"DROP TABLE \" + os.Args[1]) }\n",
-		"a function value":                "func ddl(t string) string { return \"DROP TABLE \" + t }\n\nvar f = ddl\n\nfunc main() { fmt.Print(ddl(os.Args[1])) }\n",
-		"never called":                    "func ddl(t string) string { return \"DROP TABLE \" + t }\n\nfunc main() {}\n",
-		"a method":                        db + "type G struct{}\n\nfunc (G) ddl(t string) string { return \"DROP TABLE \" + t }\n\nfunc main() { conn.Exec(G{}.ddl(os.Args[1])) }\n",
-		"into a struct":                   db + "type S struct{ Q string }\n\nfunc main() {\n\ts := S{Q: \"DROP TABLE \" + os.Args[1]}\n\tconn.Exec(s.Q)\n}\n",
-		"into a package var":              "var q string\n\nfunc main() { q = \"DROP TABLE \" + os.Args[1] }\n",
-		"an unknown writer":               "func render(w io.Writer, t string) { fmt.Fprint(w, \"DROP TABLE \"+t) }\n\nfunc main() { render(os.Stdout, os.Args[1]) }\n",
-		"a closure":                       "func main() {\n\tf := func(t string) string { return \"DROP TABLE \" + t }\n\tfmt.Print(f(os.Args[1]))\n}\n",
-		"its address taken":               "func keep(*strings.Builder) {}\n\nfunc main() {\n\tvar b strings.Builder\n\tb.WriteString(\"DROP TABLE \" + os.Args[1])\n\tkeep(&b)\n}\n",
-		"helpers in a cycle that run it":  db + "func a(q string) { b(q) }\n\nfunc b(q string) {\n\ta(q)\n\tconn.Exec(q)\n}\n\nfunc main() { a(\"DROP TABLE \" + os.Args[1]) }\n",
+		"run directly":                           db + "func main() { conn.Exec(\"DROP TABLE \" + os.Args[1]) }\n",
+		"through a helper":                       db + "func ddl(t string) string { return \"DROP TABLE \" + t }\n\nfunc main() { conn.Exec(ddl(os.Args[1])) }\n",
+		"written and run":                        db + "func ddl(t string) string { return \"DROP TABLE \" + t }\n\nfunc main() {\n\tbody := ddl(os.Args[1])\n\tfmt.Print(body)\n\tconn.Exec(body)\n}\n",
+		"from a builder":                         db + "func main() {\n\tvar b strings.Builder\n\tb.WriteString(\"DROP TABLE \" + os.Args[1])\n\tconn.Exec(b.String())\n}\n",
+		"a wrapper named like the driver":        "func Exec(q string) { run(q) }\n\nfunc run(string) {}\n\nvar _ = run\n\nfunc main() { Exec(\"DROP TABLE \" + os.Args[1]) }\n",
+		"a function value":                       "func ddl(t string) string { return \"DROP TABLE \" + t }\n\nvar f = ddl\n\nfunc main() { fmt.Print(ddl(os.Args[1])) }\n",
+		"never called":                           "func ddl(t string) string { return \"DROP TABLE \" + t }\n\nfunc main() {}\n",
+		"a method":                               db + "type G struct{}\n\nfunc (G) ddl(t string) string { return \"DROP TABLE \" + t }\n\nfunc main() { conn.Exec(G{}.ddl(os.Args[1])) }\n",
+		"into a struct":                          db + "type S struct{ Q string }\n\nfunc main() {\n\ts := S{Q: \"DROP TABLE \" + os.Args[1]}\n\tconn.Exec(s.Q)\n}\n",
+		"a map value run":                        db + "func main() {\n\tm := map[string]string{\"k\": \"DROP TABLE \" + os.Args[1]}\n\tconn.Exec(m[\"k\"])\n}\n",
+		"a ranged map run":                       db + "func main() {\n\tfor _, q := range map[string]string{\"k\": \"DROP TABLE \" + os.Args[1]} {\n\t\tconn.Exec(q)\n\t}\n}\n",
+		"an unexported field run in its package": db + "type S struct{ q string }\n\nfunc main() {\n\ts := S{q: \"DROP TABLE \" + os.Args[1]}\n\tconn.Exec(s.q)\n}\n",
+		"into a package var":                     "var q string\n\nfunc main() { q = \"DROP TABLE \" + os.Args[1] }\n",
+		"an unknown writer":                      "func render(w io.Writer, t string) { fmt.Fprint(w, \"DROP TABLE \"+t) }\n\nfunc main() { render(os.Stdout, os.Args[1]) }\n",
+		"a closure":                              "func main() {\n\tf := func(t string) string { return \"DROP TABLE \" + t }\n\tfmt.Print(f(os.Args[1]))\n}\n",
+		"its address taken":                      "func keep(*strings.Builder) {}\n\nfunc main() {\n\tvar b strings.Builder\n\tb.WriteString(\"DROP TABLE \" + os.Args[1])\n\tkeep(&b)\n}\n",
+		"helpers in a cycle that run it":         db + "func a(q string) { b(q) }\n\nfunc b(q string) {\n\ta(q)\n\tconn.Exec(q)\n}\n\nfunc main() { a(\"DROP TABLE \" + os.Args[1]) }\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, _, sites := extract(t, walkTree(t, map[string]string{"go.mod": closedMod, "gen/g.go": flowHead + body}), "gen/g.go")

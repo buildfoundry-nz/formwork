@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- **The inert flow follows more text to where it lands.** Map-literal values and comma-ok
+  map reads, a stream's or opened file's own write methods, `filepath.Join`,
+  `go/parser` calls. An unexported field now shares a node only within its package.
+
 ## 0.17.6
 
 ### Added

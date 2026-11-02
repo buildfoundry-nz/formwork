@@ -68,6 +68,9 @@ func (ff *flowFile) flowThroughCall(from string, call *ast.CallExpr, cur ast.Nod
 			}
 		}
 	case *ast.SelectorExpr:
+		if ff.isFileWrite(f) {
+			return nil, true
+		}
 		if pkg, ok := f.X.(*ast.Ident); ok && pkg.Obj == nil {
 			name := f.Sel.Name
 			if transparentFuncs[pkg.Name][name] {
@@ -131,6 +134,18 @@ func (ff *flowFile) flowThroughCall(from string, call *ast.CallExpr, cur ast.Nod
 	}
 	g.edge(from, badFlow)
 	return nil, true
+}
+
+// isFileWrite reports whether f is a write method of a standard stream or an opened file.
+func (ff *flowFile) isFileWrite(f *ast.SelectorExpr) bool {
+	if f.Sel.Name != "WriteString" && f.Sel.Name != "Write" {
+		return false
+	}
+	if isStdStream(f.X) {
+		return true
+	}
+	id, ok := f.X.(*ast.Ident)
+	return ok && id.Obj != nil && ff.osFiles[id.Obj]
 }
 
 // flowIntoWriter ends text at a stream or an opened file, or carries it into a builder.

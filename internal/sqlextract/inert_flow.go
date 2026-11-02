@@ -42,7 +42,9 @@ var transparentFuncs = map[string]map[string]bool{
 	"strings": {"Join": true, "TrimSpace": true, "TrimPrefix": true, "TrimSuffix": true, "Trim": true, "TrimLeft": true,
 		"TrimRight": true, "ReplaceAll": true, "Replace": true, "ToLower": true, "ToUpper": true, "Repeat": true,
 		"Split": true, "Fields": true},
-	"bytes": {"TrimSpace": true, "ReplaceAll": true, "Join": true},
+	"bytes":    {"TrimSpace": true, "ReplaceAll": true, "Join": true},
+	"filepath": {"Join": true, "Base": true, "Dir": true},
+	"path":     {"Join": true, "Base": true, "Dir": true},
 }
 
 // pathFuncs take text as a path and return no text of it.
@@ -51,6 +53,7 @@ var pathFuncs = map[string]map[string]bool{
 	"utf8":    {"RuneCountInString": true, "ValidString": true, "RuneCount": true, "DecodeRuneInString": true, "DecodeLastRuneInString": true},
 	"sha256":  {"Sum256": true},
 	"sort":    {"Strings": true},
+	"parser":  {"ParseFile": true, "ParseExpr": true},
 	"slices":  {"Sort": true, "Contains": true, "Equal": true, "Index": true},
 	"strconv": {"Atoi": true, "ParseInt": true, "ParseBool": true, "ParseFloat": true},
 }
@@ -295,7 +298,15 @@ func paramCount(fd *ast.FuncDecl) int {
 	return n
 }
 
-func fieldKey(name string) string { return "field " + name }
+// fieldKey is a field's node. An unexported field can only be touched in its own
+// package, so it shares a node with that package's fields of its name; an exported one
+// shares a node across the module.
+func (ff *flowFile) fieldKey(name string) string {
+	if ast.IsExported(name) {
+		return "field " + name
+	}
+	return "field " + ff.cf.dir + "." + name
+}
 
 func isByteSlice(x ast.Expr) bool {
 	a, ok := x.(*ast.ArrayType)
@@ -411,7 +422,7 @@ func (ff *flowFile) readField(sel *ast.SelectorExpr, at int) {
 			}
 		}
 	}
-	ff.flow(fieldKey(sel.Sel.Name), at)
+	ff.flow(ff.fieldKey(sel.Sel.Name), at)
 }
 
 // noteFuncValue marks pkg.F used other than by calling it.
@@ -512,8 +523,17 @@ func (ff *flowFile) flow(from string, i int) {
 		cur, parent := ff.stack[i], ff.stack[i-1]
 		switch p := parent.(type) {
 		case *ast.KeyValueExpr:
-			if id, ok := p.Key.(*ast.Ident); ok && p.Value == cur {
-				g.edge(from, fieldKey(id.Name))
+			if p.Value != cur {
+				return // a map key or a field name
+			}
+			if i >= 2 {
+				if lit, ok := ff.stack[i-2].(*ast.CompositeLit); ok && isTextCollection(lit.Type) {
+					i -= 2
+					continue
+				}
+			}
+			if id, ok := p.Key.(*ast.Ident); ok {
+				g.edge(from, ff.fieldKey(id.Name))
 				return
 			}
 			g.edge(from, badFlow)
@@ -522,7 +542,7 @@ func (ff *flowFile) flow(from string, i int) {
 			if lit, ok := p.(*ast.CompositeLit); ok && lit.Type == cur {
 				return
 			}
-			if lit, ok := p.(*ast.CompositeLit); ok && !isStringSlice(lit.Type) {
+			if lit, ok := p.(*ast.CompositeLit); ok && !isTextCollection(lit.Type) {
 				g.edge(from, badFlow)
 				return
 			}
@@ -624,9 +644,16 @@ func (ff *flowFile) flow(from string, i int) {
 	}
 }
 
-func isStringSlice(x ast.Expr) bool {
-	a, ok := x.(*ast.ArrayType)
-	return ok && a.Len == nil && isIdent(a.Elt, "string")
+// isTextCollection reports whether a literal of type x holds text directly: []string
+// or a map from anything to string.
+func isTextCollection(x ast.Expr) bool {
+	switch t := x.(type) {
+	case *ast.ArrayType:
+		return t.Len == nil && isIdent(t.Elt, "string")
+	case *ast.MapType:
+		return isIdent(t.Value, "string")
+	}
+	return false
 }
 
 func (ff *flowFile) inFunction(i int) bool {
@@ -645,13 +672,13 @@ func (ff *flowFile) flowIntoAssign(from string, p *ast.AssignStmt, cur ast.Node)
 	g := ff.g
 	to := func(lhs ast.Expr) {
 		if sel, ok := lhs.(*ast.SelectorExpr); ok {
-			g.edge(from, fieldKey(sel.Sel.Name))
+			g.edge(from, ff.fieldKey(sel.Sel.Name))
 			return
 		}
 		if ix, ok := lhs.(*ast.IndexExpr); ok {
 			lhs = ix.X
 			if sel, ok := lhs.(*ast.SelectorExpr); ok {
-				g.edge(from, fieldKey(sel.Sel.Name))
+				g.edge(from, ff.fieldKey(sel.Sel.Name))
 				return
 			}
 		}
@@ -670,6 +697,10 @@ func (ff *flowFile) flowIntoAssign(from string, p *ast.AssignStmt, cur ast.Node)
 				to(p.Lhs[k])
 			}
 		}
+		return
+	}
+	if _, ok := cur.(*ast.IndexExpr); ok && len(p.Lhs) == 2 {
+		to(p.Lhs[0]) // v, ok := m[k]
 		return
 	}
 	call, ok := cur.(*ast.CallExpr)

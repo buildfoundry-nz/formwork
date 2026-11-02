@@ -9,7 +9,8 @@ import (
 // inert_flow_shapes.go — three shapes a value takes that the walk can follow exactly.
 //
 // A LOCAL CLOSURE ONLY EVER CALLED is a function with one name in one scope, so its
-// parameters and its returns are nodes like any function's. A closure assigned twice,
+// parameters and its returns are nodes like any function's, including the recursive
+// form declared as a variable and assigned once after. A closure assigned twice,
 // passed on or returned can run anywhere, and its returns stay bad.
 //
 // A POSITIONAL ROW of a struct this file spells is the keyed row it means: the table
@@ -29,6 +30,7 @@ func writerKey(fn string, i int) string { return "writer " + fn + " " + strconv.
 func (ff *flowFile) declareClosures() {
 	uses, calls := map[*ast.Object]int{}, map[*ast.Object]int{}
 	bound := map[*ast.Object]*ast.FuncLit{}
+	late, twice := map[*ast.Object]bool{}, map[*ast.Object]bool{} // var f func(...); f = func...
 	bind := func(name *ast.Ident, value ast.Expr) {
 		if lit, ok := value.(*ast.FuncLit); ok && name.Obj != nil {
 			bound[name.Obj] = lit
@@ -50,10 +52,25 @@ func (ff *flowFile) declareClosures() {
 				ff.declareClosure(f)
 			}
 		case *ast.AssignStmt:
-			if v.Tok == token.DEFINE && len(v.Lhs) == len(v.Rhs) {
-				for i, lhs := range v.Lhs {
-					if id, ok := lhs.(*ast.Ident); ok {
+			if len(v.Lhs) != len(v.Rhs) {
+				return true
+			}
+			for i, lhs := range v.Lhs {
+				id, ok := lhs.(*ast.Ident)
+				if !ok {
+					continue
+				}
+				if v.Tok == token.DEFINE {
+					bind(id, v.Rhs[i])
+				} else if spec, ok := declaredFuncVar(id); ok && v.Tok == token.ASSIGN {
+					if _, again := bound[id.Obj]; again {
+						spec = nil // assigned twice: it can be either
+						delete(bound, id.Obj)
+						twice[id.Obj] = true
+					}
+					if spec != nil && !twice[id.Obj] {
 						bind(id, v.Rhs[i])
+						late[id.Obj] = true
 					}
 				}
 			}
@@ -67,11 +84,30 @@ func (ff *flowFile) declareClosures() {
 		return true
 	})
 	for obj, lit := range bound {
-		// The binding's own identifier is the one use that is not a call.
-		if calls[obj] > 0 && uses[obj] == calls[obj]+1 {
+		// The binding's own identifier is the one use that is not a call, and a
+		// variable declared first and assigned after has two.
+		bindings := 1
+		if late[obj] {
+			bindings = 2
+		}
+		if calls[obj] > 0 && uses[obj] == calls[obj]+bindings {
 			ff.closures[obj] = ff.declareClosure(lit)
 		}
 	}
+}
+
+// declaredFuncVar reports whether id names a variable declared with a function type
+// and no value, the shape a recursive closure needs.
+func declaredFuncVar(id *ast.Ident) (*ast.ValueSpec, bool) {
+	if id.Obj == nil {
+		return nil, false
+	}
+	spec, ok := id.Obj.Decl.(*ast.ValueSpec)
+	if !ok || len(spec.Values) != 0 {
+		return nil, false
+	}
+	_, isFunc := spec.Type.(*ast.FuncType)
+	return spec, isFunc
 }
 
 func (ff *flowFile) declareClosure(lit *ast.FuncLit) string {
@@ -158,6 +194,14 @@ func (ff *flowFile) litType(i int) ast.Expr {
 }
 
 func isWriterType(x ast.Expr) bool {
+	if st, ok := x.(*ast.StarExpr); ok {
+		sel, ok := st.X.(*ast.SelectorExpr)
+		if !ok {
+			return false
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		return ok && pkg.Obj == nil && pkg.Name == "os" && sel.Sel.Name == "File"
+	}
 	sel, ok := x.(*ast.SelectorExpr)
 	if !ok {
 		return false

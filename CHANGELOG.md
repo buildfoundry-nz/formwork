@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- **A composition consumed where it is built is not an unread site.** Text compared
+  with `==`, compiled as a regexp, passed to a `strings` predicate, or reported in an
+  error, log line or test message ends there, so no driver can run it. A local counts
+  when its one write is the composition and every read is such a use. Any other use
+  keeps it a site.
+- **`::name::` is not a cast.** A CI runner command such as `::add-mask::` no longer
+  makes a composition read as SQL.
+
 ## 0.17.5
 
 ### Added

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.17.7
+
 ### Changed
 
 - **The inert flow follows more text to where it lands.** Map-literal values and comma-ok

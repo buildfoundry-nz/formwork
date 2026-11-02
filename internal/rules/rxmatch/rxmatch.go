@@ -75,16 +75,59 @@ func (m re2Matcher) FindLine(content string) (int, bool, error) {
 // enforced by a userspace fastclock that starves under CPU load — so the
 // timeout goes unobserved and a match flatlines for tens of minutes
 // (TakeoffQS #18189 / #16809). This timer does not depend on that clock.
+//
+// Both are wall clocks, so a stalled goroutine or a clock tick arriving late can
+// put a match of a few milliseconds past them. The patient pair is the second
+// attempt that answers whether the pattern is slow or the machine was busy.
 var (
 	regexp2MatchTimeout = time.Second
 	regexp2OuterBound   = 2 * time.Second
+
+	regexp2PatientMatchTimeout = 10 * time.Second
+	regexp2PatientOuterBound   = 20 * time.Second
 )
 
-// regexp2Call bounds one regexp2 call with regexp2OuterBound. When it fires the
-// call returns an error, so the rule fails closed (exit 2) rather than reading
-// as a clean pass — the same contract MatchString documents below. The matcher
-// goroutine is reaped when the check process exits on that error.
-func regexp2Call[T any](fn func() (T, error)) (T, error) {
+const regexp2HardBoundMessage = "hard bound"
+
+// regexp2TimedOut reports whether err is a wall clock running out, not a verdict
+// on the text. regexp2 returns its timeout as an untyped error.
+func regexp2TimedOut(err error) bool {
+	msg := err.Error()
+	return strings.HasPrefix(msg, "match timeout after ") || strings.Contains(msg, regexp2HardBoundMessage)
+}
+
+// regexp2Call runs one regexp2 call, and once more under the patient bounds if
+// the first attempt's wall clock ran out. When the patient attempt runs out too
+// the call returns an error, so the rule fails closed (exit 2) rather than
+// reading as a clean pass — the same contract MatchString documents below. Only
+// a pattern that is slow in its own right gets that far, and a run has one such
+// wait, because the error ends it.
+func regexp2Call[T any](m pcreMatcher, fn func(*regexp2.Regexp) (T, error)) (T, error) {
+	v, err := regexp2Bounded(regexp2OuterBound, func() (T, error) { return fn(m.re) })
+	if err == nil || !regexp2TimedOut(err) {
+		return v, err
+	}
+	patient, err := regexp2Patient(m.src)
+	if err != nil {
+		return v, err
+	}
+	return regexp2Bounded(regexp2PatientOuterBound, func() (T, error) { return fn(patient) })
+}
+
+// regexp2Patient compiles the second attempt's copy only when one is needed: a
+// regexp2.Regexp carries its timeout and most patterns never time out.
+func regexp2Patient(src string) (*regexp2.Regexp, error) {
+	re, err := regexp2.Compile(src, regexp2.None)
+	if err != nil {
+		return nil, err
+	}
+	re.MatchTimeout = regexp2PatientMatchTimeout
+	return re, nil
+}
+
+// regexp2Bounded bounds one attempt with a timer. A matcher goroutine it gives
+// up on stops at its own MatchTimeout, or when the check process exits.
+func regexp2Bounded[T any](bound time.Duration, fn func() (T, error)) (T, error) {
 	type out struct {
 		v   T
 		err error
@@ -94,14 +137,14 @@ func regexp2Call[T any](fn func() (T, error)) (T, error) {
 		v, err := fn()
 		ch <- out{v, err}
 	}()
-	timer := time.NewTimer(regexp2OuterBound)
+	timer := time.NewTimer(bound)
 	defer timer.Stop()
 	select {
 	case r := <-ch:
 		return r.v, r.err
 	case <-timer.C:
 		var zero T
-		return zero, fmt.Errorf("match exceeded %s hard bound", regexp2OuterBound)
+		return zero, fmt.Errorf("match exceeded %s %s", bound, regexp2HardBoundMessage)
 	}
 }
 
@@ -111,7 +154,7 @@ type pcreMatcher struct {
 }
 
 func (m pcreMatcher) FindLine(content string) (int, bool, error) {
-	mm, err := regexp2Call(func() (*regexp2.Match, error) { return m.re.FindStringMatch(content) })
+	mm, err := regexp2Call(m, func(re *regexp2.Regexp) (*regexp2.Match, error) { return re.FindStringMatch(content) })
 	if err != nil {
 		return 0, false, fmt.Errorf("regexp2 %q: %w", m.src, err)
 	}
@@ -127,8 +170,7 @@ func (m pcreMatcher) FindLine(content string) (int, bool, error) {
 }
 
 // MatchString surfaces a regexp2 backtracking timeout as an error instead of
-// swallowing it as no-match: the 1s match timeout still bounds a stuck
-// guardrail, but the miss it would otherwise report reads as a pass, and the
+// swallowing it as no-match: the match timeouts still bound a stuck guardrail, but the miss it would otherwise report reads as a pass, and the
 // exit-code contract forbids a rule that failed to evaluate from passing (#22).
 //
 // Blast radius (deliberate): like any rule error, this propagates out of
@@ -141,14 +183,14 @@ func (m pcreMatcher) FindLine(content string) (int, bool, error) {
 // suite until that file or the timing-out regexp2 rule is fixed — the intended,
 // recoverable outcome over a silent under-report.
 func (m pcreMatcher) MatchString(s string) (bool, error) {
-	ok, err := regexp2Call(func() (bool, error) { return m.re.MatchString(s) })
+	ok, err := regexp2Call(m, func(re *regexp2.Regexp) (bool, error) { return re.MatchString(s) })
 	if err != nil {
 		return false, fmt.Errorf("regexp2 %q: %w", m.src, err)
 	}
 	return ok, nil
 }
 func (m pcreMatcher) FindIndex(s string) (int, bool, error) {
-	mm, err := regexp2Call(func() (*regexp2.Match, error) { return m.re.FindStringMatch(s) })
+	mm, err := regexp2Call(m, func(re *regexp2.Regexp) (*regexp2.Match, error) { return re.FindStringMatch(s) })
 	if err != nil {
 		return -1, false, fmt.Errorf("regexp2 %q: %w", m.src, err)
 	}
@@ -166,14 +208,14 @@ func (m pcreMatcher) FindIndex(s string) (int, bool, error) {
 // the matches found so far: a short count clears a countable obligation, which
 // is the silent pass this interface exists to prevent.
 func (m pcreMatcher) CountMatches(s string) (int, error) {
-	mm, err := regexp2Call(func() (*regexp2.Match, error) { return m.re.FindStringMatch(s) })
+	mm, err := regexp2Call(m, func(re *regexp2.Regexp) (*regexp2.Match, error) { return re.FindStringMatch(s) })
 	if err != nil {
 		return 0, fmt.Errorf("regexp2 %q: %w", m.src, err)
 	}
 	n := 0
 	for mm != nil {
 		n++
-		mm, err = regexp2Call(func() (*regexp2.Match, error) { return m.re.FindNextMatch(mm) })
+		mm, err = regexp2Call(m, func(re *regexp2.Regexp) (*regexp2.Match, error) { return re.FindNextMatch(mm) })
 		if err != nil {
 			return 0, fmt.Errorf("regexp2 %q: %w", m.src, err)
 		}
@@ -184,7 +226,7 @@ func (m pcreMatcher) CountMatches(s string) (int, error) {
 func (m pcreMatcher) String() string { return m.src }
 
 // Compile builds a matcher for pattern under syntax: "" or "re2" -> RE2;
-// "regexp2" -> the PCRE2-capable engine (lookaround enabled, 1s match timeout).
+// "regexp2" -> the PCRE2-capable engine (lookaround enabled, bounded match time).
 // Any other syntax value is an error (exit-2 config error).
 func Compile(what, pattern, syntax string) (Matcher, error) {
 	switch syntax {

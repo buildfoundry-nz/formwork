@@ -164,12 +164,19 @@ func FromGo(path string, src []byte) (resolved []Candidate, unresolved []Site, e
 // from tree, the walk path was found by (consts.go). A nil tree reads the
 // file's own constants only.
 func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate, unresolved []Site, err error) {
+	return FromGoSeams(tree, nil, path, src)
+}
+
+// FromGoSeams is FromGoIn with an exported constant or SQL template of a package
+// in seams read as an opaque hole rather than as its value (consts.go). seams are directories
+// relative to the walk's root.
+func FromGoSeams(tree *scan.FileSet, seams []string, path string, src []byte) (resolved []Candidate, unresolved []Site, err error) {
 	fset := token.NewFileSet()
 	file, perr := parser.ParseFile(fset, path, src, 0)
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
-	fo := foldConstants(tree, path, fset, file, true)
+	fo := foldConstants(tree, seams, path, fset, file, true)
 	type rawCand struct {
 		text string
 		pos  token.Pos
@@ -378,7 +385,7 @@ func FromGoReassembledIn(tree *scan.FileSet, path string, src []byte) ([]Candida
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
-	fo := foldConstants(tree, path, fset, file, false)
+	fo := foldConstants(tree, nil, path, fset, file, false)
 	sink := newSiteSink(path, fset, src)
 	sink.readPackageSeeds(file)
 	// ONE traversal doing both jobs (#45). It used to be two full walks over the

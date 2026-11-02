@@ -138,6 +138,11 @@ func (e *constEnv) callTemplate(call *ast.CallExpr, cf *constFile, env map[strin
 	if !ok || !all {
 		return "", false
 	}
+	if sel, isSel := call.Fun.(*ast.SelectorExpr); isSel {
+		if x, isIdent := sel.X.(*ast.Ident); isIdent && e.seams[cf.importDirs[x.Name]] {
+			return seamHole, true
+		}
+	}
 	return e.fold(fd.Body.List[0].(*ast.ReturnStmt).Results[0], fcf, false, bound, depth+1)
 }
 

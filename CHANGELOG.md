@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- **`sql/statement-predicate` takes `seam_constants`.** A rule names the package
+  directories meant to mint the text it bans. Their exported constants and SQL
+  templates read as an opaque hole, the statement around them is still judged, and the same text
+  anywhere else still fires.
+
 ## 0.17.1
 
 ### Added

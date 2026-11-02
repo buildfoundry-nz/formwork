@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.17.12
+
 ### Fixed
 
 - **A regexp2 match that times out gets a second attempt before the run fails.** The 1 s

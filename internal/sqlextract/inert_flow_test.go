@@ -28,6 +28,7 @@ func TestGeneratedTextThatOnlyLandsInAFileIsNotASite(t *testing.T) {
 		"an opened file's write":  "func main() {\n\tf, _ := os.Create(\"x.sql\")\n\tf.WriteString(\"DROP TABLE \" + os.Args[1])\n}\n",
 		"a map value written":     "func plant(files map[string]string) {\n\tfor name, body := range files {\n\t\tos.WriteFile(name, []byte(body), 0o644)\n\t}\n}\n\nfunc main() { plant(map[string]string{\"x.sql\": \"DROP TABLE \" + os.Args[1]}) }\n",
 		"a map read with ok":      "func use(m map[string]string) {\n\tv, ok := m[\"k\"]\n\tif ok {\n\t\tfmt.Print(v)\n\t}\n}\n\nfunc main() { use(map[string]string{\"k\": \"DROP TABLE \" + os.Args[1]}) }\n",
+		"a package var written":   "var cache []string\n\nfunc main() {\n\tcache = append(cache, \"DROP TABLE \"+os.Args[1])\n\tfor _, q := range cache {\n\t\tfmt.Print(q)\n\t}\n}\n",
 		"a value with an error": "func ddl(t string) (string, error) { return \"DROP TABLE \" + t, nil }\n\n" +
 			"func main() {\n\tbody, err := ddl(os.Args[1])\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\tfmt.Print(body)\n}\n",
 	} {
@@ -68,7 +69,8 @@ func TestTextThatMayReachADriverStaysASite(t *testing.T) {
 		"a map value run":                        db + "func main() {\n\tm := map[string]string{\"k\": \"DROP TABLE \" + os.Args[1]}\n\tconn.Exec(m[\"k\"])\n}\n",
 		"a ranged map run":                       db + "func main() {\n\tfor _, q := range map[string]string{\"k\": \"DROP TABLE \" + os.Args[1]} {\n\t\tconn.Exec(q)\n\t}\n}\n",
 		"an unexported field run in its package": db + "type S struct{ q string }\n\nfunc main() {\n\ts := S{q: \"DROP TABLE \" + os.Args[1]}\n\tconn.Exec(s.q)\n}\n",
-		"into a package var":                     "var q string\n\nfunc main() { q = \"DROP TABLE \" + os.Args[1] }\n",
+		"a package var it runs":                  db + "var q string\n\nfunc main() {\n\tq = \"DROP TABLE \" + os.Args[1]\n\tconn.Exec(q)\n}\n",
+		"an exported package var":                "var Q string\n\nfunc main() {\n\tQ = \"DROP TABLE \" + os.Args[1]\n\tfmt.Print(Q)\n}\n",
 		"an unknown writer":                      "func render(w io.Writer, t string) { fmt.Fprint(w, \"DROP TABLE \"+t) }\n\nfunc main() { render(os.Stdout, os.Args[1]) }\n",
 		"a closure":                              "func main() {\n\tf := func(t string) string { return \"DROP TABLE \" + t }\n\tfmt.Print(f(os.Args[1]))\n}\n",
 		"its address taken":                      "func keep(*strings.Builder) {}\n\nfunc main() {\n\tvar b strings.Builder\n\tb.WriteString(\"DROP TABLE \" + os.Args[1])\n\tkeep(&b)\n}\n",

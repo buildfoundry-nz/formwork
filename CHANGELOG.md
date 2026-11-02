@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.17.4
+
 ### Added
 
 - **SQL rules read a helper whose every return is a constant.** A package-level

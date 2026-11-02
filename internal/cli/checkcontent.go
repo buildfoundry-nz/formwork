@@ -20,6 +20,10 @@ const checkContentSchemaVersion = 1
 
 var checkContentLoadGated = loadGated
 
+// checkContentResolveGitIgnore resolves the worktree's gitignore snapshot for a
+// check-content run. A seam so a test can count how often a run asks git.
+var checkContentResolveGitIgnore = meta.ResolveGitIgnore
+
 type checkContentCoverage struct {
 	RulesTotal int `json:"rules_total"`
 	InScope    int `json:"in_scope"`
@@ -244,7 +248,7 @@ func planCheckContent(rls []*config.Rule, path string, content []byte) (eligible
 }
 
 func checkContentReachability(root string, cfg *config.Config, path string, externalTools []string) (*notScannedOut, error) {
-	gitIgnore := meta.ResolveGitIgnore(cfg, root)
+	gitIgnore := checkContentResolveGitIgnore(cfg, root)
 	nonRegular, ghostFrom, reachErr := walkReachability(root, path)
 	needsGit := false
 	ghostErr := error(nil)

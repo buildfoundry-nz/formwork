@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.17.2
+
 ### Added
 
 - **`sql/statement-predicate` takes `seam_constants`.** A rule names the package

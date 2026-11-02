@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.17.11
+
+### Fixed
+
+- **`check-content --batch` asks git for the ignored files once.** It listed them once per
+  input, so a batch's cost grew with its size: about 12 s per file on an 80,000-file
+  worktree. A run now resolves the snapshot once and every input reads it.
+
 ## 0.17.10
 
 ### Fixed

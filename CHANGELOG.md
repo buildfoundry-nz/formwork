@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.17.9
+
+### Changed
+
+- **A helper that only returns its text is judged at each call.** A function whose
+  parameters reach nothing but its own return is summarised, so text given to it at one
+  call no longer comes back at every other. Methods, and functions with a builder, writer
+  or unnamed parameter, are not summarised.
+- **A selector whose receiver spells its struct uses that struct's own field.** The
+  spelling can come from a parameter, a variable, a literal, a same-package function's
+  result or a range over a spelled collection. Any other selector still reaches every
+  field of its name in reach.
+- **The inert flow reads more of Go exactly.** A recursive local closure, a `*os.File`
+  parameter, `pkg.Name` as no field read, a type in a parameter list as no value, and a
+  file outside any module reaching only what it can import. More pure standard-library
+  calls are known.
+
+### Fixed
+
+- **Text written by index into a slice or map parameter is now bad.** It read as ending
+  there, though the caller's slice holds it. A tree can gain sites from this.
+
 ## 0.17.8
 
 ### Changed

@@ -180,6 +180,9 @@ func anywhere(e *constEnv, cf *constFile, fset *token.FileSet, x ast.Expr, liter
 	if s, ok := e.callTemplate(call, cf, nil, 0); ok {
 		return literal(x, s)
 	}
+	if s, ok := e.callClosed(call, cf, 0); ok {
+		return literal(x, s)
+	}
 	if !report || out.inTemplate(x) || out.inUnread(x) {
 		return x
 	}

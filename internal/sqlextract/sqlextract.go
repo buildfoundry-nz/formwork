@@ -163,13 +163,19 @@ func FromGo(path string, src []byte) (resolved []Candidate, unresolved []Site, e
 // FromGoIn is FromGo reading the Go string constants a composition is made of
 // from tree, the walk path was found by (consts.go). A nil tree reads the
 // file's own constants only.
-func FromGoIn(tree *scan.FileSet, path string, src []byte) (resolved []Candidate, unresolved []Site, err error) {
+func FromGoIn(tree *scan.FileSet, path string, src []byte) ([]Candidate, []Site, error) {
+	return withClosedWorlds(func(pass *closedPass) ([]Candidate, []Site, error) {
+		return fromGoWorld(tree, path, src, pass)
+	})
+}
+
+func fromGoWorld(tree *scan.FileSet, path string, src []byte, pass *closedPass) (resolved []Candidate, unresolved []Site, err error) {
 	fset := token.NewFileSet()
 	file, perr := parser.ParseFile(fset, path, src, 0)
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
-	fo := foldConstants(tree, path, fset, file, true)
+	fo := foldConstants(tree, path, fset, file, true, pass)
 	type rawCand struct {
 		text string
 		pos  token.Pos
@@ -373,12 +379,18 @@ func FromGoReassembled(path string, src []byte) ([]Candidate, []Site, error) {
 // FromGoReassembledIn is FromGoReassembled reading the Go string constants a
 // composition is made of from tree, as FromGoIn does.
 func FromGoReassembledIn(tree *scan.FileSet, path string, src []byte) ([]Candidate, []Site, error) {
+	return withClosedWorlds(func(pass *closedPass) ([]Candidate, []Site, error) {
+		return fromGoReassembledWorld(tree, path, src, pass)
+	})
+}
+
+func fromGoReassembledWorld(tree *scan.FileSet, path string, src []byte, pass *closedPass) ([]Candidate, []Site, error) {
 	fset := token.NewFileSet()
 	file, perr := parser.ParseFile(fset, path, src, 0)
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
-	fo := foldConstants(tree, path, fset, file, false)
+	fo := foldConstants(tree, path, fset, file, false, pass)
 	sink := newSiteSink(path, fset, src)
 	sink.readPackageSeeds(file)
 	// ONE traversal doing both jobs (#45). It used to be two full walks over the

@@ -3,6 +3,7 @@ package sqlextract
 import (
 	"go/ast"
 	"go/token"
+	"strconv"
 )
 
 // templates.go — A SQL TEMPLATE IS READ WHERE IT IS CALLED.
@@ -18,7 +19,8 @@ import (
 // trades the gate's coverage for its single-source guarantee.
 //
 // A TEMPLATE is a package-level function whose parameters and one result are
-// all `string` and whose body is a single `return` of a string expression.
+// all `string` and whose body is a single `return` of a string expression, a
+// fmt.Sprintf included.
 // Called with arguments that are constants, its result is a constant too: the
 // extractor binds the parameters and folds the body (fold, callTemplate), and
 // the call reads as that literal wherever it stands — an operand, an argument,
@@ -125,6 +127,29 @@ func (e *constEnv) bindings(fd *ast.FuncDecl, args []ast.Expr, cf *constFile, en
 		bound[names[i]] = val
 	}
 	return bound, all, true
+}
+
+// foldSprintf reads a fmt.Sprintf in a template's body, where env holds the bound
+// parameters. Everywhere else stringValue reads one, once its operands are literals.
+// An argument that does not fold is only read through a %d, which cannot carry
+// statement text.
+func (e *constEnv) foldSprintf(call *ast.CallExpr, cf *constFile, env map[string]string, depth int) (string, bool) {
+	if len(call.Args) == 0 {
+		return "", false
+	}
+	format, ok := e.fold(call.Args[0], cf, false, env, depth+1)
+	if !ok {
+		return "", false
+	}
+	args := make([]ast.Expr, len(call.Args)-1)
+	for i, a := range call.Args[1:] {
+		args[i] = a
+		if s, ok := e.fold(a, cf, false, env, depth+1); ok {
+			args[i] = &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(s)}
+		}
+	}
+	text, exact := formatVerbs(format, args, integerHole)
+	return text, exact
 }
 
 // callTemplate evaluates call when it calls a SQL template with arguments

@@ -380,6 +380,9 @@ func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, env map[stri
 		if isStringsJoin(v) {
 			return e.foldJoin(v, cf, env, depth)
 		}
+		if env != nil && isSprintf(v) {
+			return e.foldSprintf(v, cf, env, depth)
+		}
 		if s, ok := e.callTemplate(v, cf, env, depth); ok {
 			return s, true
 		}
@@ -568,6 +571,12 @@ func foldConstants(tree *scan.FileSet, p string, fset *token.FileSet, file *ast.
 // isConversion reports whether call converts one argument to a string type.
 func (e *constEnv) isConversion(call *ast.CallExpr, cf *constFile) bool {
 	return len(call.Args) == 1 && e.namesStringType(call.Fun, cf)
+}
+
+// isSprintf reports whether call is fmt.Sprintf.
+func isSprintf(call *ast.CallExpr) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	return ok && sel.Sel.Name == "Sprintf" && isFmtSprint(call)
 }
 
 // isFmtSprint reports whether call is fmt.Sprint, fmt.Sprintf or fmt.Sprintln.

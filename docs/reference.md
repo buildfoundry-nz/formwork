@@ -934,6 +934,8 @@ literals and named constants is read whole. A SQL template — a package-level
 function whose parameters and result are all `string` and whose body is one
 `return` — is read too: a call with constant arguments reads as what it builds,
 and the definition is judged once per argument set its callers pass.
+An unexported package variable with one value of its own, which no file of its
+package assigns, ranges into or takes the address of, reads as that value.
 
 **`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
 that carries SQL (a statement, a clause, or a SQL-only token such as a cast or

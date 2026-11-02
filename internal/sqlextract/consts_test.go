@@ -152,8 +152,8 @@ func TestNonConstantOperandsStayUnread(t *testing.T) {
 		name  string
 		files map[string]string
 	}{
-		{"variable", map[string]string{"go.mod": mod,
-			"db/q.go": "package db\n\nvar cols = \"id, name\"\n\n" + compose}},
+		{"written-variable", map[string]string{"go.mod": mod,
+			"db/q.go": "package db\n\nvar cols = \"id, name\"\n\nfunc set(s string) { cols = s }\n\n" + compose}},
 		{"local-shadows-the-constant", map[string]string{"go.mod": mod,
 			"db/q.go": "package db\n\nconst cols = \"id, name\"\n\nfunc Q(cols string) string {\n" +
 				"\treturn \"SELECT \" + cols + \" FROM t WHERE org_id = $1\"\n}\n"}},
@@ -171,8 +171,8 @@ func TestNonConstantOperandsStayUnread(t *testing.T) {
 		{"module-outside-the-tree", map[string]string{"go.mod": mod,
 			"db/q.go": "package db\n\nimport \"example.org/elsewhere/shape\"\n\n" +
 				"func Q() string { return \"SELECT \" + shape.Cols + \" FROM t WHERE org_id = $1\" }\n"}},
-		{"sprintf-of-a-variable", map[string]string{"go.mod": mod,
-			"db/q.go": "package db\n\nimport \"fmt\"\n\nvar cols = \"id, name\"\n\n" +
+		{"sprintf-of-a-written-variable", map[string]string{"go.mod": mod,
+			"db/q.go": "package db\n\nimport \"fmt\"\n\nvar cols = \"id, name\"\n\nfunc set(s string) { cols = s }\n\n" +
 				"func Q() string { return fmt.Sprintf(\"SELECT %s FROM t WHERE org_id = $1\", cols) }\n"}},
 		{"sprintf-verb-that-is-not-plain", map[string]string{"go.mod": mod,
 			"db/q.go": "package db\n\nimport \"fmt\"\n\nconst cols = \"id, name\"\n\n" +

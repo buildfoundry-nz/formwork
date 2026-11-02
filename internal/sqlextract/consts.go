@@ -109,6 +109,10 @@ type pkgTable struct {
 	strTypes map[string]bool
 	// templates are the package's SQL template functions (templates.go).
 	templates map[string]funcDef
+	// vars and written answer which package variables read as their
+	// initialiser (package_vars.go).
+	vars    map[string]constDef
+	written map[string]bool
 }
 
 type funcDef struct {
@@ -131,6 +135,7 @@ type constFile struct {
 	importDirs     map[string]string // local name → dir, resolved on first use
 	importsOnce    sync.Once
 	locals         map[*ast.Object]ast.Expr // constant_locals.go; nil outside the file being folded
+	packageVars    map[*ast.Object]bool     // package_vars.go
 }
 
 func envFor(tree *scan.FileSet, seams []string) *constEnv {
@@ -149,7 +154,7 @@ func envFor(tree *scan.FileSet, seams []string) *constEnv {
 
 // newConstFile describes file, parsed from the repo-relative path p.
 func newConstFile(p string, file *ast.File) *constFile {
-	cf := &constFile{path: p, dir: path.Dir(p), pkg: file.Name.Name, test: strings.HasSuffix(p, "_test.go"), imports: map[string]string{}}
+	cf := &constFile{path: p, dir: path.Dir(p), pkg: file.Name.Name, test: strings.HasSuffix(p, "_test.go"), imports: map[string]string{}, packageVars: fileVars(file)}
 	for _, is := range file.Imports {
 		ip, err := strconv.Unquote(is.Path.Value)
 		if err != nil {
@@ -180,7 +185,7 @@ func (e *constEnv) table(k pkgKey) *pkgTable {
 }
 
 func (e *constEnv) build(k pkgKey) *pkgTable {
-	t := &pkgTable{decls: map[string]int{}, consts: map[string]constDef{}, strTypes: map[string]bool{}, templates: map[string]funcDef{}}
+	t := &pkgTable{decls: map[string]int{}, consts: map[string]constDef{}, strTypes: map[string]bool{}, templates: map[string]funcDef{}, vars: map[string]constDef{}, written: map[string]bool{}}
 	for _, f := range e.tree.Dir(k.dir) {
 		p := f.Path()
 		if !strings.HasSuffix(p, ".go") || (!k.tests && strings.HasSuffix(p, "_test.go")) {
@@ -195,6 +200,7 @@ func (e *constEnv) build(k pkgKey) *pkgTable {
 			continue
 		}
 		cf := newConstFile(p, file)
+		addPackageWrites(t, file)
 		for _, d := range file.Decls {
 			switch d := d.(type) {
 			case *ast.FuncDecl:
@@ -211,6 +217,7 @@ func (e *constEnv) build(k pkgKey) *pkgTable {
 						for i, n := range sp.Names {
 							t.decls[n.Name]++
 							if d.Tok != token.CONST {
+								addPackageVar(t, sp, i, cf)
 								continue
 							}
 							def := constDef{file: cf}
@@ -344,6 +351,9 @@ func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, env map[stri
 			}
 		}
 		if v.Obj != nil {
+			if e != nil && cf != nil && cf.packageVars[v.Obj] {
+				return e.foldIn(e.ownTable(cf), v.Name, depth)
+			}
 			if v.Obj.Kind != ast.Con {
 				return "", false
 			}
@@ -395,10 +405,16 @@ func (e *constEnv) fold(expr ast.Expr, cf *constFile, inConst bool, env map[stri
 	return "", false
 }
 
-// foldIn folds the package-level constant name of t.
+// foldIn folds the package-level constant or unwritten variable name of t.
 func (e *constEnv) foldIn(t *pkgTable, name string, depth int) (string, bool) {
 	if t.decls[name] != 1 {
 		return "", false
+	}
+	if def, ok := t.vars[name]; ok {
+		if t.written[name] {
+			return "", false
+		}
+		return e.fold(def.expr, def.file, false, nil, depth+1)
 	}
 	def, ok := t.consts[name]
 	if !ok || def.expr == nil {

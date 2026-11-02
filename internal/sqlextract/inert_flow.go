@@ -27,7 +27,8 @@ import (
 // shape that matters most, and a cycle of such wrappers must not read as closed.
 //
 // DISCLOSED LIMITS. A build-tagged file is read whichever way its tag falls, which
-// only adds uses. Reflection and cgo are not followed. Text this calls inert is judged
+// only adds uses. Reflection and cgo are not followed, so a struct handed whole to a
+// marshaller does not count as its fields being read. Text this calls inert is judged
 // where it lands only if a rule scopes that file.
 
 var driverNames = map[string]bool{
@@ -41,8 +42,10 @@ var transparentFuncs = map[string]map[string]bool{
 	"fmt": {"Sprintf": true, "Sprint": true, "Sprintln": true},
 	"strings": {"Join": true, "TrimSpace": true, "TrimPrefix": true, "TrimSuffix": true, "Trim": true, "TrimLeft": true,
 		"TrimRight": true, "ReplaceAll": true, "Replace": true, "ToLower": true, "ToUpper": true, "Repeat": true,
-		"Split": true, "Fields": true},
-	"bytes":    {"TrimSpace": true, "ReplaceAll": true, "Join": true},
+		"Split": true, "SplitN": true, "SplitAfter": true, "Fields": true, "Cut": true, "CutPrefix": true, "CutSuffix": true},
+	"bytes": {"TrimSpace": true, "ReplaceAll": true, "Join": true, "Trim": true, "TrimLeft": true, "TrimRight": true,
+		"TrimPrefix": true, "TrimSuffix": true, "Split": true, "Fields": true},
+	"format":   {"Source": true},
 	"filepath": {"Join": true, "Base": true, "Dir": true},
 	"path":     {"Join": true, "Base": true, "Dir": true},
 }
@@ -74,17 +77,21 @@ type flowFunc struct {
 	stringResults []int
 	params        []string // the local key of each parameter, "" when unnamed
 	builderParams []bool
+	writerParams  []bool
 	variadic      bool
 }
 
 // flowGraph is every edge a value of the module can take.
 type flowGraph struct {
 	vars   map[string]bool // unexported package variables, by node
-	edges  map[string][]string
-	funcs  map[string]*flowFunc
-	called map[string]bool
-	values map[string]bool
-	bad    map[string]bool
+	fields *flowFields
+	// writers maps a writer parameter's node to its function.
+	writers map[string]string
+	edges   map[string][]string
+	funcs   map[string]*flowFunc
+	called  map[string]bool
+	values  map[string]bool
+	bad     map[string]bool
 }
 
 // flowFile is one file during the walk.
@@ -97,7 +104,11 @@ type flowFile struct {
 	path     string
 	builders map[*ast.Object]bool
 	osFiles  map[*ast.Object]bool
-	stack    []ast.Node
+	// closures and closureLits are the file's closures only ever called (inert_flow_shapes.go).
+	closures     map[*ast.Object]string
+	closureLits  map[*ast.FuncLit]string
+	writerParams map[*ast.Object]string
+	stack        []ast.Node
 }
 
 // inertFlow is the graph a composition in path is judged on, built on first use. A
@@ -132,15 +143,19 @@ func flowSiteKey(path string, pos, end int) string {
 
 func (e *constEnv) buildFlow(tests bool) *flowGraph {
 	g := &flowGraph{edges: map[string][]string{}, funcs: map[string]*flowFunc{}, called: map[string]bool{},
-		values: map[string]bool{}, vars: map[string]bool{}, bad: map[string]bool{badFlow: true}}
+		values: map[string]bool{}, vars: map[string]bool{}, fields: newFlowFields(), writers: map[string]string{}, bad: map[string]bool{badFlow: true}}
 	var files []*flowFile
 	for _, f := range e.tree.Files {
 		p := f.Path()
-		if !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, ".pb.go") || (!tests && strings.HasSuffix(p, "_test.go")) {
+		if !strings.HasSuffix(p, ".go") || (!tests && strings.HasSuffix(p, "_test.go")) {
 			continue
 		}
 		src, err := f.Content()
 		if err != nil {
+			continue
+		}
+		if strings.HasSuffix(p, ".pb.go") {
+			g.declareGenerated(p, src)
 			continue
 		}
 		fset := token.NewFileSet()
@@ -149,8 +164,10 @@ func (e *constEnv) buildFlow(tests bool) *flowGraph {
 			continue
 		}
 		ff := &flowFile{g: g, e: e, cf: newConstFile(p, file), fset: fset, file: file, path: p,
-			builders: map[*ast.Object]bool{}, osFiles: map[*ast.Object]bool{}}
+			builders: map[*ast.Object]bool{}, osFiles: map[*ast.Object]bool{},
+			closures: map[*ast.Object]string{}, closureLits: map[*ast.FuncLit]string{}, writerParams: map[*ast.Object]string{}}
 		ff.declare()
+		ff.declareFields()
 		files = append(files, ff)
 	}
 	for _, ff := range files {
@@ -173,6 +190,11 @@ func (g *flowGraph) settle() {
 	for fn := range g.funcs {
 		if !g.called[fn] || g.values[fn] {
 			g.edge(retKey(fn), badFlow)
+		}
+	}
+	for node, fn := range g.writers {
+		if !g.called[fn] || g.values[fn] {
+			g.edge(node, badFlow)
 		}
 	}
 	reverse := map[string][]string{}
@@ -220,6 +242,7 @@ func (ff *flowFile) visit(n ast.Node) {
 		}
 		if fn, ok := ff.calledFunc(v); ok {
 			ff.g.called[fn] = true
+			ff.passWriters(v, fn)
 			ff.flow(retKey(fn), top)
 			ff.flow(ff.site(v), top)
 		}
@@ -262,7 +285,7 @@ func (ff *flowFile) visitIdent(id *ast.Ident, top int) {
 
 // readField follows x.Name, unless it is the callee of a call or the target of a
 // write. A Go field is only ever read through a selector like this, so every read of
-// it is in the graph. Fields of one name share a node.
+// it is in the graph.
 func (ff *flowFile) readField(sel *ast.SelectorExpr, at int) {
 	switch p := ff.parent(at).(type) {
 	case *ast.CallExpr:
@@ -276,7 +299,9 @@ func (ff *flowFile) readField(sel *ast.SelectorExpr, at int) {
 			}
 		}
 	}
-	ff.flow(ff.fieldKey(sel.Sel.Name), at)
+	for _, node := range ff.fieldNodes(sel.Sel.Name) {
+		ff.flow(node, at)
+	}
 }
 
 // noteFuncValue marks pkg.F used other than by calling it.
@@ -343,9 +368,13 @@ func (ff *flowFile) parent(i int) ast.Node {
 // calledFunc is the module function call calls, keyed by directory and name.
 func (ff *flowFile) calledFunc(call *ast.CallExpr) (string, bool) {
 	switch f := call.Fun.(type) {
+	case *ast.FuncLit:
+		key, ok := ff.closureLits[f]
+		return key, ok
 	case *ast.Ident:
 		if f.Obj != nil && f.Obj.Kind != ast.Fun {
-			return "", false
+			key, ok := ff.closures[f.Obj]
+			return key, ok
 		}
 		key := ff.cf.dir + "." + f.Name
 		_, ok := ff.g.funcs[key]
@@ -377,17 +406,25 @@ func (ff *flowFile) flow(from string, i int) {
 		cur, parent := ff.stack[i], ff.stack[i-1]
 		switch p := parent.(type) {
 		case *ast.KeyValueExpr:
-			if p.Value != cur {
-				return // a map key or a field name
-			}
-			if i >= 2 {
-				if lit, ok := ff.stack[i-2].(*ast.CompositeLit); ok && isTextCollection(lit.Type) {
-					i -= 2
-					continue
+			if i >= 2 && p.Key == cur {
+				if _, isMap := ff.litType(i - 2).(*ast.MapType); isMap {
+					g.edge(from, badFlow) // a map key leaves by a range the walk does not tell from its value
+					return
 				}
 			}
+			if p.Value != cur {
+				return // a field name or an array index
+			}
+			if i >= 2 && isTextCollection(ff.litType(i-2)) {
+				i -= 2
+				continue
+			}
 			if id, ok := p.Key.(*ast.Ident); ok {
-				g.edge(from, ff.fieldKey(id.Name))
+				var lit *ast.CompositeLit
+				if i >= 2 {
+					lit, _ = ff.stack[i-2].(*ast.CompositeLit)
+				}
+				ff.writeKeyed(from, lit, id.Name)
 				return
 			}
 			g.edge(from, badFlow)
@@ -396,7 +433,11 @@ func (ff *flowFile) flow(from string, i int) {
 			if lit, ok := p.(*ast.CompositeLit); ok && lit.Type == cur {
 				return
 			}
-			if lit, ok := p.(*ast.CompositeLit); ok && !isTextCollection(lit.Type) {
+			if lit, ok := p.(*ast.CompositeLit); ok && !isTextCollection(ff.litType(i-1)) {
+				if name, ok := ff.structRow(lit, cur, ff.litType(i-1)); ok {
+					ff.writeField(from, name)
+					return
+				}
 				g.edge(from, badFlow)
 				return
 			}
@@ -407,11 +448,8 @@ func (ff *flowFile) flow(from string, i int) {
 			case token.ADD:
 				i--
 				continue
-			case token.EQL, token.NEQ, token.LSS, token.GTR, token.LEQ, token.GEQ:
-				return
 			}
-			g.edge(from, badFlow)
-			return
+			return // only + yields text in Go
 		case *ast.IndexExpr:
 			if p.Index == cur {
 				return
@@ -430,13 +468,15 @@ func (ff *flowFile) flow(from string, i int) {
 			i = next(i)
 			continue
 		case *ast.SelectorExpr:
-			id, ok := cur.(*ast.Ident)
-			if !ok || id.Obj == nil || !ff.builders[id.Obj] || i < 2 {
-				g.edge(from, badFlow)
+			if i < 2 {
 				return
 			}
-			call, ok := ff.stack[i-2].(*ast.CallExpr)
-			if !ok || call.Fun != p {
+			call, isCall := ff.stack[i-2].(*ast.CallExpr)
+			if !isCall || call.Fun != p {
+				return // text has no fields, so what x.F reads came through its own node
+			}
+			id, ok := cur.(*ast.Ident)
+			if !ok || id.Obj == nil || !ff.builders[id.Obj] {
 				g.edge(from, badFlow)
 				return
 			}
@@ -450,6 +490,10 @@ func (ff *flowFile) flow(from string, i int) {
 			g.edge(from, badFlow)
 			return
 		case *ast.UnaryExpr:
+			switch p.Op {
+			case token.NOT, token.SUB, token.ADD, token.XOR:
+				return // none of these operates on text
+			}
 			if p.Op != token.AND || i < 2 {
 				g.edge(from, badFlow)
 				return
@@ -492,7 +536,6 @@ func (ff *flowFile) flow(from string, i int) {
 				if id, ok := p.Value.(*ast.Ident); ok && id.Obj != nil && id.Name != "_" {
 					g.edge(from, ff.localKey(id.Obj))
 				}
-				return
 			}
 			return
 		case *ast.ExprStmt, *ast.IfStmt, *ast.SwitchStmt, *ast.CaseClause:
@@ -504,16 +547,30 @@ func (ff *flowFile) flow(from string, i int) {
 	}
 }
 
-// isTextCollection reports whether a literal of type x holds text directly: []string
-// or a map from anything to string.
+// isTransparentCall reports whether call is one of transparentFuncs.
+func isTransparentCall(call *ast.CallExpr) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Obj == nil && transparentFuncs[pkg.Name][sel.Sel.Name]
+}
+
+// isTextCollection reports whether a literal of type x holds text directly: a slice of
+// or a map from anything to text or a collection of text.
 func isTextCollection(x ast.Expr) bool {
 	switch t := x.(type) {
 	case *ast.ArrayType:
-		return t.Len == nil && isIdent(t.Elt, "string")
+		return t.Len == nil && isTextElement(t.Elt)
 	case *ast.MapType:
-		return isIdent(t.Value, "string")
+		return isTextElement(t.Value)
 	}
 	return false
+}
+
+func isTextElement(x ast.Expr) bool {
+	return isIdent(x, "string") || isByteSlice(x) || isTextCollection(x)
 }
 
 func (ff *flowFile) inFunction(i int) bool {
@@ -532,13 +589,13 @@ func (ff *flowFile) flowIntoAssign(from string, p *ast.AssignStmt, cur ast.Node)
 	g := ff.g
 	to := func(lhs ast.Expr) {
 		if sel, ok := lhs.(*ast.SelectorExpr); ok {
-			g.edge(from, ff.fieldKey(sel.Sel.Name))
+			ff.writeSelector(from, sel)
 			return
 		}
 		if ix, ok := lhs.(*ast.IndexExpr); ok {
 			lhs = ix.X
 			if sel, ok := lhs.(*ast.SelectorExpr); ok {
-				g.edge(from, ff.fieldKey(sel.Sel.Name))
+				ff.writeSelector(from, sel)
 				return
 			}
 		}
@@ -570,6 +627,12 @@ func (ff *flowFile) flowIntoAssign(from string, p *ast.AssignStmt, cur ast.Node)
 		g.edge(from, badFlow)
 		return
 	}
+	if isTransparentCall(call) {
+		for _, lhs := range p.Lhs {
+			to(lhs)
+		}
+		return
+	}
 	fn, known := ff.calledFunc(call)
 	if !known {
 		g.edge(from, badFlow)
@@ -586,6 +649,10 @@ func (ff *flowFile) flowIntoReturn(from string, i int) {
 	for ; i >= 0; i-- {
 		switch fn := ff.stack[i].(type) {
 		case *ast.FuncLit:
+			if key, ok := ff.closureLits[fn]; ok {
+				ff.g.edge(from, retKey(key))
+				return
+			}
 			ff.g.edge(from, badFlow)
 			return
 		case *ast.FuncDecl:

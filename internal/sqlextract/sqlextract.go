@@ -175,8 +175,8 @@ func fromGoWorld(tree *scan.FileSet, path string, src []byte, pass *closedPass) 
 	if perr != nil {
 		return nil, nil, fmt.Errorf("parse %s: %w", path, perr)
 	}
+	inert := inertSpans(file) // before the fold, whose literals span whole calls
 	fo := foldConstants(tree, path, fset, file, true, pass)
-	inert := inertSpans(file)
 	flow := envFor(tree).inertFlow(path)
 	type rawCand struct {
 		text string
@@ -186,12 +186,14 @@ func fromGoWorld(tree *scan.FileSet, path string, src []byte, pass *closedPass) 
 	}
 	var raws []rawCand
 	var partialSpans []span
+	visited := map[ast.Expr]bool{}
 
-	ast.Inspect(file, func(n ast.Node) bool {
+	visit := func(n ast.Node) bool {
 		expr, ok := n.(ast.Expr)
 		if !ok {
 			return true
 		}
+		visited[expr] = true
 		if fo.made[expr] {
 			return false // a constant's value: its declaration is the candidate
 		}
@@ -229,7 +231,13 @@ func fromGoWorld(tree *scan.FileSet, path string, src []byte, pass *closedPass) 
 			// keep descending: nested resolvable literals are still collected
 		}
 		return true
-	})
+	}
+	ast.Inspect(file, visit)
+	for _, arg := range fo.closedArgs {
+		if !visited[arg] {
+			ast.Inspect(arg, visit)
+		}
+	}
 
 	for _, rc := range raws {
 		partial := false

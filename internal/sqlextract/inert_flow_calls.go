@@ -28,6 +28,9 @@ func (ff *flowFile) passBuilder(from string, call *ast.CallExpr, arg ast.Expr, i
 			continue
 		}
 		f := g.funcs[fn]
+		if j < len(f.writerParams) && f.writerParams[j] {
+			return // an io.Writer can only be written; passWriters follows what is
+		}
 		if j >= len(f.params) || f.params[j] == "" || !f.builderParams[j] {
 			g.edge(from, badFlow)
 			return
@@ -62,13 +65,20 @@ func (ff *flowFile) flowThroughCall(from string, call *ast.CallExpr, cur ast.Nod
 			if f.Obj == nil {
 				return up, false
 			}
-		case "panic", "len", "print", "println", "cap":
+		case "panic", "len", "print", "println", "cap", "delete":
 			if f.Obj == nil {
 				return nil, true
 			}
 		}
 	case *ast.SelectorExpr:
 		if ff.isFileWrite(f) {
+			return nil, true
+		}
+		if f.Sel.Name == "Replace" && isStringsReplacer(f.X) {
+			return up, false
+		}
+		if id, ok := f.X.(*ast.Ident); ok && id.Obj != nil && ff.writerParams[id.Obj] != "" && (f.Sel.Name == "Write" || f.Sel.Name == "WriteString") {
+			g.edge(from, ff.writerParams[id.Obj])
 			return nil, true
 		}
 		if pkg, ok := f.X.(*ast.Ident); ok && pkg.Obj == nil {
@@ -169,6 +179,45 @@ func (ff *flowFile) flowIntoWriter(from string, call *ast.CallExpr, cur ast.Node
 			ff.g.edge(from, ff.localKey(id.Obj))
 			return
 		}
+		if node := ff.writerParams[id.Obj]; node != "" {
+			ff.g.edge(from, node)
+			return
+		}
 	}
 	ff.g.edge(from, badFlow)
+}
+
+// isStringsReplacer reports whether x is a strings.NewReplacer call, or a variable
+// declared as one. Its Replace returns its text argument onward, and that is all the
+// flow asks of it: text given to NewReplacer itself is still an unknown call's.
+func isStringsReplacer(x ast.Expr) bool {
+	if id, ok := x.(*ast.Ident); ok && id.Obj != nil {
+		switch d := id.Obj.Decl.(type) {
+		case *ast.AssignStmt:
+			if len(d.Lhs) != len(d.Rhs) {
+				return false
+			}
+			for i, lhs := range d.Lhs {
+				if l, ok := lhs.(*ast.Ident); ok && l.Obj == id.Obj {
+					x = d.Rhs[i]
+				}
+			}
+		case *ast.ValueSpec:
+			for i, name := range d.Names {
+				if name.Obj == id.Obj && i < len(d.Values) {
+					x = d.Values[i]
+				}
+			}
+		}
+	}
+	call, ok := x.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "NewReplacer" {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Obj == nil && pkg.Name == "strings"
 }

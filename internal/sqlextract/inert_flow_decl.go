@@ -26,46 +26,8 @@ func (ff *flowFile) declare() {
 				}
 			}
 		}
-		fn := &flowFunc{}
-		if fd.Type.Results != nil {
-			i := 0
-			for _, r := range fd.Type.Results.List {
-				n := max(len(r.Names), 1)
-				for k := 0; k < n; k++ {
-					if isIdent(r.Type, "string") || isByteSlice(r.Type) {
-						fn.stringResults = append(fn.stringResults, i)
-					}
-					i++
-				}
-			}
-		}
-		for _, p := range fd.Type.Params.List {
-			_, fn.variadic = p.Type.(*ast.Ellipsis)
-			builder := isTextBuilderType(p.Type)
-			if len(p.Names) == 0 {
-				fn.params = append(fn.params, "")
-				fn.builderParams = append(fn.builderParams, builder)
-			}
-			for _, name := range p.Names {
-				if name.Name == "_" || name.Obj == nil {
-					fn.params = append(fn.params, "")
-				} else {
-					fn.params = append(fn.params, ff.localKey(name.Obj))
-					if builder {
-						ff.builders[name.Obj] = true
-					}
-				}
-				fn.builderParams = append(fn.builderParams, builder)
-			}
-		}
-		if prior, again := ff.g.funcs[key]; !again || prior == nil {
-			ff.g.funcs[key] = fn
-		}
-		for i, local := range fn.params {
-			if local != "" {
-				ff.g.edge(paramKey(key, i), local)
-			}
-		}
+		fn := &flowFunc{stringResults: stringResultsOf(fd.Type)}
+		ff.fillFunc(fn, key, fd.Type)
 	}
 	for _, d := range ff.file.Decls {
 		gen, ok := d.(*ast.GenDecl)
@@ -82,6 +44,7 @@ func (ff *flowFile) declare() {
 			}
 		}
 	}
+	ff.declareClosures()
 	ast.Inspect(ff.file, func(n ast.Node) bool {
 		switch v := n.(type) {
 		case *ast.ValueSpec:
@@ -111,6 +74,71 @@ func (ff *flowFile) declare() {
 	})
 }
 
+// fillFunc records fn's parameters under key and links each to its local.
+func (ff *flowFile) fillFunc(fn *flowFunc, key string, ft *ast.FuncType) {
+	for _, p := range ft.Params.List {
+		_, fn.variadic = p.Type.(*ast.Ellipsis)
+		builder, writer := isTextBuilderType(p.Type), isWriterType(p.Type)
+		if len(p.Names) == 0 {
+			fn.params = append(fn.params, "")
+			fn.builderParams = append(fn.builderParams, builder)
+			fn.writerParams = append(fn.writerParams, writer)
+		}
+		for _, name := range p.Names {
+			i := len(fn.params)
+			if name.Name == "_" || name.Obj == nil {
+				fn.params = append(fn.params, "")
+			} else {
+				fn.params = append(fn.params, ff.localKey(name.Obj))
+				if builder {
+					ff.builders[name.Obj] = true
+				}
+				if writer {
+					ff.writerParams[name.Obj] = writerKey(key, i)
+					ff.g.writers[writerKey(key, i)] = key
+				}
+			}
+			fn.builderParams = append(fn.builderParams, builder)
+			fn.writerParams = append(fn.writerParams, writer)
+		}
+	}
+	if prior, again := ff.g.funcs[key]; !again || prior == nil {
+		ff.g.funcs[key] = fn
+	}
+	for i, local := range fn.params {
+		if local != "" {
+			ff.g.edge(paramKey(key, i), local)
+		}
+	}
+}
+
+// declareFunc records a closure's results and parameters under key.
+func (ff *flowFile) declareFunc(key string, ft *ast.FuncType) {
+	if _, again := ff.g.funcs[key]; again {
+		return
+	}
+	fn := &flowFunc{stringResults: stringResultsOf(ft)}
+	ff.fillFunc(fn, key, ft)
+}
+
+func stringResultsOf(ft *ast.FuncType) []int {
+	if ft.Results == nil {
+		return nil
+	}
+	var results []int
+	i := 0
+	for _, r := range ft.Results.List {
+		n := max(len(r.Names), 1)
+		for k := 0; k < n; k++ {
+			if isIdent(r.Type, "string") || isByteSlice(r.Type) {
+				results = append(results, i)
+			}
+			i++
+		}
+	}
+	return results
+}
+
 // funcKeyOf is fd's node: its directory and name, or for a method, its name alone. A
 // call does not say which type's method it reaches, so every method of a name shares
 // one node, and a value reaching any of them reaches all of them.
@@ -132,16 +160,6 @@ func paramCount(fd *ast.FuncDecl) int {
 // varKey is an unexported package variable's node. Only its package can touch it, and
 // every read is an identifier this walk sees.
 func (ff *flowFile) varKey(name string) string { return "var " + ff.cf.dir + "." + name }
-
-// fieldKey is a field's node. An unexported field can only be touched in its own
-// package, so it shares a node with that package's fields of its name; an exported one
-// shares a node across the module.
-func (ff *flowFile) fieldKey(name string) string {
-	if ast.IsExported(name) {
-		return "field " + name
-	}
-	return "field " + ff.cf.dir + "." + name
-}
 
 func isByteSlice(x ast.Expr) bool {
 	a, ok := x.(*ast.ArrayType)

@@ -21,7 +21,7 @@ import (
 var consumingFuncs = map[string]map[string]bool{
 	"strings": {"Contains": true, "ContainsAny": true, "ContainsRune": true, "HasPrefix": true, "HasSuffix": true, "Index": true,
 		"IndexByte": true, "IndexAny": true, "IndexRune": true, "LastIndex": true, "LastIndexByte": true, "LastIndexAny": true,
-		"Count": true, "EqualFold": true, "Compare": true},
+		"Count": true, "EqualFold": true, "Compare": true, "IndexFunc": true, "LastIndexFunc": true, "ContainsFunc": true},
 	"bytes":  {"Contains": true, "HasPrefix": true, "HasSuffix": true, "Index": true, "IndexByte": true, "Count": true},
 	"regexp": {"MustCompile": true, "Compile": true, "MatchString": true, "MustCompilePOSIX": true},
 	"errors": {"New": true},

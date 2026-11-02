@@ -42,23 +42,27 @@ var transparentFuncs = map[string]map[string]bool{
 	"fmt": {"Sprintf": true, "Sprint": true, "Sprintln": true},
 	"strings": {"Join": true, "TrimSpace": true, "TrimPrefix": true, "TrimSuffix": true, "Trim": true, "TrimLeft": true,
 		"TrimRight": true, "ReplaceAll": true, "Replace": true, "ToLower": true, "ToUpper": true, "Repeat": true,
-		"Split": true, "SplitN": true, "SplitAfter": true, "Fields": true, "Cut": true, "CutPrefix": true, "CutSuffix": true},
+		"Split": true, "SplitN": true, "SplitAfter": true, "SplitAfterN": true, "Fields": true, "FieldsFunc": true, "Cut": true,
+		"CutPrefix": true, "CutSuffix": true, "Map": true, "Title": true, "ToTitle": true, "ToValidUTF8": true, "TrimFunc": true,
+		"TrimLeftFunc": true, "TrimRightFunc": true},
 	"bytes": {"TrimSpace": true, "ReplaceAll": true, "Join": true, "Trim": true, "TrimLeft": true, "TrimRight": true,
 		"TrimPrefix": true, "TrimSuffix": true, "Split": true, "Fields": true},
 	"format":   {"Source": true},
-	"filepath": {"Join": true, "Base": true, "Dir": true},
-	"path":     {"Join": true, "Base": true, "Dir": true},
+	"regexp":   {"QuoteMeta": true},
+	"filepath": {"Join": true, "Base": true, "Dir": true, "Clean": true, "Abs": true, "Rel": true, "Ext": true, "Split": true, "FromSlash": true, "ToSlash": true},
+	"path":     {"Join": true, "Base": true, "Dir": true, "Clean": true, "Ext": true, "Split": true},
 }
 
 // pathFuncs take text as a path and return no text of it.
 var pathFuncs = map[string]map[string]bool{
-	"os":      {"ReadFile": true, "Stat": true, "Lstat": true, "MkdirAll": true, "Mkdir": true, "Remove": true, "RemoveAll": true, "Open": true},
-	"utf8":    {"RuneCountInString": true, "ValidString": true, "RuneCount": true, "DecodeRuneInString": true, "DecodeLastRuneInString": true},
-	"sha256":  {"Sum256": true},
-	"sort":    {"Strings": true},
-	"parser":  {"ParseFile": true, "ParseExpr": true},
-	"slices":  {"Sort": true, "Contains": true, "Equal": true, "Index": true},
-	"strconv": {"Atoi": true, "ParseInt": true, "ParseBool": true, "ParseFloat": true},
+	"os":       {"ReadFile": true, "ReadDir": true, "Stat": true, "Lstat": true, "MkdirAll": true, "Mkdir": true, "Remove": true, "RemoveAll": true, "Open": true, "Getenv": true, "LookupEnv": true},
+	"filepath": {"Walk": true, "WalkDir": true, "Glob": true, "Match": true, "IsAbs": true},
+	"utf8":     {"RuneCountInString": true, "ValidString": true, "RuneCount": true, "DecodeRuneInString": true, "DecodeLastRuneInString": true},
+	"sha256":   {"Sum256": true},
+	"sort":     {"Strings": true},
+	"parser":   {"ParseFile": true, "ParseExpr": true},
+	"slices":   {"Sort": true, "Contains": true, "Equal": true, "Index": true},
+	"strconv":  {"Atoi": true, "ParseInt": true, "ParseBool": true, "ParseFloat": true},
 }
 
 // regexpConsuming and regexpTransparent are *regexp.Regexp's methods by what they do
@@ -78,13 +82,18 @@ type flowFunc struct {
 	params        []string // the local key of each parameter, "" when unnamed
 	builderParams []bool
 	writerParams  []bool
+	plainParams   []bool // a parameter of a type that holds no text: a number or a bool
 	variadic      bool
+	results       []ast.Expr // each result's spelled type
 }
 
 // flowGraph is every edge a value of the module can take.
 type flowGraph struct {
 	vars   map[string]bool // unexported package variables, by node
 	fields *flowFields
+	// funcRanges and summaries are inert_flow_summaries.go's.
+	funcRanges map[string][]funcRange
+	summaries  map[string][]bool
 	// writers maps a writer parameter's node to its function.
 	writers map[string]string
 	edges   map[string][]string
@@ -142,9 +151,28 @@ func flowSiteKey(path string, pos, end int) string {
 }
 
 func (e *constEnv) buildFlow(tests bool) *flowGraph {
-	g := &flowGraph{edges: map[string][]string{}, funcs: map[string]*flowFunc{}, called: map[string]bool{},
-		values: map[string]bool{}, vars: map[string]bool{}, fields: newFlowFields(), writers: map[string]string{}, bad: map[string]bool{badFlow: true}}
-	var files []*flowFile
+	parsed := e.parseFlowFiles(tests)
+	summaries := map[string][]bool{}
+	for round := 0; ; round++ {
+		g := e.walkFlow(parsed, summaries)
+		next := g.summarised()
+		if round+1 == maxSummaryRounds || len(next) == len(summaries) {
+			g.settle()
+			return g
+		}
+		summaries = next
+	}
+}
+
+// parsedFlowFile is one Go file the flow reads.
+type parsedFlowFile struct {
+	path string
+	fset *token.FileSet
+	file *ast.File
+}
+
+func (e *constEnv) parseFlowFiles(tests bool) []parsedFlowFile {
+	var out []parsedFlowFile
 	for _, f := range e.tree.Files {
 		p := f.Path()
 		if !strings.HasSuffix(p, ".go") || (!tests && strings.HasSuffix(p, "_test.go")) {
@@ -154,26 +182,37 @@ func (e *constEnv) buildFlow(tests bool) *flowGraph {
 		if err != nil {
 			continue
 		}
-		if strings.HasSuffix(p, ".pb.go") {
-			g.declareGenerated(p, src)
-			continue
-		}
 		fset := token.NewFileSet()
 		file, err := parser.ParseFile(fset, p, src, 0)
 		if err != nil {
 			continue
 		}
-		ff := &flowFile{g: g, e: e, cf: newConstFile(p, file), fset: fset, file: file, path: p,
+		out = append(out, parsedFlowFile{path: p, fset: fset, file: file})
+	}
+	return out
+}
+
+func (e *constEnv) walkFlow(parsed []parsedFlowFile, summaries map[string][]bool) *flowGraph {
+	g := &flowGraph{edges: map[string][]string{}, funcs: map[string]*flowFunc{}, called: map[string]bool{},
+		values: map[string]bool{}, vars: map[string]bool{}, fields: newFlowFields(), writers: map[string]string{},
+		funcRanges: map[string][]funcRange{}, summaries: summaries, bad: map[string]bool{badFlow: true}}
+	var files []*flowFile
+	for _, pf := range parsed {
+		if strings.HasSuffix(pf.path, ".pb.go") {
+			g.declareGenerated(pf.path, pf.file)
+			continue
+		}
+		files = append(files, &flowFile{g: g, e: e, cf: newConstFile(pf.path, pf.file), fset: pf.fset, file: pf.file, path: pf.path,
 			builders: map[*ast.Object]bool{}, osFiles: map[*ast.Object]bool{},
-			closures: map[*ast.Object]string{}, closureLits: map[*ast.FuncLit]string{}, writerParams: map[*ast.Object]string{}}
+			closures: map[*ast.Object]string{}, closureLits: map[*ast.FuncLit]string{}, writerParams: map[*ast.Object]string{}})
+	}
+	for _, ff := range files {
 		ff.declare()
 		ff.declareFields()
-		files = append(files, ff)
 	}
 	for _, ff := range files {
 		ff.walk()
 	}
-	g.settle()
 	return g
 }
 
@@ -192,6 +231,7 @@ func (g *flowGraph) settle() {
 			g.edge(retKey(fn), badFlow)
 		}
 	}
+	g.fields.link(g)
 	for node, fn := range g.writers {
 		if !g.called[fn] || g.values[fn] {
 			g.edge(node, badFlow)
@@ -287,6 +327,9 @@ func (ff *flowFile) visitIdent(id *ast.Ident, top int) {
 // write. A Go field is only ever read through a selector like this, so every read of
 // it is in the graph.
 func (ff *flowFile) readField(sel *ast.SelectorExpr, at int) {
+	if x, ok := sel.X.(*ast.Ident); ok && x.Obj == nil && (ff.importsName(x.Name) || ff.e.importTable(ff.cf, x.Name) != nil) {
+		return // pkg.Name is a name of that package, not a field of a value
+	}
 	switch p := ff.parent(at).(type) {
 	case *ast.CallExpr:
 		if p.Fun == sel {
@@ -297,6 +340,12 @@ func (ff *flowFile) readField(sel *ast.SelectorExpr, at int) {
 			if lhs == sel {
 				return
 			}
+		}
+	}
+	if typ := ff.spelledTypeOf(sel.X); typ != nil {
+		if owner := ff.spelledField(typ, sel.Sel.Name); owner != "" {
+			ff.flow(ff.g.fields.typedRead(owner, sel.Sel.Name), at)
+			return
 		}
 	}
 	for _, node := range ff.fieldNodes(sel.Sel.Name) {
@@ -538,8 +587,8 @@ func (ff *flowFile) flow(from string, i int) {
 				}
 			}
 			return
-		case *ast.ExprStmt, *ast.IfStmt, *ast.SwitchStmt, *ast.CaseClause:
-			return
+		case *ast.ExprStmt, *ast.IfStmt, *ast.SwitchStmt, *ast.CaseClause, *ast.Field:
+			return // a Field holds a type, which is no value
 		default:
 			g.edge(from, badFlow)
 			return
@@ -597,6 +646,12 @@ func (ff *flowFile) flowIntoAssign(from string, p *ast.AssignStmt, cur ast.Node)
 			if sel, ok := lhs.(*ast.SelectorExpr); ok {
 				ff.writeSelector(from, sel)
 				return
+			}
+			if id, ok := lhs.(*ast.Ident); ok && id.Obj != nil {
+				if _, isParam := id.Obj.Decl.(*ast.Field); isParam {
+					g.edge(from, badFlow) // the caller's slice or map holds it, out of this walk's sight
+					return
+				}
 			}
 		}
 		id, ok := lhs.(*ast.Ident)

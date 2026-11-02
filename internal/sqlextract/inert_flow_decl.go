@@ -17,6 +17,9 @@ func (ff *flowFile) declare() {
 			continue
 		}
 		key := ff.funcKeyOf(fd)
+		if fd.Recv == nil {
+			ff.noteFuncRange(fd)
+		}
 		if _, again := ff.g.funcs[key]; again && fd.Recv != nil {
 			// Methods of one name share a node, so their parameters must line up.
 			if f := ff.g.funcs[key]; len(f.params) != paramCount(fd) {
@@ -76,13 +79,21 @@ func (ff *flowFile) declare() {
 
 // fillFunc records fn's parameters under key and links each to its local.
 func (ff *flowFile) fillFunc(fn *flowFunc, key string, ft *ast.FuncType) {
+	if ft.Results != nil {
+		for _, r := range ft.Results.List {
+			for k := 0; k < max(len(r.Names), 1); k++ {
+				fn.results = append(fn.results, r.Type)
+			}
+		}
+	}
 	for _, p := range ft.Params.List {
 		_, fn.variadic = p.Type.(*ast.Ellipsis)
-		builder, writer := isTextBuilderType(p.Type), isWriterType(p.Type)
+		builder, writer, plain := isTextBuilderType(p.Type), isWriterType(p.Type), isPlainType(p.Type)
 		if len(p.Names) == 0 {
 			fn.params = append(fn.params, "")
 			fn.builderParams = append(fn.builderParams, builder)
 			fn.writerParams = append(fn.writerParams, writer)
+			fn.plainParams = append(fn.plainParams, plain)
 		}
 		for _, name := range p.Names {
 			i := len(fn.params)
@@ -100,6 +111,7 @@ func (ff *flowFile) fillFunc(fn *flowFunc, key string, ft *ast.FuncType) {
 			}
 			fn.builderParams = append(fn.builderParams, builder)
 			fn.writerParams = append(fn.writerParams, writer)
+			fn.plainParams = append(fn.plainParams, plain)
 		}
 	}
 	if prior, again := ff.g.funcs[key]; !again || prior == nil {
@@ -160,6 +172,20 @@ func paramCount(fd *ast.FuncDecl) int {
 // varKey is an unexported package variable's node. Only its package can touch it, and
 // every read is an identifier this walk sees.
 func (ff *flowFile) varKey(name string) string { return "var " + ff.cf.dir + "." + name }
+
+// isPlainType reports whether x is a predeclared type that cannot hold text. A byte and
+// a rune are left out, because a loop over text passes it on a byte at a time.
+func isPlainType(x ast.Expr) bool {
+	id, ok := x.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	switch id.Name {
+	case "bool", "int", "int8", "int16", "int32", "int64", "uint", "uint16", "uint32", "uint64", "uintptr", "float32", "float64":
+		return id.Obj == nil
+	}
+	return false
+}
 
 func isByteSlice(x ast.Expr) bool {
 	a, ok := x.(*ast.ArrayType)

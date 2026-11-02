@@ -135,6 +135,12 @@ func (ff *flowFile) flowThroughCall(from string, call *ast.CallExpr, cur ast.Nod
 			}
 			j = len(info.params) - 1
 		}
+		if reaches, ok := g.summaries[fn]; ok && call.Ellipsis == token.NoPos {
+			if reaches[j] {
+				return up, false
+			}
+			return nil, true
+		}
 		if info.params[j] == "" {
 			g.edge(from, badFlow)
 			return nil, true

@@ -6,6 +6,7 @@ package engine
 import (
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -250,8 +251,10 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 									cs[h.Entry].Add(1)
 									homes = append(homes, h.Span)
 								}
-								if len(homes) > 0 {
-									// A home's imports cannot sit inside it.
+								// A home's imports cannot sit inside it. A SQL rule reads Go, not
+								// text, and needs them to resolve another package's constant in
+								// the file's other statements; no import is a statement it judges.
+								if len(homes) > 0 && !strings.HasPrefix(pr.rule.Type, "sql/") {
 									homes = append(homes, declspan.Directives(f.Path(), content)...)
 								}
 							}

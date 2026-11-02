@@ -118,32 +118,6 @@ func TestCensusDoesNotAttributeSQLSitesToANonSQLRule(t *testing.T) {
 	}
 }
 
-// A statement-predicate rule that names unread: census does not fail on what it
-// cannot read, so the census owes it the line: that is where the site stays
-// visible. The default rule on the same file gets none.
-func TestCensusListsUnreadSQLForARuleThatNamesCensus(t *testing.T) {
-	dyn := "package p\n\nimport \"fmt\"\n\nfunc q(t string) string {\n" +
-		"\treturn fmt.Sprintf(\"SELECT id FROM %s WHERE s = 'x'\", t)\n}\n"
-	rule := func(extra string) string {
-		return "rules:\n" +
-			"  - id: sql-pred\n" +
-			"    type: sql/statement-predicate\n" +
-			"    scope: {include: ['**/*.go']}\n" +
-			"    params: {table: 'nothing_selects_this', require: ['x']" + extra + "}\n" +
-			"    fixture_exempt: \"parse-tree rule; the corpus is the fixture\"\n"
-	}
-	files := sqlRepo(map[string]string{"dyn.go": dyn})
-	files[".formwork/rules/r.yaml"] = rule(", unread: census")
-	if _, out := lint(t, files); !strings.Contains(out, "sql-pred: SQL at dyn.go:6") {
-		t.Fatalf("unread: census must list the site:\n%s", out)
-	}
-	files = sqlRepo(map[string]string{"dyn.go": dyn})
-	files[".formwork/rules/r.yaml"] = rule("")
-	if _, out := lint(t, files); strings.Contains(out, "sql-pred: SQL at") {
-		t.Fatalf("a rule that fails closed gets no census line:\n%s", out)
-	}
-}
-
 // A rule that fails closed has no escape hatch to list. sql/parses reports the
 // composition it cannot read as a finding (sqlparse's statementsWithSites), so
 // a census line calling the same composition "not analysed by this rule" would

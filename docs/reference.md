@@ -935,8 +935,7 @@ function whose parameters and result are all `string` and whose body is one
 `return` — is read too: a call with constant arguments reads as what it builds,
 and the definition is judged once per argument set its callers pass.
 
-**`sql/parses` and `sql/statement-predicate` fail closed**, unless a
-`sql/statement-predicate` rule names `unread: census`. A Go composition
+**`sql/parses` and `sql/statement-predicate` fail closed.** A Go composition
 that carries SQL (a statement, a clause, or a SQL-only token such as a cast or
 `$1`) and has an operand that is not a constant — a variable, a call, a field —
 is a finding: `SQL could not be read (…), so this rule cannot judge it`. The
@@ -979,12 +978,6 @@ regexes over the statement, and at least one of them is required. A `.go`
 composition it cannot read is a finding whatever its text names: the part it
 cannot read may be the table (see above).
 
-`unread` sets what happens to such a composition. `census` lists it in `formwork
-lint` instead of failing on it, and the rule still judges every statement it can read. It is for a rule whose
-scope holds statements composed at run time on purpose, such as a broad scope over
-a catalogue query whose guards a constant spelling would defeat. A statement hidden
-behind a hole is then not judged, so name it on a broad rule only when you accept
-that. `fail` is the default.
 
 `seam_constants` names package directories, relative to the repository root,
 whose exported constants and SQL templates read as an opaque hole in this rule's

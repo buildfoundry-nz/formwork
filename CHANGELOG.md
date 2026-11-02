@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- **SQL rules read an unexported package variable nothing writes.** A `var` set
+  once from constants or a constant SQL template call, and never assigned, ranged
+  into or addressed in its package, reads as its initialiser. Everything else stays
+  a composition the rule cannot read.
+
 ### Removed
 
 - **`sql/statement-predicate` no longer takes `unread`.** It let a rule stop failing

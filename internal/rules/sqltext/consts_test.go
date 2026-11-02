@@ -102,3 +102,15 @@ func TestUnreadIsNotAParameter(t *testing.T) {
 		t.Fatal("params.unread must be refused")
 	}
 }
+
+// A named package's constants are text the parser can read, so a rule cannot ask
+// it not to. seam_constants did, and the engine now refuses it.
+func TestSeamConstantsIsNotAParameter(t *testing.T) {
+	factory, ok := rules.Lookup("sql/statement-predicate")
+	if !ok {
+		t.Fatal(`type "sql/statement-predicate" not registered`)
+	}
+	if _, err := factory(paramsNode(t, "table: 't'\nrequire:\n  - 'x'\nseam_constants: [seam]\n")); err == nil {
+		t.Fatal("params.seam_constants must be refused")
+	}
+}

@@ -979,15 +979,6 @@ composition it cannot read is a finding whatever its text names: the part it
 cannot read may be the table (see above).
 
 
-`seam_constants` names package directories, relative to the repository root,
-whose exported constants and SQL templates read as an opaque hole in this rule's
-statements. It is
-for a rule banning text that one package exists to mint: `status = 'approved'`
-folded out of the approval package is not the hand-written copy the rule is
-about. The statement stays whole and judged, and the same text in any other
-package still fires. A directory that names no package changes nothing, so a
-mistake leaves the rule firing.
-
 `table` is an unanchored RE2 regex matched against the whole
 **statement text**, so it selects statements rather than naming a relation: a
 schema-qualified `app\.projects` works here, and matches any statement

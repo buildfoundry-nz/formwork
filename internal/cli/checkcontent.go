@@ -111,15 +111,18 @@ func runCheckContent(args []string, stdin io.Reader, stdout, stderr io.Writer) i
 	if !ok {
 		return 2
 	}
+	// The gitignore snapshot is the worktree's, not a record's: resolved once
+	// per run and shared by every record a batch carries.
+	gitIgnore := checkContentResolveGitIgnore(cfg, *root)
 	if *batch {
-		return runCheckContentBatch(cfg, *root, stdin, stdout, stderr, *allFindings)
+		return runCheckContentBatch(cfg, gitIgnore, *root, stdin, stdout, stderr, *allFindings)
 	}
 	content, err := io.ReadAll(stdin)
 	if err != nil {
 		fmt.Fprintln(stderr, "formwork: reading stdin:", err)
 		return 2
 	}
-	doc, findings, err := evaluateCheckContent(cfg, *root, *pathFlag, content, *allFindings, started)
+	doc, findings, err := evaluateCheckContent(cfg, gitIgnore, *root, *pathFlag, content, *allFindings, started)
 	if err != nil {
 		fmt.Fprintln(stderr, "formwork:", err)
 		return 2
@@ -135,7 +138,7 @@ func runCheckContent(args []string, stdin io.Reader, stdout, stderr io.Writer) i
 	return 0
 }
 
-func evaluateCheckContent(cfg *config.Config, root, path string, content []byte, allFindings bool, started time.Time) (checkContentDocument, []finding.Finding, error) {
+func evaluateCheckContent(cfg *config.Config, gitIgnore meta.GitIgnoreResult, root, path string, content []byte, allFindings bool, started time.Time) (checkContentDocument, []finding.Finding, error) {
 	normalized, err := newQueryNormalizer(root).normalize(path)
 	if err != nil {
 		return checkContentDocument{}, nil, err
@@ -146,7 +149,7 @@ func evaluateCheckContent(cfg *config.Config, root, path string, content []byte,
 			externalTools = append(externalTools, r.ID)
 		}
 	}
-	notScanned, err := checkContentReachability(root, cfg, normalized, externalTools)
+	notScanned, err := checkContentReachability(root, cfg, gitIgnore, normalized, externalTools)
 	if err != nil {
 		return checkContentDocument{}, nil, err
 	}
@@ -247,8 +250,7 @@ func planCheckContent(rls []*config.Rule, path string, content []byte) (eligible
 	return eligible, notEvaluated, inScope, deferred, outOfScope
 }
 
-func checkContentReachability(root string, cfg *config.Config, path string, externalTools []string) (*notScannedOut, error) {
-	gitIgnore := checkContentResolveGitIgnore(cfg, root)
+func checkContentReachability(root string, cfg *config.Config, gitIgnore meta.GitIgnoreResult, path string, externalTools []string) (*notScannedOut, error) {
 	nonRegular, ghostFrom, reachErr := walkReachability(root, path)
 	needsGit := false
 	ghostErr := error(nil)

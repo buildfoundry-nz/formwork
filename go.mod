@@ -2,7 +2,7 @@ module github.com/buildfoundry-nz/formwork
 
 go 1.25.0
 
-toolchain go1.26.4
+toolchain go1.27.3
 
 require gopkg.in/yaml.v3 v3.0.1
 

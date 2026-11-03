@@ -7,6 +7,15 @@
 - **Built with Go 1.27.3.** The toolchain moves from 1.26.4. `make test`, `make vet`, `make fmt`
   and the parser's concurrency test under `-race` pass on it.
 
+### Fixed
+
+- **A tool's ignored output can no longer shadow a command fixture's next run.** Dart's
+  implicit `pub get` inside a fixture wrote an ignored package config there, a file inside
+  the fixture and not a path in this repository, which then shadowed the workspace's
+  resolver on every later run. An isolated arm is now copied without the files git
+  ignores. An arm judged in place loses the ignored files under `.dart_tool` before its
+  command runs. A tracked or not-yet-committed file stays.
+
 ## 0.17.12
 
 ### Fixed

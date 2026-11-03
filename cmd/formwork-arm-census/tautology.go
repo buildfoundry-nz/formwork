@@ -42,8 +42,8 @@ var probeLines = []string{
 // other non-empty one.
 //
 // Compilation mirrors the engine's own compileMatcher: RE2 by default,
-// dlclark/regexp2 under `syntax: regexp2`, with the same one-second match
-// timeout. An unknown syntax or an uncompilable pattern is an ERROR, never a
+// dlclark/regexp2 under `syntax: regexp2`, with the same bound on a
+// match. An unknown syntax or an uncompilable pattern is an ERROR, never a
 // quiet "not tautological" — the engine would have refused to load that rule,
 // so a census that swallowed it would be reporting on a corpus the gate cannot
 // run.
@@ -65,7 +65,10 @@ func tautological(pattern, syntax string) (bool, error) {
 		if err != nil {
 			return false, fmt.Errorf("invalid regexp2 pattern %q: %w", pattern, err)
 		}
-		re.MatchTimeout = time.Second
+		// The engine fails a match only when it outlasts 10s: a match that times out at
+		// 1s gets a second attempt with 10s (internal/rules/rxmatch). One 10s limit
+		// gives the same verdict, so this mirrors it.
+		re.MatchTimeout = 10 * time.Second
 		for _, p := range probeLines {
 			ok, err := re.MatchString(p)
 			if err != nil {

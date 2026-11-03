@@ -66,7 +66,10 @@ func compileLine(pattern, syntax string) (lineMatcher, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid regexp2 pattern %q: %w", pattern, err)
 		}
-		re.MatchTimeout = time.Second
+		// The engine fails a match only when it outlasts 10s: a match that times out at
+		// 1s gets a second attempt with 10s (internal/rules/rxmatch). One 10s limit
+		// gives the same verdict, so this mirrors it.
+		re.MatchTimeout = 10 * time.Second
 		return pcreLine{re: re}, nil
 	default:
 		return nil, fmt.Errorf("unknown syntax %q (want re2 or regexp2)", syntax)

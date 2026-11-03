@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
@@ -120,7 +121,7 @@ func isolateArm(src string) (string, func(), error) {
 	// One level down, so `..` from the fixture root lands in an empty
 	// directory rather than on the temp root's other tenants.
 	dst := filepath.Join(tmp, "tree")
-	if err := copyTree(src, dst); err != nil {
+	if err := copyTree(src, dst, ignoredUnder(src)); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("fixture isolation: copying %s: %w", src, err)
 	}
@@ -152,7 +153,8 @@ func isolateArm(src string) (string, func(), error) {
 // copyTree copies a directory tree, following no symlinks: a link inside a
 // fixture is refused for the reason the discovery walk refuses one, and
 // copying its target would silently pull in a file from outside the tree.
-func copyTree(src, dst string) error {
+// A file in skip, relative to src, is left behind (ignoredUnder).
+func copyTree(src, dst string, skip map[string]bool) error {
 	return filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -160,6 +162,9 @@ func copyTree(src, dst string) error {
 		rel, err := filepath.Rel(src, p)
 		if err != nil {
 			return err
+		}
+		if !d.IsDir() && skip[rel] {
+			return nil
 		}
 		target := filepath.Join(dst, rel)
 		switch {
@@ -176,6 +181,46 @@ func copyTree(src, dst string) error {
 		}
 		return copyFile(p, target, info.Mode().Perm())
 	})
+}
+
+// ignoredUnder lists the files under dir that git ignores and does not track,
+// relative to dir. They are what a tool left behind, never the author's
+// evidence: an ignored file cannot be committed without force-adding it, and
+// then it is tracked. A Dart command fixture is the case that made this matter
+// (formwork #44). Dart's implicit `pub get` inside an arm writes an ignored
+// `.dart_tool/package_config.json` there, and the stale file then shadows the
+// workspace's resolver on every later run. A tree that git cannot read, such
+// as one outside a work tree, has nothing removed.
+func ignoredUnder(dir string) map[string]bool {
+	cmd := exec.Command("git", "-C", dir, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--", ".")
+	cmd.Env = isolationEnv()
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	set := map[string]bool{}
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			set[filepath.FromSlash(p)] = true
+		}
+	}
+	return set
+}
+
+// dropIgnoredDartTool removes the ignored files under a `.dart_tool`
+// directory in an arm judged in place, before its command runs. An isolated
+// arm is copied without them; one judged where it is committed would hand them
+// to the next run. A tracked file under `.dart_tool` is the author's and stays.
+func dropIgnoredDartTool(dir string) error {
+	for rel := range ignoredUnder(dir) {
+		if !slices.Contains(strings.Split(filepath.ToSlash(rel), "/"), ".dart_tool") {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, rel)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("fixture %s: removing %s: %w", dir, rel, err)
+		}
+	}
+	return nil
 }
 
 // copyFileIfPresent copies src to dst when src exists, and reports any other
@@ -221,6 +266,13 @@ func isolateArms(r *config.Rule, ruleDir string, arms []armEntry) ([]armEntry, f
 		out[i].src = out[i].path
 	}
 	if !wantsIsolation(r) {
+		if _, ok := ruleCommandCmd(r); ok {
+			for i := range out {
+				if err := dropIgnoredDartTool(out[i].path); err != nil {
+					return nil, nil, err
+				}
+			}
+		}
 		return out, func() {}, nil
 	}
 	var cleanups []func()

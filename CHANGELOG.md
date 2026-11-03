@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+
+- **Built with Go 1.27.3.** The toolchain moves from 1.26.4. `make test`, `make vet`, `make fmt`
+  and the parser's concurrency test under `-race` pass on it.
+
 ## 0.17.12
 
 ### Fixed

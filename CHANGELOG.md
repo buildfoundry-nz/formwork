@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.18.0
+
 ### Added
 
 - **`check --shard K/N` runs one of N disjoint shards of the selected rules.** A CI matrix

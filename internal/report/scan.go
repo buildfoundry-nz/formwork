@@ -122,6 +122,18 @@ type ScanSummary struct {
 	// It changes no verdict. The walk follows no symlink in any mode, and this
 	// is the disclosure of that fact, not a new gate in front of it.
 	UnfollowedLinks []string
+	// Shard is set when `check --shard K/N` ran one shard of the selected
+	// rules, and names every rule id assigned to it. A sharded report is a
+	// part, not the whole: the headline says so, and the id list is what lets
+	// a merge of the N parts prove each rule ran exactly once.
+	Shard *Shard
+}
+
+// Shard is one `check --shard K/N` run: its position and its rule ids, sorted.
+type Shard struct {
+	Index int      `json:"index"`
+	Count int      `json:"count"`
+	Rules []string `json:"rules"`
 }
 
 // UnfollowedLinkLine renders one unfollowed-symlink disclosure. It is the
@@ -233,10 +245,14 @@ func (p PruneChannel) Line() string {
 // a file-set mode it reports BOTH counts, because one of them alone cannot
 // distinguish an empty request from an unseen one.
 func (s ScanSummary) headline() string {
-	if s.FileSetMode == "" {
-		return fmt.Sprintf("%d file(s) scanned", s.FilesScanned)
+	line := fmt.Sprintf("%d file(s) scanned", s.FilesScanned)
+	if s.FileSetMode != "" {
+		line = fmt.Sprintf("%d path(s) requested by %s, %d file(s) scanned", s.PathsRequested, s.FileSetMode, s.FilesScanned)
 	}
-	return fmt.Sprintf("%d path(s) requested by %s, %d file(s) scanned", s.PathsRequested, s.FileSetMode, s.FilesScanned)
+	if s.Shard != nil {
+		line += fmt.Sprintf(", shard %d/%d (%d of the selected rule id(s); the other shards run the rest)", s.Shard.Index, s.Shard.Count, len(s.Shard.Rules))
+	}
+	return line
 }
 
 // detailListCap bounds how many rules each per-rule list — vacuous, then
@@ -342,6 +358,7 @@ type jsonScan struct {
 	NotRun               []jsonSkip  `json:"rules_not_run"`
 	Prunes               []jsonPrune `json:"prune_channels"`
 	UnfollowedLinks      []string    `json:"unfollowed_symlinks"`
+	Shard                *Shard      `json:"shard,omitempty"`
 }
 
 // toJSON renders the summary with non-nil slices, so an empty one encodes as
@@ -357,6 +374,7 @@ func (s ScanSummary) toJSON() jsonScan {
 		NotRun:               make([]jsonSkip, 0, len(s.RulesNotRun)),
 		Prunes:               make([]jsonPrune, 0, len(s.Prunes)),
 		UnfollowedLinks:      make([]string, 0, len(s.UnfollowedLinks)),
+		Shard:                s.Shard,
 	}
 	out.RulesMatchingNoFiles = append(out.RulesMatchingNoFiles, s.RulesMatchingNoFiles...)
 	// Uncapped, for the reason the not-run list is: the cap is a readability

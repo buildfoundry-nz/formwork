@@ -588,6 +588,21 @@ formwork check [--lane <name>] [--staged | --range A..B] [--rules id,…]
    file indices and each worker evaluates every applicable rule against the
    file it took, so a rule's position in that loop does not decide when it
    starts.
+
+   **Across machines, `check --shard K/N` runs one of N shards** (TakeoffQS
+   #25657). One process can only spread a corpus over one machine's cores, and
+   a downstream whole-corpus sweep measured 3–5x per-rule wall inflation from
+   its own rules contending there. The shard is chosen after `--lane` and
+   before `--skip-escapes`/`--cost-max`, over rule IDS (rules sharing an id
+   stay together), as a pure function of (rules, durations hint, N): ids are
+   placed one at a time onto the least-loaded shard, heaviest first by the two
+   keys above, so every one of N independent jobs computes the same
+   partition, the N shards are disjoint, and together they are the whole
+   selection. A rule the hint does not name weighs the smallest positive
+   duration it does name, not zero, so new rules spread rather than stack. The
+   report names the shard and its ids (`scan.shard`), because a shard's
+   report is a part: the ids are what lets a merge of the N parts prove each
+   rule ran exactly once. An empty shard is exit 2, like any empty selection.
 5. **Report + exit**: findings sorted by (rule id, path, line) for
    determinism.
 

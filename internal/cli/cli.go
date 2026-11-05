@@ -233,6 +233,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	format := fs.String("format", "human", "output format: human | json | github")
 	progress := fs.Bool("progress", false, "stream one line per finalizer to stderr as it completes (rule id + cumulative ms) — liveness for long whole-corpus runs; never affects stdout or the verdict")
 	durations := fs.String("durations", "", durationsUsage)
+	shard := fs.String("shard", "", shardUsage)
 	cfg, ok := parseAndLoad(fs, args, root, stderr)
 	if !ok {
 		return 2
@@ -270,6 +271,17 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	if err := report.ValidFormat(*format); err != nil {
 		fmt.Fprintln(stderr, "formwork:", err)
 		return 2
+	}
+	// --shard is parsed with the flags, and an explicitly empty value is a
+	// supplied flag like an empty --range: refused, not read as "no sharding".
+	shardK, shardN, sharded := 0, 0, false
+	fs.Visit(func(f *flag.Flag) { sharded = sharded || f.Name == "shard" })
+	if sharded {
+		var err error
+		if shardK, shardN, err = parseShard(*shard); err != nil {
+			fmt.Fprintln(stderr, "formwork:", err)
+			return 2
+		}
 	}
 	// --cost-max and --skip-escapes both narrow by cost and would answer the
 	// same rule two ways; a supplied flag that is silently overridden is the
@@ -310,6 +322,16 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		rls = selected
+	}
+	// --shard partitions what the lane selected, before the cost filters, so
+	// every shard job partitions the same set whatever else it narrows. The
+	// shard's report names its whole assignment; a rule a filter then drops is
+	// still disclosed in rules_not_run like any other.
+	laneCount := len(rls)
+	var shardInfo *report.Shard
+	if sharded {
+		rls = shardRules(rls, prior, shardK, shardN)
+		shardInfo = &report.Shard{Index: shardK, Count: shardN, Rules: shardedIDs(rls)}
 	}
 	selectedCount := len(rls)
 	// Fast local hooks: the heavy escapes (command / git-diff) shell out to a
@@ -355,6 +377,8 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		switch {
 		case configured == 0:
 			reason = noRulesReason(cfg, "this run would check nothing")
+		case sharded && laneCount > 0 && selectedCount == 0:
+			reason = fmt.Sprintf("shard %d/%d selects no rules — the %d selected rule(s) did not fill %d shards, so this run would check nothing; run fewer shards", shardK, shardN, laneCount, shardN)
 		case selectedCount == 0:
 			reason = fmt.Sprintf("lane %q selects no rules — every rule was filtered out by the lane's tags/cost, so this run would check nothing (formwork lint's lane-nonempty check reports the same condition)", *lane)
 		case *skipEscapes:
@@ -442,6 +466,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		Prunes:          meta.PruneChannels(cfg, fset.Ignored, gi),
 		UnfollowedLinks: meta.UnfollowedLinks(fset.Ignored),
 	}
+	summary.Shard = shardInfo
 	// Per-rule wall-clock accounting for whole-tree runs, where a lane can hold
 	// thousands of rules and minutes of silence. File-set modes keep their
 	// 0.6.1 shape (no timing, no progress). Neither reaches stdout or the verdict.

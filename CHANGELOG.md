@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- **`check --shard K/N` runs one of N disjoint shards of the selected rules.** A CI matrix
+  of N jobs can now split one whole-corpus sweep over N machines instead of contending
+  for one machine's cores. The partition is a pure function of the selected rules, the
+  `--durations` report and N, balanced heaviest first, so every rule id lands in exactly
+  one shard. A sharded report names its shard and rule ids in `scan.shard` so a merge can
+  prove each rule ran once. A malformed spec or an empty shard is exit 2.
+
 ## 0.17.13
 
 ### Changed

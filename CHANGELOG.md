@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.18.1
+
+### Changed
+
+- **SQL rules share extraction of a walk's unchanged Go files.** Each extractor
+  mode computes a file's candidates and unreadable sites once per walk, including
+  errors. Masked or otherwise changed sources are extracted independently, and
+  returned slices stay isolated between callers.
+
 ## 0.18.0
 
 ### Added

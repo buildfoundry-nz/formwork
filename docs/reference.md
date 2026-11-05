@@ -1507,6 +1507,37 @@ unreadable or unparseable report, a report carrying no `durations` object (a
 `human`/`github` report, or one from a `--staged`/`--range` run, which collect
 no timings), or the flag combined with `--staged`/`--range`.
 
+### Sharding: `--shard K/N`
+
+`check --shard K/N` runs shard K of N of the rules the lane selected, so one
+whole-corpus sweep can be spread over N machines — a CI matrix of N jobs, each
+passing its own K and the same N.
+
+```sh
+formwork check --lane ci --shard 2/4 --durations prior.json -format json > shard-2.json
+```
+
+**Every rule id is in exactly one shard.** The partition is computed from the
+selected rules, the `--durations` report when one is given, and N — nothing
+else — so the N jobs agree on it without talking to each other. Ids are placed
+heaviest first (measured duration, then declared `cost:`) onto the least-loaded
+shard. Rules that share an id stay together. A rule the report does not name is
+weighed at the report's smallest positive duration rather than at zero.
+
+The shard is taken after `--lane` and before `--skip-escapes`/`--cost-max`: a
+rule a cost filter drops is still assigned, and named in `rules_not_run`.
+
+A sharded report is a part, and says so. The human and GitHub headlines read
+`shard K/N (M of the selected rule id(s); …)`, and the JSON report carries
+`scan.shard`: `{"index": K, "count": N, "rules": [<every id assigned, sorted>]}`.
+Merging the N reports is the caller's job; the id lists are what let a merge
+refuse a rule that appears twice or not at all. An unsharded report omits the
+field and is byte-identical to before.
+
+Refused with exit 2: a spec that is not canonical `K/N` with `1 <= K <= N`
+(`0/4`, `5/4`, `01/4`, an empty value), and a shard the partition leaves empty
+(more shards than selected rule ids).
+
 ---
 
 ## Single-content checks

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.19.0
+
 ### Added
 
 - **Whole-tree `check --format json` reports CPU cost beside wall time.** `cpu_durations`

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/buildfoundry-nz/formwork/internal/rules"
@@ -64,3 +65,19 @@ func (t *TestGate) Acquire() func() { return t.g.acquire() }
 // method exists on a type. Mirrors HeavyFinalizerWorkers above: a test asserts
 // against the thing the engine reads, not a copy of it.
 func SelfBoundedOf(c rules.Checker) bool { return selfBoundedOf(c) }
+
+// SetCPUMeasurementForTest switches clock measurement and installs an optional
+// per-(file, rule) counter for the overhead benchmark. The restore function
+// returns both globals to their prior values.
+func SetCPUMeasurementForTest(enabled bool, pairs *atomic.Int64) func() {
+	previousMeasure, previousHook := measureCPU, cpuEvaluationHook
+	measureCPU = enabled
+	if pairs == nil {
+		cpuEvaluationHook = nil
+	} else {
+		cpuEvaluationHook = func() { pairs.Add(1) }
+	}
+	return func() {
+		measureCPU, cpuEvaluationHook = previousMeasure, previousHook
+	}
+}

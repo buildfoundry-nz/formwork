@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/buildfoundry-nz/formwork/internal/cputime"
 	"github.com/buildfoundry-nz/formwork/internal/declspan"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
@@ -104,7 +105,7 @@ type excusals struct {
 	evidence    []*evidence
 }
 
-func compileExcusals(key string, specs []excusalSpec, syntax string) (excusals, error) {
+func compileExcusals(key string, specs []excusalSpec, syntax string, meter *cputime.Meter) (excusals, error) {
 	var out excusals
 	for i, s := range specs {
 		where := fmt.Sprintf("forbidden-pattern %s[%d]", key, i)
@@ -126,7 +127,7 @@ func compileExcusals(key string, specs []excusalSpec, syntax string) (excusals, 
 			if *s.Holders < 1 {
 				return out, fmt.Errorf("%s: holders must be >= 1, got %d: a credential no line holds excuses nothing; delete it", where, *s.Holders)
 			}
-			m, err := compileExcusal(where, s.Credential, syntax)
+			m, err := compileExcusal(where, s.Credential, syntax, meter)
 			if err != nil {
 				return out, err
 			}
@@ -148,7 +149,7 @@ func compileExcusals(key string, specs []excusalSpec, syntax string) (excusals, 
 				return out, fmt.Errorf("%s: within must be between 0 and %d, got %d: evidence further away proves something about the file, "+
 					"not the trigger; write the rule as required-pattern with when:", where, maxEvidenceWithin, *s.Within)
 			}
-			m, err := compileExcusal(where, s.Evidence, syntax)
+			m, err := compileExcusal(where, s.Evidence, syntax, meter)
 			if err != nil {
 				return out, err
 			}
@@ -165,11 +166,11 @@ func compileExcusals(key string, specs []excusalSpec, syntax string) (excusals, 
 // in-scope file, and a regexp2 rule's backtracking engine under load can time
 // out on a one-line literal; only a pattern RE2 cannot express keeps the rule's
 // syntax.
-func compileExcusal(where, pattern, syntax string) (lineMatcher, error) {
-	if m, err := compileMatcher(where, pattern, "re2"); err == nil {
+func compileExcusal(where, pattern, syntax string, meter *cputime.Meter) (lineMatcher, error) {
+	if m, err := compileMatcher(where, pattern, "re2", meter); err == nil {
 		return m, nil
 	}
-	return compileMatcher(where, pattern, syntax)
+	return compileMatcher(where, pattern, syntax, meter)
 }
 
 // homes counts every credential line in f and returns f with the

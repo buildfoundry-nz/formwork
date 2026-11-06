@@ -467,10 +467,10 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		UnfollowedLinks: meta.UnfollowedLinks(fset.Ignored),
 	}
 	summary.Shard = shardInfo
-	// Per-rule wall-clock accounting for whole-tree runs, where a lane can hold
+	// Wall and CPU accounting for whole-tree runs, where a lane can hold
 	// thousands of rules and minutes of silence. File-set modes keep their
-	// 0.6.1 shape (no timing, no progress). Neither reaches stdout or the verdict.
-	timing := map[string]time.Duration{}
+	// 0.6.1 shape (no timing, no progress). Neither reaches a verdict.
+	timing := report.Timing{}
 	onProgress := func(string, time.Duration) {}
 	if *progress {
 		onProgress = func(id string, d time.Duration) {
@@ -606,13 +606,13 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		}
 	} else {
 		summary.RulesMatchingNoFiles = meta.RulesMatchingNoFiles(rls, fset.Files)
-		var runTiming engine.Timing
+		var runTiming engine.Timings
 		findings, runTiming, err = engine.RunTimedHinted(rls, fset, *workers, onProgress, prior)
 		if err != nil {
 			fmt.Fprintln(stderr, "formwork:", err)
 			return 2
 		}
-		timing = map[string]time.Duration(runTiming)
+		timing = report.Timing{Wall: runTiming.Wall, CPU: runTiming.CPU, CPUTotal: runTiming.CPUTotal}
 	}
 	// A rule that ARMED scope.min_files and matched fewer files than it declared
 	// fails the run (#23). This is the arming end of the vacuity RulesMatchingNoFiles

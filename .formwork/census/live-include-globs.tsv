@@ -10,4 +10,5 @@ file-size-vendor-cap	internal/**/*.go
 fixture-exempt-declares-nothing	**/.formwork/rules/**/*.yaml
 no-todo-comments	cmd/**/*.go
 no-todo-comments	internal/**/*.go
+rule-code-runs-off-thread-only-through-cputime	internal/rules/**/*.go
 spec-exists	docs/specs/*.md

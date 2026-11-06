@@ -26,14 +26,14 @@ func TestRunTimedCollectsPhase1Durations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, ok := timing["hit-go-files"]
+	d, ok := timing.Wall["hit-go-files"]
 	if !ok {
 		t.Fatalf("Timing must cover every ran rule: %v", timing)
 	}
 	if d < 0 {
 		t.Fatalf("durations cannot be negative: %v", d)
 	}
-	if len(timing) != 1 {
+	if len(timing.Wall) != 1 {
 		t.Fatalf("one rule ran, one entry expected: %v", timing)
 	}
 }
@@ -74,7 +74,7 @@ func TestRunTimedProgressFiresPerFinalizer(t *testing.T) {
 		if !seen[want] {
 			t.Fatalf("finalizer %s never reported progress: %v", want, fired)
 		}
-		if _, ok := timing[want]; !ok {
+		if _, ok := timing.Wall[want]; !ok {
 			t.Fatalf("Timing must cover finalizer %s: %v", want, timing)
 		}
 	}

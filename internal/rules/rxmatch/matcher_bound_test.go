@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/buildfoundry-nz/formwork/internal/cputime"
 	"github.com/dlclark/regexp2"
 )
 
@@ -37,7 +38,7 @@ func TestRegexp2OuterBoundFailsClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 	re.MatchTimeout = regexp2MatchTimeout
-	m := pcreMatcher{re: re, src: "(a+)+$"}
+	m := pcreMatcher{re: re, src: "(a+)+$", meter: new(cputime.Meter)}
 	bomb := strings.Repeat("a", 50) + "!"
 
 	start := time.Now()
@@ -133,7 +134,7 @@ func TestThePatientCopyContinuesAWalkTheFirstAttemptStarted(t *testing.T) {
 
 func compilePcre(t *testing.T, pattern string) pcreMatcher {
 	t.Helper()
-	c, err := Compile("test", pattern, "regexp2")
+	c, err := Compile("test", pattern, "regexp2", new(cputime.Meter))
 	if err != nil {
 		t.Fatal(err)
 	}

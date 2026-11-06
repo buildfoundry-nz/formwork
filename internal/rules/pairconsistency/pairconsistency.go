@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/buildfoundry-nz/formwork/internal/cputime"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/rules/rxmatch"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
@@ -105,6 +106,7 @@ type dirState struct {
 }
 
 type pairConsistency struct {
+	*cputime.Meter
 	trigger     rxmatch.Matcher
 	requires    rxmatch.Matcher
 	alsoPresent rxmatch.Matcher // optional; nil when unset
@@ -160,22 +162,24 @@ func newPairConsistency(params *yaml.Node) (rules.Checker, error) {
 		return nil, fmt.Errorf("pair-consistency: obligation %q is not supported with where: %q (use %q or %q)",
 			obligationCountable, whereSameDir, whereSameFile, whereSameFunc)
 	}
-	trigger, err := rxmatch.Compile("trigger", p.Trigger, p.Syntax)
+	meter := new(cputime.Meter)
+	trigger, err := rxmatch.Compile("trigger", p.Trigger, p.Syntax, meter)
 	if err != nil {
 		return nil, fmt.Errorf("pair-consistency: invalid trigger: %w", err)
 	}
-	requires, err := rxmatch.Compile("requires", p.Requires, p.Syntax)
+	requires, err := rxmatch.Compile("requires", p.Requires, p.Syntax, meter)
 	if err != nil {
 		return nil, fmt.Errorf("pair-consistency: invalid requires: %w", err)
 	}
 	var alsoPresent rxmatch.Matcher
 	if p.AlsoPresent != "" {
-		alsoPresent, err = rxmatch.Compile("also_present", p.AlsoPresent, p.Syntax)
+		alsoPresent, err = rxmatch.Compile("also_present", p.AlsoPresent, p.Syntax, meter)
 		if err != nil {
 			return nil, fmt.Errorf("pair-consistency: invalid also_present: %w", err)
 		}
 	}
 	return &pairConsistency{
+		Meter:       meter,
 		trigger:     trigger,
 		requires:    requires,
 		alsoPresent: alsoPresent,

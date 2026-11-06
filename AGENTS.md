@@ -21,8 +21,9 @@ with the reasoning.
 **Engine core.** `internal/scan` (one shared walk; skips `.git`/`.formwork` plus
 operator-declared `scan.ignore` globs, each census-enumerated with a reason and
 a live match count, plus — when `scan.gitignore` is declared — every path git
-reports ignored) → `internal/engine` (two-phase executor, worker pools) →
-`internal/finding` → `internal/report` (human, JSON, GitHub formats).
+reports ignored) → `internal/engine` (two-phase executor, worker pools, wall and
+CPU timing through `internal/cputime`) → `internal/finding` → `internal/report`
+(human, JSON, GitHub formats).
 `internal/config` decodes strictly and gates on the `engine:` semver constraint
 before parsing any rule file.
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/buildfoundry-nz/formwork/internal/cputime"
 	"github.com/dlclark/regexp2"
 )
 
@@ -103,7 +104,7 @@ func regexp2TimedOut(err error) bool {
 // a pattern that is slow in its own right gets that far, and a run has one such
 // wait, because the error ends it.
 func regexp2Call[T any](m pcreMatcher, fn func(*regexp2.Regexp) (T, error)) (T, error) {
-	v, err := regexp2Bounded(regexp2OuterBound, func() (T, error) { return fn(m.re) })
+	v, err := regexp2Bounded(m.meter, regexp2OuterBound, func() (T, error) { return fn(m.re) })
 	if err == nil || !regexp2TimedOut(err) {
 		return v, err
 	}
@@ -111,7 +112,7 @@ func regexp2Call[T any](m pcreMatcher, fn func(*regexp2.Regexp) (T, error)) (T, 
 	if err != nil {
 		return v, err
 	}
-	return regexp2Bounded(regexp2PatientOuterBound, func() (T, error) { return fn(patient) })
+	return regexp2Bounded(m.meter, regexp2PatientOuterBound, func() (T, error) { return fn(patient) })
 }
 
 // regexp2Patient compiles the second attempt's copy only when one is needed: a
@@ -127,16 +128,15 @@ func regexp2Patient(src string) (*regexp2.Regexp, error) {
 
 // regexp2Bounded bounds one attempt with a timer. A matcher goroutine it gives
 // up on stops at its own MatchTimeout, or when the check process exits.
-func regexp2Bounded[T any](bound time.Duration, fn func() (T, error)) (T, error) {
+func regexp2Bounded[T any](meter *cputime.Meter, bound time.Duration, fn func() (T, error)) (T, error) {
 	type out struct {
 		v   T
 		err error
 	}
-	ch := make(chan out, 1)
-	go func() {
+	ch := cputime.Go(meter, func() out {
 		v, err := fn()
-		ch <- out{v, err}
-	}()
+		return out{v, err}
+	})
 	timer := time.NewTimer(bound)
 	defer timer.Stop()
 	select {
@@ -149,8 +149,9 @@ func regexp2Bounded[T any](bound time.Duration, fn func() (T, error)) (T, error)
 }
 
 type pcreMatcher struct {
-	re  *regexp2.Regexp
-	src string
+	re    *regexp2.Regexp
+	src   string
+	meter *cputime.Meter
 }
 
 func (m pcreMatcher) FindLine(content string) (int, bool, error) {
@@ -227,8 +228,12 @@ func (m pcreMatcher) String() string { return m.src }
 
 // Compile builds a matcher for pattern under syntax: "" or "re2" -> RE2;
 // "regexp2" -> the PCRE2-capable engine (lookaround enabled, bounded match time).
-// Any other syntax value is an error (exit-2 config error).
-func Compile(what, pattern, syntax string) (Matcher, error) {
+// Any other syntax value is an error (exit-2 config error). The meter is
+// mandatory for every backend so a new caller cannot omit CPU attribution.
+func Compile(what, pattern, syntax string, meter *cputime.Meter) (Matcher, error) {
+	if meter == nil {
+		panic("rxmatch.Compile: nil CPU meter")
+	}
 	switch syntax {
 	case "", "re2":
 		re, err := regexp.Compile(pattern)
@@ -242,7 +247,7 @@ func Compile(what, pattern, syntax string) (Matcher, error) {
 			return nil, fmt.Errorf("%s: invalid regexp2 pattern: %w", what, err)
 		}
 		re.MatchTimeout = regexp2MatchTimeout
-		return pcreMatcher{re: re, src: pattern}, nil
+		return pcreMatcher{re: re, src: pattern, meter: meter}, nil
 	default:
 		return nil, fmt.Errorf("%s: unknown syntax %q (want re2 or regexp2)", what, syntax)
 	}

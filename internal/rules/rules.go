@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"gopkg.in/yaml.v3"
@@ -112,6 +113,22 @@ func CostOf(c Checker) Cost {
 		return cc.Cost()
 	}
 	return CostFast
+}
+
+// OffThreadCPU is implemented by a checker that charges metered goroutines and
+// child processes to the rule that started them.
+type OffThreadCPU interface {
+	OffThreadCPU() time.Duration
+}
+
+// OffThreadCPUOf returns CPU a checker measured off its calling thread. A
+// checker without the interface has no such attribution to add.
+func OffThreadCPUOf(c Checker) time.Duration {
+	m, ok := c.(OffThreadCPU)
+	if !ok {
+		return 0
+	}
+	return m.OffThreadCPU()
 }
 
 // ProcessBound is optionally implemented by a CostHeavy checker whose

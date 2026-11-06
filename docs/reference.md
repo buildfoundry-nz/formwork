@@ -1507,6 +1507,27 @@ unreadable or unparseable report, a report carrying no `durations` object (a
 `human`/`github` report, or one from a `--staged`/`--range` run, which collect
 no timings), or the flag combined with `--staged`/`--range`.
 
+### Cost: wall vs CPU
+
+A whole-tree `check --format json` report measures two different things, both in
+milliseconds. `durations` is wall time and remains the scheduling hint described
+above. `cpu_durations` has exactly the same rule-id keys and is the cost figure:
+each rule's user+system CPU on its evaluation threads, plus the metered
+goroutines and waited-for child processes it started. `cpu_total` is user+system
+CPU for the whole process across the engine run, including waited-for children.
+
+`cpu_total` is at least the sum of `cpu_durations`. The residual is real work no
+single rule owns: background garbage collection, git preflights and git-diff
+children, and `os/exec` output-copy goroutines. Both per-rule CPU and the total
+are lower bounds. In particular, a detached grandchild that the command does not
+wait for is charged
+to neither figure. CPU time is less sensitive to runner contention than wall
+time, not perfectly invariant under every workload.
+
+These fields are observability only: they never change a finding or an exit
+code. Platforms without thread/process CPU clocks omit both CPU fields.
+`--staged` and `--range` reports omit them just as they omit `durations`.
+
 ### Sharding: `--shard K/N`
 
 `check --shard K/N` runs shard K of N of the rules the lane selected, so one

@@ -36,6 +36,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/buildfoundry-nz/formwork/internal/cputime"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"github.com/buildfoundry-nz/formwork/internal/vcs"
@@ -70,6 +71,7 @@ type expectSpec struct {
 }
 
 type command struct {
+	*cputime.Meter
 	cmd          []string
 	whenGlobs    []string // non-nil ⇒ run only if a scanned file matched one
 	expectExit   int
@@ -125,7 +127,7 @@ func newCommand(params *yaml.Node) (rules.Checker, error) {
 	if len(p.Cmd) == 0 {
 		return nil, errors.New("command: params.cmd must be a non-empty argv list")
 	}
-	c := &command{cmd: p.Cmd, expectExit: 0, cost: rules.CostHeavy}
+	c := &command{Meter: new(cputime.Meter), cmd: p.Cmd, expectExit: 0, cost: rules.CostHeavy}
 	if p.Expect.Exit != nil {
 		c.expectExit = *p.Expect.Exit
 	}
@@ -370,7 +372,7 @@ func (c *command) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) 
 	if c.workDir != "" {
 		cmd.Dir = c.workDir
 	}
-	out, err := cmd.CombinedOutput()
+	out, err := cputime.CombinedOutput(c.Meter, cmd)
 	exit := 0
 	if err != nil {
 		var ee *exec.ExitError
@@ -630,6 +632,7 @@ func WithCompiledBinary(c rules.Checker, binary string, progArgs []string, workD
 	// replay quietly does not. params.output was lost exactly that way, which
 	// is why compiled_carries_output_test.go pins it.
 	return &command{
+		Meter:                 new(cputime.Meter),
 		cmd:                   append([]string{binary}, progArgs...),
 		whenGlobs:             orig.whenGlobs,
 		expectExit:            orig.expectExit,

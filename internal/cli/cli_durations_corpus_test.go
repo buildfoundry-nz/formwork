@@ -44,11 +44,11 @@ func corpusRoots(t *testing.T) []string {
 	return roots
 }
 
-// splitReport decodes a JSON report into its durations and everything else.
-// Durations are separated because they are WALL TIME: two runs of one tree
-// differ in them by construction, so comparing them would compare the clock.
-// Everything else — findings, suppressed findings, the scan census, the
-// summary — is the verdict, and must be byte-identical.
+// splitReport decodes a JSON report into its wall durations and everything
+// else. All timing fields are separated because two runs of one tree differ in
+// them by construction, so comparing them would compare the clocks. Everything
+// else — findings, suppressed findings, the scan census, the summary — is the
+// verdict, and must be byte-identical.
 func splitReport(t *testing.T, raw string) (durations map[string]int64, rest string) {
 	t.Helper()
 	var doc map[string]json.RawMessage
@@ -61,8 +61,10 @@ func splitReport(t *testing.T, raw string) (durations map[string]int64, rest str
 		}
 		delete(doc, "durations")
 	}
+	delete(doc, "cpu_durations")
+	delete(doc, "cpu_total")
 	// Re-marshalling a map sorts its keys, so `rest` is a canonical form of
-	// everything the run reported except the clock.
+	// everything the run reported except the clocks.
 	out, err := json.Marshal(doc)
 	if err != nil {
 		t.Fatal(err)

@@ -589,6 +589,14 @@ formwork check [--lane <name>] [--staged | --range A..B] [--rules id,…]
    file it took, so a rule's position in that loop does not decide when it
    starts.
 
+   **Whole-tree timing separates scheduling from cost.** Wall `durations` remains
+   the scheduling hint above. On Linux and macOS the engine also reports
+   `cpu_durations`, with the same rule-id keys, and `cpu_total` in JSON. Per-rule
+   CPU covers locked evaluation threads plus goroutines and child processes
+   charged through `internal/cputime`; the process total also exposes
+   unattributed runtime work such as background GC. Both are observability and
+   never reach a verdict. File-set modes collect neither wall nor CPU timings.
+
    **Across machines, `check --shard K/N` runs one of N shards** (TakeoffQS
    #25657). One process can only spread a corpus over one machine's cores, and
    a downstream whole-corpus sweep measured 3–5x per-rule wall inflation from

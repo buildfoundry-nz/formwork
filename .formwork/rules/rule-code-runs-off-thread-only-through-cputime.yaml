@@ -1,0 +1,11 @@
+rules:
+  - id: rule-code-runs-off-thread-only-through-cputime
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include: ["internal/rules/**/*.go"]
+      exclude:
+        - "**/*_test.go" # test code may start goroutines to exercise rule behavior; this lockdown governs production rule work
+    params:
+      pattern: '^\s*go\s|\.(CombinedOutput|Output|Run|Start|Wait)\(\)'
+    cure: "Rule work that leaves its calling thread must go through internal/cputime: use cputime.Go for goroutines and cputime.CombinedOutput for child processes, so the engine can charge the CPU to the rule that started it."

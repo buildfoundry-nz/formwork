@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- **Whole-tree `check --format json` reports CPU cost beside wall time.** `cpu_durations`
+  carries each rule's user+system CPU in milliseconds, with the same keys as `durations`;
+  `cpu_total` carries process CPU across the engine run, including waited-for children.
+  Wall `durations` remains the `--durations` scheduling hint. The CPU fields are
+  observability only and are omitted on unsupported platforms and in `--staged`/`--range`
+  reports. **Strict JSON readers must declare both new keys before upgrading.**
+
 ## 0.18.0
 
 ### Added

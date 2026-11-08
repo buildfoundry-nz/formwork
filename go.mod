@@ -1,6 +1,6 @@
 module github.com/buildfoundry-nz/formwork
 
-go 1.25.0
+go 1.26.0
 
 toolchain go1.27.3
 
@@ -14,7 +14,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/pganalyze/pg_query_go/v6 v6.2.5
 	github.com/wasilibs/go-pgquery v0.0.0-20260728010200-155ebad2880e
-	golang.org/x/sys v0.44.0
+	golang.org/x/sys v0.49.0
 )
 
 require (

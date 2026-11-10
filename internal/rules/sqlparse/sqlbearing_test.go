@@ -56,6 +56,8 @@ func TestSQLBearingTellsComposedSQLFromProse(t *testing.T) {
 		"/// rejects distinctCount < fw_expr with ErrNotEnoughVertices, which the server validates as one.",
 		"DO NOT EDIT. Generated from fw_expr.",
 		"\\$fw_expr\\b",
+		"SET-fw_expr-fw_expr",
+		"SET-0-fw_expr",
 	}
 	for _, s := range sql {
 		if !sqlBearing(s) {

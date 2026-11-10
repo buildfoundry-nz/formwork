@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.19.1
+
 ### Fixed
 
 - **A capitalised clause word joined to the next word by a hyphen is not SQL.** The

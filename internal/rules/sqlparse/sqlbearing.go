@@ -138,7 +138,7 @@ func opensWithClause(s string, token bool) bool {
 	for i < len(s) && isAlpha(s[i]) {
 		i++
 	}
-	if i == 0 || (i < len(s) && isWordChar(s[i])) || isLabel(s[i:]) {
+	if i == 0 || (i < len(s) && isWordChar(s[i])) || isLabel(s[i:]) || isHyphenated(s[i:]) {
 		return false
 	}
 	word := s[:i]
@@ -150,6 +150,15 @@ func opensWithClause(s string, token bool) bool {
 		return token
 	}
 	return word == up || token
+}
+
+// isHyphenated reports whether rest, what follows a word, opens with a hyphen
+// joined to that word: "SET-3-a1b2" is a product code, "SET-" + n composes
+// one, and "FOR-EACH" is a name. SQL separates a clause keyword from what
+// follows with whitespace or a parenthesis, never a hyphen; "--" opens a
+// comment and is not one.
+func isHyphenated(rest string) bool {
+	return len(rest) > 1 && rest[0] == '-' && rest[1] != '-'
 }
 
 // isLabel reports whether rest, what follows a word, makes that word a label:

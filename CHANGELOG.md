@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A capitalised clause word joined to the next word by a hyphen is not SQL.** The
+  unread-composition census read `fmt.Sprintf("SET-%d-%s", …)`, a product code, as a
+  `SET` clause and reported it as SQL it could not read. SQL separates a clause keyword
+  from what follows with whitespace or a parenthesis, so `SET-…`, `FOR-…` and the like
+  are now prose; `--` after a keyword still reads as a comment.
+
 ## 0.19.0
 
 ### Added

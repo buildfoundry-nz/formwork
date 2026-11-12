@@ -97,6 +97,24 @@ func assertCPUKeysMatchWall(t *testing.T, timings engine.Timings) {
 	}
 }
 
+// spinYieldingForCPU is spinForCPU in slices that yield the P between them.
+// spinForCPU's loop makes no calls, so a goroutine running it leaves its P
+// only when asynchronous preemption fires; on darwin runners that left the
+// measured rule on its P beside the load, the loaded wall stretched only
+// 1.03x-1.48x, and the contrast below failed. Yielding lets the scheduler
+// share the two Ps among the rule and the load. The engine locks the rule's
+// goroutine to its thread, so the thread CPU it charges is still the rule's
+// alone.
+func spinYieldingForCPU(n uint64) uint64 {
+	const slice = 5_000_000
+	var x uint64
+	for done := uint64(0); done < n; done += slice {
+		x += spinForCPU(min(slice, n-done))
+		runtime.Gosched()
+	}
+	return x
+}
+
 func medianDuration(values []time.Duration) time.Duration {
 	slices.Sort(values)
 	return values[len(values)/2]
@@ -115,14 +133,14 @@ func TestRunTimedCPUIsStableUnderContention(t *testing.T) {
 			name:    "phase 1",
 			include: []string{"**/*.txt"},
 			checker: &fakeChecker{match: func(*scan.File) []rules.Match {
-				cpuBenchSink = spinForCPU(iterations)
+				cpuBenchSink = spinYieldingForCPU(iterations)
 				return nil
 			}},
 		},
 		{
 			name:    "finalizer",
 			include: []string{"not-in-scope/**"},
-			checker: &workFinalizer{work: func() { cpuBenchSink = spinForCPU(iterations) }},
+			checker: &workFinalizer{work: func() { cpuBenchSink = spinYieldingForCPU(iterations) }},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

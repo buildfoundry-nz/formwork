@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.19.2
+
+### Fixed
+
+- **A method call reaches its receiver type's method, not every method of its name.**
+  The unread-composition census followed text into a method by the method's name alone,
+  so every method of one name across the tree shared one node. Two same-named methods of
+  different arity on unrelated types, in unrelated packages, poisoned each other's
+  parameters, and generator text that only lands in a file was reported as SQL that
+  could not be read. A method's node is now its receiver type's (directory, type,
+  name). A call whose receiver is declared with, or is a literal of, a package-level type
+  that declares the method reaches that method only; any other call (an interface, a
+  promoted method, a receiver the walk cannot type) reaches every method of its name
+  whose parameters can take its arguments. Text that reaches a driver through any of
+  them is still reported.
+
 ## 0.19.1
 
 ### Fixed

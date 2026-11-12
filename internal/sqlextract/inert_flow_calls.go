@@ -36,7 +36,11 @@ func (ff *flowFile) passBuilder(from string, call *ast.CallExpr, arg ast.Expr, i
 			return
 		}
 		g.edge(from, f.params[j])
-		g.edge(f.params[j], ff.localKey(id.Obj))
+		back := f.params[j]
+		if f.back != nil {
+			back = f.back[j]
+		}
+		g.edge(back, ff.localKey(id.Obj))
 		return
 	}
 	g.edge(from, badFlow)

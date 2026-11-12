@@ -20,7 +20,9 @@ import (
 // reachable from it. So the proof fails closed: an exported package variable, a closure, an
 // io.Writer, a function used as a value, a function nothing calls, a method no type of
 // the module declares, and any call this does not know all keep the text a site.
-// Fields and methods of one name share a node, which only adds uses.
+// Fields of one name share a node, which only adds uses. A method is its receiver
+// type's: a call reaches another type's method of its name only when the walk cannot
+// name its receiver's type (inert_flow_methods.go).
 //
 // THE DRIVER IS NEVER FOLLOWED. A call of any name in driverNames is bad even when the
 // module declares a function of that name, because a wrapper around a driver is the
@@ -80,6 +82,9 @@ const badFlow = "bad"
 type flowFunc struct {
 	stringResults []int
 	params        []string // the local key of each parameter, "" when unnamed
+	// back is, for a dispatch node (inert_flow_methods.go), the node each builder
+	// parameter's writes come back by; nil for a function, whose parameter's local is both.
+	back          []string
 	builderParams []bool
 	writerParams  []bool
 	plainParams   []bool // a parameter of a type that holds no text: a number or a bool
@@ -98,9 +103,12 @@ type flowGraph struct {
 	writers map[string]string
 	edges   map[string][]string
 	funcs   map[string]*flowFunc
-	called  map[string]bool
-	values  map[string]bool
-	bad     map[string]bool
+	// methods and dispatches are inert_flow_methods.go's.
+	methods    map[string][]string
+	dispatches map[string][]string
+	called     map[string]bool
+	values     map[string]bool
+	bad        map[string]bool
 }
 
 // flowFile is one file during the walk.
@@ -194,6 +202,7 @@ func (e *constEnv) parseFlowFiles(tests bool) []parsedFlowFile {
 
 func (e *constEnv) walkFlow(parsed []parsedFlowFile, summaries map[string][]bool) *flowGraph {
 	g := &flowGraph{edges: map[string][]string{}, funcs: map[string]*flowFunc{}, called: map[string]bool{},
+		methods: map[string][]string{}, dispatches: map[string][]string{},
 		values: map[string]bool{}, vars: map[string]bool{}, fields: newFlowFields(), writers: map[string]string{},
 		funcRanges: map[string][]funcRange{}, summaries: summaries, bad: map[string]bool{badFlow: true}}
 	var files []*flowFile
@@ -226,6 +235,11 @@ func (ff *flowFile) localKey(o *ast.Object) string {
 
 // settle marks everything that reaches something bad.
 func (g *flowGraph) settle() {
+	for d, candidates := range g.dispatches {
+		for _, c := range candidates {
+			g.called[c] = g.called[c] || g.called[d]
+		}
+	}
 	for fn := range g.funcs {
 		if !g.called[fn] || g.values[fn] {
 			g.edge(retKey(fn), badFlow)
@@ -438,9 +452,7 @@ func (ff *flowFile) calledFunc(call *ast.CallExpr) (string, bool) {
 			}
 			return "", false // another module's function
 		}
-		key := "method." + f.Sel.Name
-		_, known := ff.g.funcs[key]
-		return key, known && !driverNames[f.Sel.Name]
+		return ff.calledMethod(call, f)
 	}
 	return "", false
 }

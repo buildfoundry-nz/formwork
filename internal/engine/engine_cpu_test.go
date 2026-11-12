@@ -33,19 +33,29 @@ func (f *workFinalizer) Finalize() []rules.Match {
 
 var cpuLoadSink atomic.Uint64
 
+// startCPULoad returns once every load goroutine has spun at least once. One
+// runtime.Gosched did not guarantee the load was on a P when the measured
+// rule started, so on a darwin runner the loaded wall barely moved and the
+// contention test could prove nothing.
 func startCPULoad() func() {
 	stop := make(chan struct{})
-	var wg sync.WaitGroup
-	for range 2 * runtime.GOMAXPROCS(0) {
+	var wg, running sync.WaitGroup
+	for range 4 * runtime.GOMAXPROCS(0) {
 		wg.Add(1)
+		running.Add(1)
 		go func() {
 			defer wg.Done()
 			x := uint64(1)
+			first := true
 			for {
 				for range 1024 {
 					x = x*1664525 + 1013904223
 				}
 				cpuLoadSink.Store(x)
+				if first {
+					running.Done()
+					first = false
+				}
 				select {
 				case <-stop:
 					return
@@ -54,7 +64,7 @@ func startCPULoad() func() {
 			}
 		}()
 	}
-	runtime.Gosched()
+	running.Wait()
 	return func() {
 		close(stop)
 		wg.Wait()

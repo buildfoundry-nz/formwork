@@ -14,11 +14,16 @@ import (
 type lockingParams struct {
 	UniqueKeyColumns       []string `yaml:"unique_key_columns"`
 	OrderRequiresUniqueKey *bool    `yaml:"order_requires_unique_key"`
+	// Schemas are repo-relative paths of SQL schema files whose PRIMARY KEY,
+	// UNIQUE constraints and unique indexes give each relation its own keys
+	// (schemakeys.go, locking_keys.go).
+	Schemas []string `yaml:"schemas"`
 }
 
 type lockingOrder struct {
 	uniqueCols             map[string]bool
 	orderRequiresUniqueKey bool
+	schema                 *schemaKeyCache
 }
 
 func newLockingOrder(node *yaml.Node) (rules.Checker, error) {
@@ -43,7 +48,16 @@ func newLockingOrder(node *yaml.Node) (rules.Checker, error) {
 	if p.OrderRequiresUniqueKey != nil {
 		orderStrict = *p.OrderRequiresUniqueKey
 	}
-	return &lockingOrder{uniqueCols: set, orderRequiresUniqueKey: orderStrict}, nil
+	lo := &lockingOrder{uniqueCols: set, orderRequiresUniqueKey: orderStrict}
+	for _, s := range p.Schemas {
+		if s == "" {
+			return nil, errors.New("sql/locking-select-order: schemas entries must be non-empty")
+		}
+	}
+	if len(p.Schemas) > 0 {
+		lo.schema = &schemaKeyCache{paths: p.Schemas}
+	}
+	return lo, nil
 }
 
 // CheckFile flags every locking SELECT that is neither ordered by a total order
@@ -375,6 +389,12 @@ func (c *lockingOrder) CheckFile(f *scan.File) ([]rules.Match, error) {
 	if err != nil {
 		return nil, err
 	}
+	var keys *schemaKeys
+	if c.schema != nil && len(stmts) > 0 {
+		if keys, err = c.schema.load(f); err != nil {
+			return nil, err
+		}
+	}
 	var ms []rules.Match
 	// cols[i] is the seed column of ms[i], parallel by construction. It exists
 	// only for the dedup below (#44) — no reporter renders it, and putting it on
@@ -384,7 +404,7 @@ func (c *lockingOrder) CheckFile(f *scan.File) ([]rules.Match, error) {
 	var escapes []string
 	for _, s := range stmts {
 		for _, sel := range lockingSelects(s.Node) {
-			if c.compliant(sel) {
+			if c.compliant(sel) || (keys != nil && keyedCompliant(sel, keys)) {
 				continue
 			}
 			cols = append(cols, s.Col)

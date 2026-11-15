@@ -980,6 +980,33 @@ A locking `SELECT` without a deterministic `ORDER BY` is a deadlock shape.
     order_requires_unique_key: true
 ```
 
+`schemas` names SQL schema files in the repository (`pg_dump --schema-only`
+snapshots, say) whose `PRIMARY KEY`, `UNIQUE` constraints and unique indexes
+give every relation its own keys, composite ones included. A column list
+cannot say that `material_id` identifies a row of one table and not of
+another, that `(session_id, row_key)` is one key, or that `org_id` is unique
+only `WHERE site_id IS NULL`; the schemas say all three. With them, a locked
+relation is safe when the statement pins every column of one of its keys to a
+single value, or when every column of a key is either pinned or named by the
+`ORDER BY` (`WHERE project_id = $1 ORDER BY ordinal` is a total order on a
+`(project_id, ordinal)` key). A column is pinned by `col = $1` (or a constant,
+a cast of one, a function of them), by `col IS NULL`, or by a `WHERE` or
+`INNER JOIN` equality to a column of a relation that is itself pinned to one
+row. An index expression built from columns, constants, casts, `COALESCE` and
+function calls is a key column pinned when every column it reads is pinned, so
+`org_id = $1 AND site_id IS NULL` pins `(org_id, COALESCE(site_id, …))`; it
+never counts as an `ORDER BY` witness, and an index on any other expression is
+no key. A partial unique index counts only when the statement repeats its
+predicate. An outer join's condition and anything under a top-level `OR` pin
+nothing. The schemas add to `unique_key_columns`, never replace it. A listed
+file the tree does not hold, or one that does not parse, is exit 2, never an
+empty key set.
+
+```yaml
+  params:
+    schemas: [db/schema.snapshot.sql]
+```
+
 #### `sql/statement-predicate`
 Per-statement assertions scoped to a table. `require` and `forbid` are lists of
 regexes over the statement, and at least one of them is required. A `.go`

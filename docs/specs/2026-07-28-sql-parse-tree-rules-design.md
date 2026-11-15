@@ -326,6 +326,35 @@ exemption holds iff **all** of:
 - The binding is **conjunctive** — no `OR` reachable from the top of the
   predicate (`BoolExpr` `OR`/`NOT` nesting breaks the exemption).
 
+**Schema keys (`params.schemas`, 2026-11-16).** The heuristic above exists
+because the parser cannot see which columns are unique. When `schemas` names
+SQL schema files in the repository, that fact is no longer out of reach, and a
+selected node is ALSO compliant when every locked relation is either:
+
+- **reduced to one row**: the statement pins every column of one of the
+  relation's keys (its `PRIMARY KEY`, a `UNIQUE` constraint, or a unique index)
+  to a single value. A column is pinned by the equality criterion above, by
+  `col IS NULL`, or by an equality to a column of another relation that is
+  itself reduced to one row, read from `WHERE` and `INNER JOIN` quals only and
+  iterated to a fixpoint; or
+- **totally ordered**: every column of one of its keys is pinned or named by
+  the `ORDER BY`.
+
+A partial unique index is a key only where the statement's conditions repeat
+each conjunct of its predicate. An index expression built from columns,
+constants, casts, `COALESCE` and function calls is a key column pinned when
+every column it reads is pinned; any other expression makes the index no key.
+More than one locked relation is compliant when each one is reduced or ordered:
+the hazard here is siblings visited in two orders, and a relation reduced to one
+row has none. The order BETWEEN relations is a repository's lock-order
+discipline, not this rule's. The schemas are read from the walk, once per run;
+a listed file the walk does not hold, or one that does not parse, is a rule
+error (exit 2), because an empty key set would turn every keyed statement into
+a finding with no word about why. A constant `LIMIT 1` is deliberately NOT
+read as one row. It bounds the rows returned, not the rows `LockRows` tried
+to lock on the way, and this design does not rest a deadlock verdict on what
+the executor does when a recheck fails.
+
 **Unparseable input is not this rule's concern.** A statement that fails to
 parse has no tree to walk, so `sql/locking-select-order` silently skips it — the
 rule ran fine; the input simply was not analyzable (not a rule crash). Surfacing

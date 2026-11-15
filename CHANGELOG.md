@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- **`sql/locking-select-order` reads relation keys from schema files.** `params.schemas`
+  names SQL schemas in the repository, and their `PRIMARY KEY`, `UNIQUE` constraints and
+  unique indexes give each relation its own keys, composite, partial and expression ones
+  included. A locked relation is safe when the statement pins every column of a key, or
+  when every column of a key is pinned or ordered on. Pins come from `col = $1`, `col IS
+  NULL`, and inner-join equalities to a relation already pinned to one row. A partial
+  index counts only when the statement repeats its predicate. `unique_key_columns` still
+  applies alongside. A missing or unparseable schema is exit 2.
+
 ## 0.20.0
 
 ### Added

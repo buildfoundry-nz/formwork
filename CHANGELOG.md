@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.20.0
+
+### Added
+
+- **`check --shard-pin LANE=K` runs every rule a lane selects on one shard.** A CI matrix
+  can now install a toolchain (a language SDK, a resolved package workspace) in one shard
+  job instead of all N: the pinned ids are placed on shard K first and count toward its
+  load, then the rest are balanced around them, heaviest first, as before. The partition
+  is a pure function of (rules, `--durations`, N, pins), so every shard job passes the same
+  pins, and the N shards still cover the selection exactly once. The flag repeats, one pin
+  per lane. A pin without `--shard`, a K past N, an unknown or repeated lane, a lane that
+  selects none of the selected rules, and an id two pins place on different shards are
+  exit 2. The JSON report is unchanged.
+
 ## 0.19.2
 
 ### Fixed

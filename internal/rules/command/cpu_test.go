@@ -3,6 +3,7 @@ package command_test
 import (
 	"fmt"
 	"os/exec"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -44,6 +45,31 @@ func calibrateBusyLoop(t *testing.T) (int, time.Duration) {
 	return 0, 0
 }
 
+// pairedCPU runs script three times directly and three times through a command
+// rule, interleaved, and returns the middle sample of each. rusage is time on
+// a core, so the next run of one shell loop is not the same cost: one pair
+// missed an 80% bar on linux at 420ms against 574ms (run 43141699089) and on
+// darwin at 336ms against 431ms (run 43751745209), with the child fully
+// charged. The middle of three is what the bar sees. A charge that was never
+// added is still a miss against a loop calibrated to at least 300ms.
+func pairedCPU(t *testing.T, script string) (direct, got time.Duration) {
+	t.Helper()
+	const samples = 3
+	ds := make([]time.Duration, samples)
+	gs := make([]time.Duration, samples)
+	for i := 0; i < samples; i++ {
+		ds[i] = directChildCPU(t, script)
+		gs[i] = commandChildCPU(t, script)
+	}
+	return medianDuration(ds), medianDuration(gs)
+}
+
+func medianDuration(samples []time.Duration) time.Duration {
+	s := append([]time.Duration(nil), samples...)
+	sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })
+	return s[len(s)/2]
+}
+
 func TestCommandSleepCPUIsNotWall(t *testing.T) {
 	start := time.Now()
 	cpu := commandChildCPU(t, "sleep 1")
@@ -57,8 +83,8 @@ func TestCommandSleepCPUIsNotWall(t *testing.T) {
 }
 
 func TestCommandBusyLoopCPUTracksDirectChild(t *testing.T) {
-	n, direct := calibrateBusyLoop(t)
-	got := commandChildCPU(t, busyLoop(n))
+	n, _ := calibrateBusyLoop(t)
+	direct, got := pairedCPU(t, busyLoop(n))
 	if got < direct*80/100 {
 		t.Fatalf("command CPU = %s, direct child = %s; want at least 80%%", got, direct)
 	}
@@ -67,8 +93,7 @@ func TestCommandBusyLoopCPUTracksDirectChild(t *testing.T) {
 func TestCommandWaitedGrandchildCPUIsCharged(t *testing.T) {
 	n, _ := calibrateBusyLoop(t)
 	outer := "sh -c '" + busyLoop(n) + "'"
-	direct := directChildCPU(t, outer)
-	got := commandChildCPU(t, outer)
+	direct, got := pairedCPU(t, outer)
 	if got < direct*80/100 {
 		t.Fatalf("waited grandchild CPU = %s, direct = %s; want at least 80%%", got, direct)
 	}

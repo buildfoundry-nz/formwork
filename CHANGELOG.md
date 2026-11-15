@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.21.0
+
 ### Added
 
 - **`sql/locking-select-order` reads relation keys from schema files.** `params.schemas`

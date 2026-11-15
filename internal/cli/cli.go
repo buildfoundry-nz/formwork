@@ -234,6 +234,15 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	progress := fs.Bool("progress", false, "stream one line per finalizer to stderr as it completes (rule id + cumulative ms) — liveness for long whole-corpus runs; never affects stdout or the verdict")
 	durations := fs.String("durations", "", durationsUsage)
 	shard := fs.String("shard", "", shardUsage)
+	var pins []shardPin
+	fs.Func("shard-pin", shardPinUsage, func(spec string) error {
+		p, err := parseShardPin(spec)
+		if err != nil {
+			return err
+		}
+		pins = append(pins, p)
+		return nil
+	})
 	cfg, ok := parseAndLoad(fs, args, root, stderr)
 	if !ok {
 		return 2
@@ -283,6 +292,13 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 	}
+	// A pin is part of the partition, so without --shard there is no
+	// partition for it to shape: a supplied flag that changes nothing is the
+	// shape the guards above refuse.
+	if len(pins) > 0 && !sharded {
+		fmt.Fprintln(stderr, "formwork: --shard-pin places rules on a shard of --shard K/N; without --shard it would change nothing")
+		return 2
+	}
 	// --cost-max and --skip-escapes both narrow by cost and would answer the
 	// same rule two ways; a supplied flag that is silently overridden is the
 	// shape the guards above refuse (#22).
@@ -330,7 +346,12 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	laneCount := len(rls)
 	var shardInfo *report.Shard
 	if sharded {
-		rls = shardRules(rls, prior, shardK, shardN)
+		pinned, err := pinnedHomes(cfg, rls, pins, shardN)
+		if err != nil {
+			fmt.Fprintln(stderr, "formwork:", err)
+			return 2
+		}
+		rls = shardRules(rls, prior, pinned, shardK, shardN)
 		shardInfo = &report.Shard{Index: shardK, Count: shardN, Rules: shardedIDs(rls)}
 	}
 	selectedCount := len(rls)

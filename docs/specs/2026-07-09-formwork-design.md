@@ -611,6 +611,12 @@ formwork check [--lane <name>] [--staged | --range A..B] [--rules id,…]
    report names the shard and its ids (`scan.shard`), because a shard's
    report is a part: the ids are what lets a merge of the N parts prove each
    rule ran exactly once. An empty shard is exit 2, like any empty selection.
+   `--shard-pin LANE=K` (TakeoffQS #26017) places every selected rule a lane
+   selects on shard K before the rest are balanced around that load, so the
+   rules that need a toolchain run in the one job that installs it. The pins
+   join the partition's inputs; a pin that places nothing, names a shard past
+   N, or conflicts with another pin is exit 2 rather than a silent unpinned
+   partition.
 5. **Report + exit**: findings sorted by (rule id, path, line) for
    determinism.
 

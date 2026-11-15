@@ -1559,6 +1559,30 @@ Refused with exit 2: a spec that is not canonical `K/N` with `1 <= K <= N`
 (`0/4`, `5/4`, `01/4`, an empty value), and a shard the partition leaves empty
 (more shards than selected rule ids).
 
+#### Pinning a lane to one shard: `--shard-pin LANE=K`
+
+Some rules need a toolchain that only one matrix job should pay to install — a
+language SDK, a resolved package workspace. `--shard-pin LANE=K` places every
+selected rule that lane `LANE` selects on shard K, so that job is the only one
+that needs the toolchain:
+
+```sh
+formwork check --lane ci --shard 2/8 --shard-pin dart=1 --durations prior.json -format json > shard-2.json
+```
+
+The pinned ids are placed first and count toward shard K's load; the rest are
+then placed heaviest first exactly as without a pin, so the other shards absorb
+the work the pinned shard is already carrying. The partition is still a pure
+function of its inputs — now (rules, `--durations`, N, pins) — so **every shard
+job must pass the same pins**, and the union of the N shards is still the whole
+selection, each id exactly once. The flag repeats, one pin per lane. The report
+is unchanged: `scan.shard.rules` already names what each shard ran.
+
+Refused with exit 2, never dropped: a pin without `--shard`; a spec that is not
+`LANE=K` with K canonical; K greater than N; an unknown lane, or one lane named
+twice; a lane that selects none of the selected rules (the job that set up for
+them would set up for nothing); and an id two pins place on different shards.
+
 ---
 
 ## Single-content checks

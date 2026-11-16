@@ -1267,8 +1267,11 @@ all-clear.
   ANCESTOR — the built-in set prunes directories only, so a regular file
   *named* `.git`, the linked-worktree gitdir-pointer shape, is scanned and
   reported governed; a `scan.ignore` glob; a git-ignored path when
-  `scan.gitignore` is declared, resolved through the same
-  `meta.ResolveGitIgnore` seam the walk uses and attributed to the deciding
+  `scan.gitignore` is declared, resolved through the meta seam the walk
+  uses — `meta.ResolveGitIgnoreFor`, which holds exactly the records the
+  walk's `meta.ResolveGitIgnore` snapshot holds for the queried paths and
+  their ancestor directories, the only keys a query looks up, and asks git
+  about those paths alone (`vcs.IgnoredAmong`, #126) — and attributed to the deciding
   `.gitignore` line in the census's `<file>:<line>:<pattern>` shape (#122 —
   a tracked file under an ignored directory keeps its governed answer, git's
   own carve-out; and because that snapshot holds only paths that exist, a

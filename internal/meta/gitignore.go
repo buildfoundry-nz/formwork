@@ -67,6 +67,29 @@ func ResolveGitIgnore(cfg *config.Config, root string) GitIgnoreResult {
 	return GitIgnoreResult{State: GitIgnoreOn, Set: GitIgnoredSet(recs)}
 }
 
+// ResolveGitIgnoreFor is ResolveGitIgnore for a caller that will only ever look
+// up the given paths and the directories above them — the path-scoped commands,
+// check-content and rules-for, whose every lookup is scan.NotScannedBy or the
+// ghost overlay over one queried path. The set holds exactly the records
+// ResolveGitIgnore's would hold under those keys (vcs.IgnoredAmong), and git
+// is asked about those keys only, instead of listing every ignored path in the
+// working tree (#126). Everything else — the off and unanswerable states, and
+// that an unanswerable git is carried on the result rather than returned — is
+// ResolveGitIgnore's, for the same reasons.
+//
+// A whole-tree walk must keep ResolveGitIgnore: it looks up every path it
+// meets, and a set built for other keys would prune none of them.
+func ResolveGitIgnoreFor(cfg *config.Config, root string, paths []string) GitIgnoreResult {
+	if cfg == nil || cfg.Gitignore == nil {
+		return GitIgnoreResult{State: GitIgnoreOff}
+	}
+	recs, err := vcs.IgnoredAmong(root, paths)
+	if err != nil {
+		return GitIgnoreResult{State: GitIgnoreUnknown, Err: err}
+	}
+	return GitIgnoreResult{State: GitIgnoreOn, Set: GitIgnoredSet(recs)}
+}
+
 // GitIgnoredSet keys confirmed-ignored records for the walk. This is the ONE
 // construction of a prune set from vcs records — the walk snapshot and
 // rules-for's ghost frame both build through it, so a future filter or key

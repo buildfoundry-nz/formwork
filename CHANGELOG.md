@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Performance
+
+- **`check-content` and `rules-for` ask git about the paths they were given, not the
+  whole tree.** Both resolved `scan.gitignore` by listing every ignored path in the
+  working tree (`ls-files --others --ignored --directory`), about 7 s on an 83,000-file
+  checkout, to answer for one file. They now ask `check-ignore` and the index about the
+  queried paths and the directories above them, and reproduce the listing's own
+  decisions there: the `--directory` collapse, tracked files under an ignored
+  directory, nested `.gitignore` files, negations, symlinks, nested repositories and
+  gitlinks. The prune set holds exactly the records the whole listing held for those
+  paths. A nested repository that is not ignored, a `dir/*`-style pattern that matches
+  only the slash spelling of an untracked directory, and a root below the top level
+  still take the whole listing. A one-file `check-content` on TakeoffQS went from
+  6.7 s to 0.4 s with an identical report. `check` and `lint` walk the whole tree and
+  keep the whole listing.
+
 ## 0.21.0
 
 ### Added

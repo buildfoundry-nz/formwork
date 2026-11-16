@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -40,9 +41,11 @@ func TestCheckContentBatchLoadsConfigOnce(t *testing.T) {
 func TestCheckContentBatchResolvesGitIgnoreOnce(t *testing.T) {
 	original := checkContentResolveGitIgnore
 	calls := 0
-	checkContentResolveGitIgnore = func(cfg *config.Config, root string) meta.GitIgnoreResult {
+	var asked []string
+	checkContentResolveGitIgnore = func(cfg *config.Config, root string, paths []string) meta.GitIgnoreResult {
 		calls++
-		return original(cfg, root)
+		asked = paths
+		return original(cfg, root, paths)
 	}
 	defer func() { checkContentResolveGitIgnore = original }()
 
@@ -56,5 +59,11 @@ func TestCheckContentBatchResolvesGitIgnoreOnce(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("gitignore snapshot resolved %d times for three records, want exactly once", calls)
+	}
+	// Once, and for every record's path: the snapshot holds only the keys it
+	// was resolved for (#126), so a record whose path was left out would be
+	// judged against a set that cannot prune it.
+	if want := []string{"src/notes.txt", "src/other.txt", "src/third.txt"}; !reflect.DeepEqual(asked, want) {
+		t.Fatalf("gitignore snapshot resolved for %v, want %v", asked, want)
 	}
 }

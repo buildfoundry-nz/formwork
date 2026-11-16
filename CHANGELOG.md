@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.21.1
+
 ### Performance
 
 - **`check-content` and `rules-for` ask git about the paths they were given, not the

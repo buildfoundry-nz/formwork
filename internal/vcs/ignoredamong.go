@@ -174,12 +174,12 @@ func modelIgnored(root string, keys []string, frame indexFrame) ([]IgnoredPath, 
 		if !parentEntered(states, k) {
 			continue
 		}
+		// Any lstat failure leaves the key unreached, as a missing one is: a
+		// path git's walk cannot stat is one it cannot list either, and the
+		// callers classify an unreadable path themselves (walkReachability).
 		fi, err := os.Lstat(filepath.Join(root, filepath.FromSlash(k)))
 		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return nil, err
+			continue
 		}
 		st.exists, st.mode = true, fi.Mode().Type()
 		st.reached = true
@@ -269,10 +269,10 @@ func modelIgnored(root string, keys []string, frame indexFrame) ([]IgnoredPath, 
 			if slashConfirmed {
 				return nil, errNeedsWholeListing
 			}
-			if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(k), ".git")); err == nil {
+			// Anything but a clean "no such entry" leaves the nested-repository
+			// question open, and git's own walk is what closes it.
+			if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(k), ".git")); !os.IsNotExist(err) {
 				return nil, errNeedsWholeListing
-			} else if !os.IsNotExist(err) {
-				return nil, err
 			}
 		case st.listable() && !st.tracked:
 			if v, ok := asFile[k]; ok {
@@ -295,6 +295,11 @@ func parentEntered(states map[string]*keyState, k string) bool {
 	return st != nil && st.entered
 }
 
+// maxIndexPathspecs bounds the argv readIndexFacts builds. Past it the whole
+// index is read instead — the same facts, about 30 ms for 83k entries — so a
+// large check-content batch cannot run into the kernel's argument limit.
+var maxIndexPathspecs = 512
+
 // readIndexFacts records, for each key on disk, whether the index holds it,
 // whether as a gitlink, and whether it holds anything below it. The pathspecs
 // are the keys themselves, so git lists only those subtrees; :(literal) keeps a
@@ -305,10 +310,15 @@ func readIndexFacts(root string, frame indexFrame, keys []string, fold bool, sta
 	if fold {
 		magic = ":(literal,icase)"
 	}
-	args := []string{"ls-files", "-z", "--stage", "--"}
+	args := []string{"ls-files", "-z", "--stage"}
+	if len(keys) <= maxIndexPathspecs {
+		args = append(args, "--")
+		for _, k := range keys {
+			args = append(args, magic+k)
+		}
+	}
 	byName := make(map[string]*keyState, len(keys))
 	for _, k := range keys {
-		args = append(args, magic+k)
 		byName[foldName(k, fold)] = states[k]
 	}
 	out, err := frame.git(root, args...)

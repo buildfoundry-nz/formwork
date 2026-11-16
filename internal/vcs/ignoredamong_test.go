@@ -207,6 +207,16 @@ func TestIgnoredAmongAgreesOnEveryPathOfTheFixture(t *testing.T) {
 	if !reflect.DeepEqual(got, all) {
 		t.Errorf("IgnoredAmong(all %d paths) = %v, want %v", len(queries), paths(got), paths(all))
 	}
+	// Past the argv bound the index facts come from the whole index; the
+	// answer must not change.
+	defer vcs.SetMaxIndexPathspecsForTest(0)()
+	got, err = vcs.IgnoredAmong(dir, queries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, all) {
+		t.Errorf("IgnoredAmong(all %d paths, whole index) = %v, want %v", len(queries), paths(got), paths(all))
+	}
 }
 
 // THE POINT OF #126, PINNED: an ordinary query never lists the working tree,

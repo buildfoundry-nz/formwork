@@ -68,6 +68,7 @@ variant and the reasoning.
 formwork check     # evaluate all rules; exit 0 pass, 1 violations, 2 error
 formwork check-content --path src/a.go < src/a.go  # eligible file-local rules only
 formwork check-content --batch < records.jsonl      # one {path, content} per line
+formwork serve --mcp                                # MCP check_file over stdio
 formwork test      # run every rule against its fixtures
 formwork lint      # self-integrity checks over the config itself
 formwork rules-for <path>...   # which rules govern these paths
@@ -83,6 +84,10 @@ a single-file verdict, not a repository-wide green. With `--batch`, stdin and
 stdout are newline-delimited JSON: one strict `{path, content}` input object and
 one independent schema-1 result per line. Configuration loads once for the
 whole batch; empty or malformed input is exit 2.
+
+`serve --mcp` exposes the same evaluator as MCP `check_file`. Supply complete
+unsaved `content`, or omit it to read the on-disk file. The structured response
+uses the check-content schema. See [MCP `check_file`](docs/reference.md#mcp-check_file).
 
 This repo self-hosts: its own rules live in `.formwork/`.
 

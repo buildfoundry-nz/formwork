@@ -94,6 +94,9 @@ table.
   line and output is one compact object with this same schema per line, in input
   order. Per-record hashes, status, coverage, and replay identity are API; no
   batch-wide document replaces them.
+- **MCP `check_file`** returns that same schema-1 document as structured
+  content. Its input and result field names share the `check-content`
+  compatibility contract; a short text summary accompanies them.
 - **`-format github`** emits GitHub Actions workflow-command annotations. The
   format is GitHub's, not ours; we track it.
 - **`-format human` is NOT API.** It is for people, it will change to read
@@ -102,9 +105,9 @@ table.
 
 ### CLI surface — API
 
-Command names (`check`, `check-content`, `test`, `lint`, `scope`, `hooks`,
-`explain`, `list`, `rules-for`, `version`) and their flags. Removing a command
-or flag, or changing a flag's meaning, is breaking. Adding is not.
+Command names (`check`, `check-content`, `serve`, `test`, `lint`, `scope`,
+`hooks`, `explain`, `list`, `rules-for`, `version`) and their flags. Removing
+a command or flag, or changing a flag's meaning, is breaking. Adding is not.
 
 ## What is NOT API
 

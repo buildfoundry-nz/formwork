@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.22.0
+
 ### Added
 
 - **`formwork serve --mcp` exposes `check_file` over stdio.** The official MCP Go

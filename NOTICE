@@ -45,6 +45,23 @@ github.com/Masterminds/semver/v3 (MIT License)
 
     Copyright (C) 2014-2019, Matt Butcher and Matt Farina
 
+github.com/google/jsonschema-go (MIT License)
+
+    Copyright (c) 2025 JSON Schema Go Project Authors
+
+github.com/segmentio/asm (MIT License)
+
+    Copyright (c) 2021 Segment
+
+github.com/segmentio/encoding (MIT License)
+
+    Copyright (c) 2019 Segment.io, Inc.
+
+  Its json/fuzz/LICENSE carries the Apache License boilerplate's placeholder
+  notice as well:
+
+    Copyright {yyyy} {name of copyright owner}
+
 github.com/wasilibs/go-pgquery (MIT License)
 
     Copyright (c) wasilibs authors
@@ -67,7 +84,7 @@ github.com/wasilibs/wazero-helpers (MIT License)
 
     Copyright (c) wasilibs authors
 
-Each of the five modules above is distributed under the MIT License, whose
+The modules above are distributed under the MIT License, whose
 permission notice must accompany the software:
 
     Permission is hereby granted, free of charge, to any person obtaining a
@@ -113,11 +130,26 @@ golang.org/x/sys (BSD 3-Clause License)
 
     Copyright 2009 The Go Authors.
 
+github.com/fsnotify/fsnotify (BSD 3-Clause License)
+
+    Copyright © 2012 The Go Authors. All rights reserved.
+    Copyright © fsnotify Authors. All rights reserved.
+
+github.com/yosida95/uritemplate/v3 (BSD 3-Clause License)
+
+    Copyright (C) 2016, Kohei YOSHIDA <https://yosida95.com/>. All rights reserved.
+
+golang.org/x/oauth2 (BSD 3-Clause License)
+golang.org/x/sync (BSD 3-Clause License)
+golang.org/x/time (BSD 3-Clause License)
+
+    Copyright 2009 The Go Authors.
+
 google.golang.org/protobuf (BSD 3-Clause License)
 
     Copyright (c) 2018 The Go Authors. All rights reserved.
 
-The three modules above, the pganalyze work bundled by go-pgquery and the
+The modules above, the pganalyze work bundled by go-pgquery and the
 Go-derived code in regexp2 are distributed under the 3-clause BSD license,
 which requires binary redistributions to reproduce the copyright notice, the
 conditions and the disclaimer:
@@ -149,9 +181,10 @@ conditions and the disclaimer:
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
   The third condition names a different party in each copy: Google LLC in
-  golang.org/x/sys, Google Inc. in google.golang.org/protobuf and in the
-  Go-derived code in regexp2, and pg_query in pg_query_go and the pganalyze
-  work bundled by go-pgquery.
+  golang.org/x/sys and the other golang.org/x modules, Google Inc. in fsnotify,
+  google.golang.org/protobuf and the Go-derived code in regexp2, pg_query in
+  pg_query_go and the pganalyze work bundled by go-pgquery, and the copyright
+  holder in uritemplate.
 
 --------------------------------------------------------------------------
 PostgreSQL License
@@ -190,6 +223,14 @@ reproduced from its NOTICE file:
     wazero
     Copyright 2020-2023 wazero authors
 
+github.com/modelcontextprotocol/go-sdk (Apache License 2.0 and MIT License)
+
+    Copyright (c) 2024-2025 Model Context Protocol a Series of LF Projects, LLC.
+
+  Its LICENSE places new and relicensed contributions under Apache License 2.0;
+  contributions without relicensing consent remain under the MIT License whose
+  permission notice is reproduced above.
+
 gopkg.in/yaml.v3 (Apache License 2.0) — attribution notice reproduced from
 its NOTICE file:
 
@@ -207,8 +248,9 @@ its NOTICE file:
     Copyright (c) 2006-2010 Kirill Simonov
     Copyright (c) 2006-2011 Kirill Simonov
 
-Both modules above are distributed under the Apache License, Version 2.0, the
-same license this product is under; its full text is in the LICENSE file.
+The Apache-licensed modules and contributions above are distributed under the
+Apache License, Version 2.0, the same license this product is under; its full
+text is in the LICENSE file.
 
 --------------------------------------------------------------------------
 

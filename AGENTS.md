@@ -72,6 +72,11 @@ one independent result object per line in input order. Generated/reachability
 state is per record; empty input is exit 2. Lanes and cost classes do not select
 or filter these rules. Full `check` is unchanged.
 
+**MCP.** `formwork serve --mcp` exposes `check_file` over stdio through the
+official MCP Go SDK. Supplied content wins over disk; omitted content reads the
+confined on-disk file. The resident corpus is invalidated by filesystem events,
+and a watcher failure forces strict reloads instead of stale answers.
+
 **Self-testing.** `formwork test` (fire/pass fixtures, `want:` markers, `.want`
 manifests) and `formwork lint` (rules-present, fixture coverage, empty scope,
 lane reachability, command-trigger-armable, and more). Both take `--rule <id>`

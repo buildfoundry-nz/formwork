@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- **`formwork serve --mcp` exposes `check_file` over stdio.** The official MCP Go
+  SDK validates the typed input and carries the same structured report as
+  `check-content`, with supplied unsaved content or the confined on-disk file.
+  Filesystem events invalidate the resident compiled corpus, watcher failures
+  force strict reloads, and a short text summary avoids serializing the full
+  report twice. On the TakeoffQS corpus, 50 warm calls measured 186 ms p50 and
+  210 ms p95.
+
 ## 0.21.1
 
 ### Performance

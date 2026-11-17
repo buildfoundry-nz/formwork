@@ -1734,6 +1734,31 @@ complete. JSON write errors are exit 2. The aggregate exit is 1 if any record
 has an error-severity finding, 0 otherwise, and 2 for input/config/engine/output
 failure. No batch-wide status replaces each record's `status` and `coverage`.
 
+### MCP `check_file`
+
+```sh
+formwork serve --mcp [-C <root>]
+```
+
+This serves the Model Context Protocol over stdin/stdout using the official MCP
+Go SDK. It exposes one tool, `check_file`, with a required `path` and optional
+`content`. Supplied content is the complete candidate file, including `""`, and
+wins over disk. Omitted content reads the on-disk file after path normalization;
+a missing file is a tool error. Nonregular paths return `not_scanned` without
+following them outside the repository.
+
+The structured result is the same schema-1 document as `check-content`, with all
+findings included. A short text summary accompanies it for clients that do not
+consume structured content. Findings are ordinary tool results; malformed input,
+configuration failures, read failures, and engine failures are tool errors.
+Input is decoded and validated by the SDK. The server deliberately emits no
+output schema and does not serialize a second full JSON copy into text content.
+
+The compiled corpus is reused between calls. Filesystem write, create, remove,
+and rename events under `.formwork` invalidate it; a watcher failure disables
+reuse and every call goes through the strict loader. Thus performance does not
+depend on file mtimes or on retaining stale rules after an edit.
+
 ---
 
 ## Introspection

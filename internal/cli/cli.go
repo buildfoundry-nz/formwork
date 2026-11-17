@@ -66,6 +66,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runCheck(args[1:], stdout, stderr)
 	case "check-content":
 		return runCheckContent(args[1:], stdin, stdout, stderr)
+	case "serve":
+		return runServe(args[1:], stdin, stdout, stderr)
 	case "test":
 		return runTest(args[1:], stdout, stderr)
 	case "lint":
@@ -92,7 +94,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "usage: formwork <command> [flags]")
-	fmt.Fprintln(w, "commands: check, check-content, test, lint, scope, hooks, explain, list, rules-for, version")
+	fmt.Fprintln(w, "commands: check, check-content, serve, test, lint, scope, hooks, explain, list, rules-for, version")
 }
 
 // newFlagSet builds a FlagSet for a subcommand with the shared "-C" root

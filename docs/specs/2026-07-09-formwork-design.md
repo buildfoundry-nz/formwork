@@ -114,8 +114,8 @@ Go ≥ 1.24 (pin exact toolchain at scaffold time).
 ```
 formwork/
   cmd/formwork/            CLI entry point (subcommands: check, check-content,
-                           test, lint, scope, hooks, explain, list, rules-for,
-                           version;
+                           serve, test, lint, scope, hooks, explain, list,
+                           rules-for, version;
                            init is designed in §10 but deferred — not built,
                            deliberately, until the open-source quickstart
                            arc (#110) decides its shape)
@@ -683,7 +683,7 @@ This is a planning mode over the existing engine, not a second evaluator. The
 planner constructs one `scan.NewMemFile`, selects eligible rules, and calls
 `engine.Run` over a singleton `FileSet` with one worker. Preprocessors, finding
 order, cures, and engine errors are therefore the ordinary implementations.
-There is no MCP, daemon, or stored result service.
+The `serve --mcp` transport below reuses this evaluator; it stores no verdicts.
 
 Eligibility is a path-aware `rules.ContentOnly` opt-in, false by default for an
 unknown checker and independent of `cost:`. The planner independently defers
@@ -746,6 +746,26 @@ exit 2. Exit 1 means any record has an error-severity finding; otherwise exit 0.
 Lanes and cost classes do not select or filter rules in either single-content
 mode: `ContentOnly` and the independent deferral guards are the only additional
 planning filter.
+
+#### MCP single-file evaluation
+
+`formwork serve --mcp -C <root>` serves the Model Context Protocol over
+stdin/stdout through the official MCP Go SDK. Its `check_file` tool takes a
+required `path` and optional `content`. Supplied content is the complete
+candidate file, including the empty string, and wins over disk. Omitted content
+reads the normalized on-disk file; a missing file is a tool error, and a
+nonregular path produces `not_scanned` without reading through it. The tool
+returns the schema-1 single-content document as structured content with all
+findings, plus a short text summary. Findings are data, not tool errors. Invalid
+input, configuration, path, read, and engine failures are tool errors.
+
+The SDK owns JSON-RPC, input-schema inference and validation, and structured
+content encoding. There is no output schema or duplicate full-document text
+serialization. The resident process reuses its compiled corpus until a
+filesystem write, create, remove, or rename under `.formwork` invalidates it.
+Watcher failure disables reuse, so every subsequent call uses the strict loader
+rather than stale rules. No verdict cache is stored. Warm `check_file` calls on
+the validating target have a p95 target under 300 ms.
 
 Performance target: full-tree evaluation of all fast rules on a repo the size
 of the validating target in low single-digit seconds (vs ~30s today), single

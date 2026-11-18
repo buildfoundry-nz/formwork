@@ -1649,10 +1649,15 @@ current file-local families are:
   constants, and templates.
 
 Every `Finalizer`/`ErrFinalizer` is deferred, including a wrapped finalizer, as
-are whole-tree/cross-file rules, `scope.min_files`, `scope.not_declaring`,
-generated-only scopes, external commands, git-diff, census/credential forms,
-and other tree readers. Unknown checkers default to ineligible. Running only a
-finalizing rule's per-file half would not be its full-check verdict.
+are whole-tree/cross-file rules, `scope.not_declaring`, generated-only
+scopes, external commands, git-diff, census/credential forms, and other tree
+readers. Unknown checkers default to ineligible. Running only a finalizing
+rule's per-file half would not be its full-check verdict.
+
+A `scope.min_files` floor does not defer a rule. The floor counts the paths the
+scope selects and is checked outside the rule's own evaluation, and one file's
+content cannot change which paths a scope selects. The rest of the rule decides
+whether it is eligible, and `check` still reports the floor.
 
 `not_evaluated` gives each applicable but unevaluated rule a stable reason.
 Rules the path scope does not select are counted in `out_of_scope` without
@@ -1662,7 +1667,6 @@ than enumerating the whole corpus:
 | reason | meaning | counted as |
 |---|---|---|
 | `generated_excluded` | declared generated content is outside an ordinary rule's scope | `out_of_scope` |
-| `scope_min_files` | the floor is a repository-corpus assertion | `deferred` |
 | `scope_not_declaring` | holder counting/masking needs tree context | `deferred` |
 | `generated_only_scope` | generated-only evaluation depends on repository proof context | `deferred` |
 | `finalizer` | any finalization phase exists, even behind a wrapper | `deferred` |

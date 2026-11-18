@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Fixed
+
+- **`check-content` evaluates rules that declare `scope.min_files`.** It deferred
+  every one of them as `scope_min_files`, although the floor is checked outside
+  the rule's evaluation and one file's content cannot move it. On four TakeoffQS
+  files (a Go route, a Go tool, two Dart files) the rules evaluated went from 277
+  to 309, 50 to 55, 158 to 173 and 124 to 140; 295 files sampled from that tree
+  gave no finding. The per-file verdict is the one `check` gives. `check` still
+  reports the floor, and `scope_min_files` is no longer a `not_evaluated` reason.
+
 ## 0.22.0
 
 ### Added

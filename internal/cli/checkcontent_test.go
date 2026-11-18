@@ -313,10 +313,6 @@ func TestCheckContentDefersTreeDependentFamilies(t *testing.T) {
     type: forbidden-pattern
     scope: {include: ['**']}
     params: {pattern: NEVER}
-  - id: min-files
-    type: forbidden-pattern
-    scope: {include: ['**'], min_files: 1}
-    params: {pattern: TODO}
   - id: not-declaring
     type: forbidden-pattern
     scope:
@@ -369,7 +365,7 @@ func TestCheckContentDefersTreeDependentFamilies(t *testing.T) {
 		t.Fatalf("evaluated = %v, want only plain file-local rule; doc=%+v", doc.EvaluatedRuleIDs, doc)
 	}
 	want := map[string]string{
-		"min-files": "scope_min_files", "not-declaring": "scope_not_declaring",
+		"not-declaring":  "scope_not_declaring",
 		"generated-only": "generated_only_scope", "whole-tree": "finalizer",
 		"census-fast": "finalizer", "credential": "finalizer", "command": "finalizer",
 		"git-diff": "finalizer", "tree-reader": "finalizer",
@@ -383,11 +379,41 @@ func TestCheckContentDefersTreeDependentFamilies(t *testing.T) {
 	if _, present := got["out-of-scope"]; present {
 		t.Errorf("out-of-scope rule must not carry guidance detail: %+v", doc.NotEvaluated)
 	}
-	if doc.Coverage.Deferred != 9 || doc.Coverage.OutOfScope != 1 {
+	if doc.Coverage.Deferred != 8 || doc.Coverage.OutOfScope != 1 {
 		t.Fatalf("deferred/out-of-scope coverage = %+v", doc.Coverage)
 	}
 	if strings.Contains(errOut, "must-not-run") || doc.FindingsTotal != 0 {
 		t.Fatalf("a deferred checker ran: doc=%+v stderr=%s", doc, errOut)
+	}
+}
+
+// A scope floor is a claim about the tree, which ScopeFloorFindings checks
+// outside engine.Run. The rule's per-file verdict on one content is the same
+// as in a whole-tree check, so the floor must not hide it.
+func TestCheckContentEvaluatesARuleWithAScopeFloor(t *testing.T) {
+	root := contentRepo(t, "", `rules:
+  - id: floored
+    type: forbidden-pattern
+    scope: {include: ['**'], min_files: 50}
+    params: {pattern: TODO}
+  - id: floored-tree
+    type: required-pattern
+    scope: {include: ['**'], min_files: 50}
+    params: {pattern: REQUIRED, mode: exists}
+`)
+	code, doc, errOut := runContent(t, "TODO\n", "check-content", "-C", root, "--path", "a.go")
+	if code != 1 || !reflect.DeepEqual(doc.EvaluatedRuleIDs, []string{"floored"}) {
+		t.Fatalf("floored rule: code=%d doc=%+v stderr=%s", code, doc, errOut)
+	}
+	if len(doc.Findings) != 1 || doc.Findings[0].Rule != "floored" || doc.Findings[0].Line != 1 {
+		t.Fatalf("want the pattern finding alone, never a floor finding: %+v", doc.Findings)
+	}
+	if got := notEvaluatedReasons(doc); got["floored-tree"] != "finalizer" {
+		t.Fatalf("a floor must not excuse a tree-dependent checker: %v", got)
+	}
+	code, clean, errOut := runContent(t, "fine\n", "check-content", "-C", root, "--path", "a.go")
+	if code != 0 || clean.FindingsTotal != 0 || clean.Status != "clean" {
+		t.Fatalf("clean content under a floor of 50 must pass: code=%d doc=%+v stderr=%s", code, clean, errOut)
 	}
 }
 

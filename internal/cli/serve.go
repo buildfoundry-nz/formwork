@@ -30,11 +30,13 @@ func (nopWriteCloser) Close() error { return nil }
 func runServe(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs, root := newFlagSet("serve", "repository root whose configuration governs check_file calls", stderr)
 	mcpFlag := fs.Bool("mcp", false, "serve the Model Context Protocol over stdin/stdout")
+	socketFlag := fs.String("socket", "", "serve check-content requests on this Unix socket path")
+	idleFlag := fs.Duration("idle", residentIdleDefault, "with --socket, exit after this long without a request")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if fs.NArg() != 0 || !*mcpFlag {
-		fmt.Fprintln(stderr, "usage: formwork serve --mcp [-C root]")
+	if fs.NArg() != 0 || *mcpFlag == (*socketFlag != "") || *idleFlag <= 0 {
+		fmt.Fprintln(stderr, "usage: formwork serve (--mcp | --socket <path> [--idle <duration>]) [-C root]")
 		return 2
 	}
 	corpus, err := newCheckFileCorpus(*root)
@@ -43,6 +45,9 @@ func runServe(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 2
 	}
 	defer corpus.Close()
+	if *socketFlag != "" {
+		return serveSocket(corpus, *socketFlag, *idleFlag, stderr)
+	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "formwork", Version: displayVersion()}, nil)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "check_file",

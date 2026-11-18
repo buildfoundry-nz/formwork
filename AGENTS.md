@@ -63,8 +63,9 @@ rule's scope — including the ones nobody declared.
 content from stdin and evaluates it through the ordinary engine over one
 in-memory file. Only checkers that explicitly implement path-aware
 `rules.ContentOnly` are eligible. Finalizers, whole-tree/cross-file readers,
-`scope.min_files`, `scope.not_declaring`, generated-only scopes, and unknown
-checkers are deferred with explicit reasons; `cost: fast` is not eligibility.
+`scope.not_declaring`, generated-only scopes, and unknown checkers are deferred
+with explicit reasons; a `scope.min_files` floor is not, because it is checked
+outside the rule's evaluation; `cost: fast` is not eligibility.
 The versioned JSON report distinguishes clean eligible rules from zero eligible
 rules and never claims whole-repository coverage. `--batch` reads strict
 `{path, content}` JSON objects one per stdin line, loads config once, and emits
@@ -76,6 +77,9 @@ or filter these rules. Full `check` is unchanged.
 official MCP Go SDK. Supplied content wins over disk; omitted content reads the
 confined on-disk file. The resident corpus is invalidated by filesystem events,
 and a watcher failure forces strict reloads instead of stale answers.
+`formwork serve --socket` keeps the same resident corpus for
+`check-content --server`, which answers exactly as local evaluation does and
+falls back to it when no server for that root and version answers.
 
 **Self-testing.** `formwork test` (fire/pass fixtures, `want:` markers, `.want`
 manifests) and `formwork lint` (rules-present, fixture coverage, empty scope,

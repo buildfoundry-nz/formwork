@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -98,6 +99,7 @@ func runCheckContent(args []string, stdin io.Reader, stdout, stderr io.Writer) i
 	pathFlag := fs.String("path", "", "root-relative file path to evaluate (required with single-file stdin; the path need not exist)")
 	allFindings := fs.Bool("all-findings", false, "return every finding instead of the first three")
 	batch := fs.Bool("batch", false, "read one {path, content} JSON object per stdin line and emit one result per line")
+	server := fs.String("server", "", "directory of resident-server sockets: answer from the server for this root, starting one for the next call when none answers")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -108,6 +110,17 @@ func runCheckContent(args []string, stdin io.Reader, stdout, stderr io.Writer) i
 			fmt.Fprintln(stderr, "usage: formwork check-content [flags] --path <file> (complete file content on stdin; no path operands)")
 		}
 		return 2
+	}
+	if *server != "" {
+		input, err := io.ReadAll(stdin)
+		if err != nil {
+			fmt.Fprintln(stderr, "formwork: reading stdin:", err)
+			return 2
+		}
+		if code, ok := checkContentViaResident(*server, *root, *batch, *pathFlag, *allFindings, input, stdout, stderr); ok {
+			return code
+		}
+		stdin = bytes.NewReader(input)
 	}
 	cfg, ok := checkContentLoadGated(*root, stderr)
 	if !ok {

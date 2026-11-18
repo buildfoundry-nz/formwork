@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- **A resident `check-content` server.** `formwork serve --socket <path>` keeps one
+  compiled corpus for a root and answers each Unix-socket connection as one
+  `check-content --batch` run, reloading on `.formwork` changes as `serve --mcp`
+  does. `check-content --server <dir>` asks it and prints exactly what local
+  evaluation prints; when none answers it evaluates locally and starts one for
+  the next call. A per-edit hook stops paying for loading and compiling the
+  corpus on every call.
+
 ## 0.22.1
 
 ### Fixed

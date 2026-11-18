@@ -1738,6 +1738,31 @@ complete. JSON write errors are exit 2. The aggregate exit is 1 if any record
 has an error-severity finding, 0 otherwise, and 2 for input/config/engine/output
 failure. No batch-wide status replaces each record's `status` and `coverage`.
 
+### Resident server
+
+```sh
+formwork check-content [-C <root>] --server <dir> (--path P | --batch) [--all-findings]
+formwork serve --socket <path> [--idle <duration>] [-C <root>]
+```
+
+A hook that checks one file per edit pays for loading and compiling the whole
+corpus on every call. With `--server <dir>`, `check-content` asks a resident
+server instead. The socket is `<dir>/formwork-<version>-<root hash>.sock`, so
+two engine versions or two roots never share a corpus. When no server answers,
+the call evaluates locally as it would without the flag, and a server is started
+in the background for the next call. Its stdout, stderr and exit code are the
+local ones either way.
+
+`serve --socket` keeps one compiled corpus for `-C <root>`, reloads it on the
+same `.formwork` filesystem events as `serve --mcp`, and answers each connection
+as one `check-content --batch` run. A second server for a socket another holds
+exits 0. The socket is mode 0600, under a directory created 0700. The server
+exits after `--idle` without a request (default 15m) once every answer in flight
+is written. A request whose root or version differs from the server's is
+refused, and the client evaluates locally. The connection protocol between a
+client and the server it started is internal to one engine version and is not
+API.
+
 ### MCP `check_file`
 
 ```sh

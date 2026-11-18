@@ -715,7 +715,7 @@ Totals and error-severity exit status use the untruncated result. `status` is
 `clean`, `findings`, `no_eligible_rules`, or `not_scanned`, and `coverage`
 carries `rules_total`, `in_scope`, `eligible`, `evaluated`, `deferred`, and
 `out_of_scope`; there is deliberately no vacuous `rules_passed`. Not-evaluated
-reasons are `generated_excluded`, `scope_min_files`, `scope_not_declaring`,
+reasons are `generated_excluded`, `scope_not_declaring`,
 `generated_only_scope`, `finalizer`, `whole_tree_invariant`, and
 `content_only_not_supported`. Generated exclusion is a scope exclusion, not a
 deferral. Rules outside the path scope contribute only to `out_of_scope`, and a
@@ -766,6 +766,17 @@ filesystem write, create, remove, or rename under `.formwork` invalidates it.
 Watcher failure disables reuse, so every subsequent call uses the strict loader
 rather than stale rules. No verdict cache is stored. Warm `check_file` calls on
 the validating target have a p95 target under 300 ms.
+
+#### Resident single-content server
+
+`formwork serve --socket <path> -C <root>` keeps the same resident corpus and
+answers each Unix-socket connection as one `check-content --batch` run, so a
+per-edit hook does not reload the corpus. `check-content --server <dir>` asks
+the server for its root and version and returns exactly what local evaluation
+would; when none answers it evaluates locally and starts one for the next call.
+A second server for a held socket exits; an idle server exits after its last
+answer. A request for another root or version is refused, never answered from
+the wrong corpus.
 
 Performance target: full-tree evaluation of all fast rules on a repo the size
 of the validating target in low single-digit seconds (vs ~30s today), single

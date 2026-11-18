@@ -94,6 +94,9 @@ table.
   line and output is one compact object with this same schema per line, in input
   order. Per-record hashes, status, coverage, and replay identity are API; no
   batch-wide document replaces them.
+- **`check-content --server`** prints exactly what local evaluation prints. The
+  socket protocol between it and `serve --socket` is internal to one version and
+  is not API.
 - **MCP `check_file`** returns that same schema-1 document as structured
   content. Its input and result field names share the `check-content`
   compatibility contract; a short text summary accompanies them.

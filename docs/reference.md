@@ -1610,6 +1610,32 @@ Refused with exit 2, never dropped: a pin without `--shard`; a spec that is not
 twice; a lane that selects none of the selected rules (the job that set up for
 them would set up for nothing); and an id two pins place on different shards.
 
+### Running a listed selection: `--rules-file PATH`
+
+`check --rules-file PATH` runs exactly the rule ids `PATH` lists, one per line
+(blank lines and `#` comments are ignored, a repeated id counts once). It is the
+carrier for a selector outside the engine that has decided which rules a change
+can affect: the engine runs that list, and nothing else.
+
+```sh
+formwork check --lane ci --rules-file selected.txt --shard 1/2 -format json > shard-1.json
+```
+
+The file narrows the lane; it never widens it. It is applied right after
+`--lane` and before `--shard`, so the shards partition the listed set and their
+union is that set, each id exactly once. A pin's lane is then judged against the
+listed set too, so a pin whose lane holds none of the listed rules is refused as
+above.
+
+A selected report says so. The headline adds `M of L lane rule(s) selected by
+--rules-file`, and the JSON report carries `scan.selection`:
+`{"listed": M, "lane": L}`. A report without the flag omits the field and is
+byte-identical to before, so a whole-lane run still reads as one.
+
+Refused with exit 2, never shrunk: an empty value, an unreadable file, a file
+that lists no id, and any listed id the selected lane does not run (each such id
+is named).
+
 ---
 
 ## Single-content checks

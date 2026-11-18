@@ -236,6 +236,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	progress := fs.Bool("progress", false, "stream one line per finalizer to stderr as it completes (rule id + cumulative ms) — liveness for long whole-corpus runs; never affects stdout or the verdict")
 	durations := fs.String("durations", "", durationsUsage)
 	shard := fs.String("shard", "", shardUsage)
+	rulesFile := fs.String("rules-file", "", rulesFileUsage)
 	var pins []shardPin
 	fs.Func("shard-pin", shardPinUsage, func(spec string) error {
 		p, err := parseShardPin(spec)
@@ -329,6 +330,10 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	if !ok {
 		return 2
 	}
+	listed, selecting, ok := listedRuleIDs(fs, *rulesFile, stderr)
+	if !ok {
+		return 2
+	}
 	// --lane selects which rules run; --staged/--range select which files.
 	// Unknown lane → config error (exit 2).
 	rls := cfg.Rules
@@ -340,6 +345,17 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		rls = selected
+	}
+	var selection *report.Selection
+	if selecting {
+		laneRules := len(rls)
+		picked, err := selectListed(rls, listed)
+		if err != nil {
+			fmt.Fprintln(stderr, "formwork:", err)
+			return 2
+		}
+		rls = picked
+		selection = &report.Selection{Listed: len(rls), Lane: laneRules}
 	}
 	// --shard partitions what the lane selected, before the cost filters, so
 	// every shard job partitions the same set whatever else it narrows. The
@@ -490,6 +506,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		UnfollowedLinks: meta.UnfollowedLinks(fset.Ignored),
 	}
 	summary.Shard = shardInfo
+	summary.Selection = selection
 	// Wall and CPU accounting for whole-tree runs, where a lane can hold
 	// thousands of rules and minutes of silence. File-set modes keep their
 	// 0.6.1 shape (no timing, no progress). Neither reaches a verdict.

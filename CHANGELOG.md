@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- **`check --rules-file PATH` runs exactly the rule ids a file lists.** A selector
+  outside the engine decides which rules a change can affect; the engine runs that
+  list after `--lane` and before `--shard`, so the shards partition the listed set.
+  An id the lane does not run, an empty or unreadable file, or a file that lists no
+  id is refused with exit 2 rather than run as a smaller set. The JSON report's
+  `scan.selection` (`{"listed": M, "lane": L}`) and the headline say the run judged
+  a selection; a run without the flag reports exactly as before.
+
 ## 0.22.0
 
 ### Added

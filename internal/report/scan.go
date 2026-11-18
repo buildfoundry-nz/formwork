@@ -127,6 +127,18 @@ type ScanSummary struct {
 	// part, not the whole: the headline says so, and the id list is what lets
 	// a merge of the N parts prove each rule ran exactly once.
 	Shard *Shard
+	// Selection is set when `check --rules-file` narrowed the lane to a listed
+	// set of rule ids. A selected report judged part of the lane, by design: a
+	// consumer that treats it as the whole corpus would read every unlisted
+	// rule as passing.
+	Selection *Selection
+}
+
+// Selection is one `check --rules-file` run: how many rule ids it listed (and
+// therefore ran, before any --shard), out of how many the lane selects.
+type Selection struct {
+	Listed int `json:"listed"`
+	Lane   int `json:"lane"`
 }
 
 // Shard is one `check --shard K/N` run: its position and its rule ids, sorted.
@@ -249,6 +261,9 @@ func (s ScanSummary) headline() string {
 	if s.FileSetMode != "" {
 		line = fmt.Sprintf("%d path(s) requested by %s, %d file(s) scanned", s.PathsRequested, s.FileSetMode, s.FilesScanned)
 	}
+	if s.Selection != nil {
+		line += fmt.Sprintf(", %d of %d lane rule(s) selected by --rules-file", s.Selection.Listed, s.Selection.Lane)
+	}
 	if s.Shard != nil {
 		line += fmt.Sprintf(", shard %d/%d (%d of the selected rule id(s); the other shards run the rest)", s.Shard.Index, s.Shard.Count, len(s.Shard.Rules))
 	}
@@ -359,6 +374,7 @@ type jsonScan struct {
 	Prunes               []jsonPrune `json:"prune_channels"`
 	UnfollowedLinks      []string    `json:"unfollowed_symlinks"`
 	Shard                *Shard      `json:"shard,omitempty"`
+	Selection            *Selection  `json:"selection,omitempty"`
 }
 
 // toJSON renders the summary with non-nil slices, so an empty one encodes as
@@ -375,6 +391,7 @@ func (s ScanSummary) toJSON() jsonScan {
 		Prunes:               make([]jsonPrune, 0, len(s.Prunes)),
 		UnfollowedLinks:      make([]string, 0, len(s.UnfollowedLinks)),
 		Shard:                s.Shard,
+		Selection:            s.Selection,
 	}
 	out.RulesMatchingNoFiles = append(out.RulesMatchingNoFiles, s.RulesMatchingNoFiles...)
 	// Uncapped, for the reason the not-run list is: the cap is a readability

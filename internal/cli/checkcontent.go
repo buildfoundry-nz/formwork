@@ -245,9 +245,11 @@ func planCheckContent(rls []*config.Rule, path string, content []byte) (eligible
 			continue
 		}
 		inScope++
+		// scope.min_files is not a reason to defer. The floor is a claim about
+		// how many paths the scope selects, checked by ScopeFloorFindings
+		// outside engine.Run, and one file's content cannot move it: scope is
+		// decided by path. The per-file half is the same check `check` runs.
 		switch {
-		case r.MinFiles() > 0:
-			deferRule(r, "scope_min_files")
 		case len(r.NotDeclaringEntries()) > 0:
 			deferRule(r, "scope_not_declaring")
 		case r.JudgesGenerated():

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.22.1
+
 ### Fixed
 
 - **`check-content` evaluates rules that declare `scope.min_files`.** It deferred

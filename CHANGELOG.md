@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.23.0
+
 ### Added
 
 - **A resident `check-content` server.** `formwork serve --socket <path>` keeps one

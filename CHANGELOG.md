@@ -15,6 +15,17 @@
   `check-content` defers the rule, as it does every finalizer. Design:
   `docs/specs/2026-11-19-go-types-rule-family-design.md`.
 
+### Fixed
+
+- **`check-content` defers a `sql/locking-select-order` rule that reads
+  `params.schemas`.** Such a rule judges a `.sql` file against schema files
+  beside it, but it claimed a content-only verdict, so a single-content check of
+  any `.sql` file holding a statement stopped with an engine error ("… has no
+  tree to read them from") instead of judging the file. The rule now opts into
+  content-only evaluation only when it reads no schemas; with schemas it is
+  deferred as `content_only_not_supported`, and the file's other rules still
+  run.
+
 ## 0.23.1
 
 ### Changed

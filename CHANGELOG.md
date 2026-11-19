@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.23.1
+
 ### Changed
 
 - **A single-file check asks git its three questions at once.** Deciding

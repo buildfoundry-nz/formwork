@@ -39,7 +39,7 @@ grammar), and enumerating those exceptions would be a list that itself rots.
 Prose accuracy inside an entry is likewise not mechanically checkable; a
 handful of facts too easy to get wrong are pinned individually.
 
-Counts at the time of writing: **29 rule types, 15 preprocessors.** If your
+Counts at the time of writing: **30 rule types, 15 preprocessors.** If your
 binary reports different numbers, believe your binary and file an issue against
 this document.
 
@@ -249,7 +249,7 @@ are enumerated by the escape-hatch census with their reason.
 
 ## Rule types
 
-29 registered rule types. Parameters below are the strictly-decoded set — an unknown one is
+30 registered rule types. Parameters below are the strictly-decoded set — an unknown one is
 exit 2. Each entry gives what the type asserts, every parameter it decodes, and
 a worked example.
 
@@ -813,6 +813,41 @@ new home is one comment at its declaration.
     include: ["internal/**/*.go"]
   params:
     marker: 'formwork:single-home'
+```
+
+### Go type analyzers (`internal/rules/gotypes`)
+
+These rules know what a name refers to. They run under `go vet`, with the
+formwork binary itself as the vettool, so the go command builds every
+package's type information and caches the result. formwork vets the packages
+that hold an in-scope file, once per module, keeps only the diagnostics
+positioned in an in-scope file, and needs a `go.mod` above every such file
+inside the root. A package that does not build or type-check is an engine
+error (exit 2), never a clean result. `check-content` defers these rules, as
+it defers every finalizer. Design:
+`docs/specs/2026-11-19-go-types-rule-family-design.md`.
+
+#### `go/forbidden-type-in-position`
+Reports a listed type wherever it is the type of a listed position, resolved
+with `go/types`: written directly, through an alias declared in any package, or
+inferred. `any` is the empty interface by any spelling, including a defined
+type whose underlying type it is; a type parameter is never it, so `[T any]` is
+not a finding. Any other entry in `types` is compared with the type's qualified
+spelling, such as `encoding/json.RawMessage`. Generated files are skipped.
+
+| param | meaning |
+|---|---|
+| `types` | required: the forbidden types |
+| `positions` | required: any of `field`, `param` (variadic included), `result`, `var` (declared or inferred), `elem` (slice, array, pointer and channel elements, at any depth), `map` (keys and values, at any depth), `type-arg` (explicit or inferred) |
+
+```yaml
+- id: no-empty-interface
+  type: go/forbidden-type-in-position
+  scope:
+    include: ["**/*.go"]
+  params:
+    types: [any]
+    positions: [field, param, result, var, elem, map, type-arg]
 ```
 
 ### Dart analyzers (`internal/rules/dartscan`)

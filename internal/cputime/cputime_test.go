@@ -1,6 +1,7 @@
 package cputime_test
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -102,5 +103,26 @@ func TestCombinedOutputStartFailureAddsNoCPU(t *testing.T) {
 	}
 	if got := meter.OffThreadCPU(); got != 0 {
 		t.Fatalf("a child that never started charged %s", got)
+	}
+}
+
+func TestRunChargesTheChildAndKeepsItsStreamsApart(t *testing.T) {
+	if !cputime.Supported {
+		t.Skip("process-state CPU assertion requires a supported host")
+	}
+	var meter cputime.Meter
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command("sh", "-c", "i=0; while [ $i -lt 20000 ]; do i=$((i+1)); done; echo out; echo err >&2; exit 3")
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cputime.Run(&meter, cmd)
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 3 {
+		t.Fatalf("error = %v, want exit 3", err)
+	}
+	if stdout.String() != "out\n" || stderr.String() != "err\n" {
+		t.Fatalf("stdout %q stderr %q, want each stream on its own", stdout.String(), stderr.String())
+	}
+	if meter.OffThreadCPU() <= 0 {
+		t.Fatal("busy child reported zero CPU")
 	}
 }

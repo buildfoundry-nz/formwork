@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- **`go/forbidden-type-in-position`, the first `go/types` rule.** It reports a
+  listed type wherever it is the type of a listed position (struct fields,
+  params, results, vars, slice, array, pointer and channel elements, map keys
+  and values, type arguments), resolved with `go/types`: written directly,
+  through an alias declared in another package, or inferred. `[T any]` is not a
+  finding. The rule runs under `go vet` with the formwork binary as the
+  vettool, once per module, so the go command builds and caches the type
+  information. A package that does not type-check is an engine error.
+  `check-content` defers the rule, as it does every finalizer. Design:
+  `docs/specs/2026-11-19-go-types-rule-family-design.md`.
+
 ## 0.23.1
 
 ### Changed

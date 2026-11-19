@@ -58,3 +58,17 @@ func CombinedOutput(m *Meter, cmd *exec.Cmd) ([]byte, error) {
 	}
 	return out, err
 }
+
+// Run runs cmd with the streams its caller set and charges the child's user
+// and system CPU as CombinedOutput does: whenever it started, including when it
+// returned an *exec.ExitError.
+func Run(m *Meter, cmd *exec.Cmd) error {
+	if m == nil {
+		panic("cputime.Run: nil meter")
+	}
+	err := cmd.Run()
+	if cmd.ProcessState != nil {
+		m.Add(cmd.ProcessState.UserTime() + cmd.ProcessState.SystemTime())
+	}
+	return err
+}

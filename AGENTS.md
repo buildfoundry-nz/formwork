@@ -35,11 +35,12 @@ answering "nothing there" to "I cannot look" is a fail-open. Symlinks are never
 followed; refusing is the loud move. Skipped links are named in the census, with
 their reason.
 
-**Rule types — 26 registered** across `internal/rules/`: the declarative core
+**Rule types — 30 registered** across `internal/rules/`: the declarative core
 (`forbidden-pattern`, `required-pattern`, `pattern-count`, `ordering`,
 `file-size`, `file-naming`, `binary-content`, `doc-path-exists`,
 `pair-consistency`, `set-relation`, `baseline`), the built-in analyzers
-(`go/*` ×5 in `goast`, `dart/*` ×4 in `dartscan`, `sql/*` ×4 in `sqlparse` +
+(`go/*` ×7 in `goast`, `go/forbidden-type-in-position` in `gotypes` under
+`go vet`, `dart/*` ×5 in `dartscan`, `sql/*` ×4 in `sqlparse` +
 `sqltext`), and the heavy external-tool pair (`command`, `git-diff`).
 
 **SQL parse-tree path.** Real PostgreSQL grammar via `wasilibs/go-pgquery` (WASM

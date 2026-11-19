@@ -272,3 +272,20 @@ func TestSchemaFileThatDoesNotParseIsAnError(t *testing.T) {
 		t.Fatal("a schema that does not parse must be an error, never an empty key set")
 	}
 }
+
+// A rule that reads params.schemas judges a file against other files, so it is
+// never content-only: a single-content check would have no tree to read the
+// schemas from. Without schemas, a .sql file stays content-only.
+func TestLockingOrderWithSchemasIsNotContentOnly(t *testing.T) {
+	c, _ := schemaChecker(t)
+	if rules.IsContentOnly(c, "q.sql") {
+		t.Fatal("sql/locking-select-order with schemas claims a content-only verdict for q.sql")
+	}
+	plain := checker(t, "sql/locking-select-order", "")
+	if !rules.IsContentOnly(plain, "q.sql") {
+		t.Fatal("sql/locking-select-order without schemas lost its content-only verdict for q.sql")
+	}
+	if rules.IsContentOnly(plain, "q.go") {
+		t.Fatal("sql/locking-select-order claims a content-only verdict for a .go file")
+	}
+}

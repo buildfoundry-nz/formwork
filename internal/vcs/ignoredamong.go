@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // IgnoredAmong answers IgnoredUnder's question for the given paths only: it
@@ -153,16 +154,31 @@ func (k *keyState) listable() bool {
 }
 
 func modelIgnored(root string, keys []string, frame indexFrame) ([]IgnoredPath, error) {
-	prefix, err := frame.git(root, "rev-parse", "--show-prefix")
-	if err != nil {
-		return nil, err
+	// The three questions for git do not depend on one another's answers, so
+	// they are asked at once: one git round trip of wall time instead of three,
+	// which on a loaded machine is most of a single-file check. The index is
+	// read under :(icase) whatever core.ignorecase says, because the answer to
+	// that is not in yet; indexFacts folds or does not afterwards, and a
+	// case-insensitive listing holds every entry a case-sensitive one would.
+	var (
+		prefix, listing                string
+		fold                           bool
+		prefixErr, foldErr, listingErr error
+		wg                             sync.WaitGroup
+	)
+	wg.Add(3)
+	go func() { defer wg.Done(); prefix, prefixErr = frame.git(root, "rev-parse", "--show-prefix") }()
+	go func() { defer wg.Done(); fold, foldErr = frame.ignoreCase(root) }()
+	go func() { defer wg.Done(); listing, listingErr = frame.git(root, indexArgs(keys)...) }()
+	wg.Wait()
+	if prefixErr != nil {
+		return nil, prefixErr
 	}
 	if strings.TrimSuffix(prefix, "\n") != "" {
 		return nil, errNeedsWholeListing
 	}
-	fold, err := frame.ignoreCase(root)
-	if err != nil {
-		return nil, err
+	if foldErr != nil {
+		return nil, foldErr
 	}
 
 	// Pass 1, the filesystem: which keys the walk can reach at all.
@@ -192,9 +208,10 @@ func modelIgnored(root string, keys []string, frame indexFrame) ([]IgnoredPath, 
 	}
 
 	// Pass 2, the index.
-	if err := readIndexFacts(root, frame, onDisk, fold, states); err != nil {
-		return nil, err
+	if listingErr != nil {
+		return nil, listingErr
 	}
+	indexFacts(listing, onDisk, fold, states)
 
 	// Pass 3, check-ignore: every key that could still be listed or entered, in
 	// both spellings a directory needs.
@@ -223,6 +240,7 @@ func modelIgnored(root string, keys []string, frame indexFrame) ([]IgnoredPath, 
 	}
 	var verdicts []IgnoredPath
 	if len(asks) > 0 {
+		var err error
 		if verdicts, err = confirmIgnored(root, asks, frame); err != nil {
 			return nil, err
 		}
@@ -295,37 +313,36 @@ func parentEntered(states map[string]*keyState, k string) bool {
 	return st != nil && st.entered
 }
 
-// maxIndexPathspecs bounds the argv readIndexFacts builds. Past it the whole
-// index is read instead — the same facts, about 30 ms for 83k entries — so a
-// large check-content batch cannot run into the kernel's argument limit.
+// maxIndexPathspecs bounds the argv indexArgs builds. Past it the whole index
+// is read instead — the same facts, about 30 ms for 83k entries — so a large
+// check-content batch cannot run into the kernel's argument limit.
 var maxIndexPathspecs = 512
 
-// readIndexFacts records, for each key on disk, whether the index holds it,
-// whether as a gitlink, and whether it holds anything below it. The pathspecs
-// are the keys themselves, so git lists only those subtrees; :(literal) keeps a
-// name holding a glob character from matching anything else, and :(icase) is
-// added where the walk folds case, so a case-variant entry is not missed.
-func readIndexFacts(root string, frame indexFrame, keys []string, fold bool, states map[string]*keyState) error {
-	magic := ":(literal)"
-	if fold {
-		magic = ":(literal,icase)"
-	}
+// indexArgs lists the index entries at and below each key. The pathspecs are
+// the keys themselves, so git lists only those subtrees; :(literal) keeps a
+// name holding a glob character from matching anything else, and :(icase)
+// keeps a case-variant entry in the listing for a walk that folds case.
+func indexArgs(keys []string) []string {
 	args := []string{"ls-files", "-z", "--stage"}
 	if len(keys) <= maxIndexPathspecs {
 		args = append(args, "--")
 		for _, k := range keys {
-			args = append(args, magic+k)
+			args = append(args, ":(literal,icase)"+k)
 		}
 	}
+	return args
+}
+
+// indexFacts records, for each key on disk, whether the index holds it,
+// whether as a gitlink, and whether it holds anything below it. Names are
+// compared as the walk compares them: folded only where core.ignorecase is
+// set, so the case variants the :(icase) listing adds match nothing otherwise.
+func indexFacts(listing string, keys []string, fold bool, states map[string]*keyState) {
 	byName := make(map[string]*keyState, len(keys))
 	for _, k := range keys {
 		byName[foldName(k, fold)] = states[k]
 	}
-	out, err := frame.git(root, args...)
-	if err != nil {
-		return err
-	}
-	for _, rec := range strings.Split(out, "\x00") {
+	for _, rec := range strings.Split(listing, "\x00") {
 		// Each record: "<mode> <object> <stage>\t<path>".
 		tab := strings.IndexByte(rec, '\t')
 		if tab < 0 {
@@ -347,7 +364,6 @@ func readIndexFacts(root string, frame indexFrame, keys []string, fold bool, sta
 			}
 		}
 	}
-	return nil
 }
 
 // ignoreCase is core.ignorecase as git resolves it for root; unset is false.

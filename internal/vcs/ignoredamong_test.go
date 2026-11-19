@@ -1,6 +1,7 @@
 package vcs_test
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -155,6 +156,45 @@ func TestIgnoredAmongMatchesTheWholeListing(t *testing.T) {
 			}
 			if !reflect.DeepEqual(paths(got), append([]string{}, tc.want...)) {
 				t.Fatalf("IgnoredAmong(%q) paths = %v, want %v", tc.query, paths(got), tc.want)
+			}
+		})
+	}
+}
+
+// The index and the disk spell one directory in different cases, and a pattern
+// names the disk's spelling. Folding, the walk finds the entry and lists
+// nothing; not folding, the file is untracked and ignored, and is listed. Both
+// directions are asked, so neither the entry side nor the key side can fold
+// on its own.
+func TestIgnoredAmongFoldsIndexNamesOnlyWhereGitDoes(t *testing.T) {
+	for _, tc := range []struct {
+		ignoreCase, index, disk string
+		want                    []string
+	}{
+		{"true", "fold", "Fold", nil},
+		{"true", "Fold", "fold", nil},
+		{"false", "fold", "Fold", []string{"Fold/t.go"}},
+		{"false", "Fold", "fold", []string{"fold/t.go"}},
+	} {
+		t.Run(fmt.Sprintf("core.ignorecase=%s index=%s disk=%s", tc.ignoreCase, tc.index, tc.disk), func(t *testing.T) {
+			dir := initRepo(t)
+			query := tc.disk + "/t.go"
+			write(t, dir, ".gitignore", query+"\n")
+			write(t, dir, tc.index+"/t.go", "x\n")
+			run(t, dir, "add", "-f", ".gitignore", tc.index+"/t.go")
+			if err := os.Rename(filepath.Join(dir, tc.index), filepath.Join(dir, tc.disk)); err != nil {
+				t.Fatal(err)
+			}
+			run(t, dir, "config", "core.ignorecase", tc.ignoreCase)
+			got, err := vcs.IgnoredAmong(dir, []string{query})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := wholeListingFor(t, dir, query); !reflect.DeepEqual(got, want) {
+				t.Fatalf("IgnoredAmong = %+v, whole listing restricted to its keys = %+v", got, want)
+			}
+			if !reflect.DeepEqual(paths(got), append([]string{}, tc.want...)) {
+				t.Fatalf("IgnoredAmong paths = %v, want %v", paths(got), tc.want)
 			}
 		})
 	}

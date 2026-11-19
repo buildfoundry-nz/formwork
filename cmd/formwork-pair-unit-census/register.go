@@ -19,6 +19,7 @@ import (
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/filesize"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/gitdiff"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/goast"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/gotypes"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/ordering"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/pairconsistency"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/pattern"

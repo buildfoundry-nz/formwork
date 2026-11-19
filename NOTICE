@@ -142,6 +142,7 @@ github.com/yosida95/uritemplate/v3 (BSD 3-Clause License)
 golang.org/x/oauth2 (BSD 3-Clause License)
 golang.org/x/sync (BSD 3-Clause License)
 golang.org/x/time (BSD 3-Clause License)
+golang.org/x/tools (BSD 3-Clause License)
 
     Copyright 2009 The Go Authors.
 
@@ -254,6 +255,7 @@ text is in the LICENSE file.
 
 --------------------------------------------------------------------------
 
-golang.org/x/sys and google.golang.org/protobuf additionally ship a PATENTS
-file granting patent rights on the Go authors' contributions. Each module's
-full license text ships in its own source tree.
+golang.org/x/sys, golang.org/x/sync, golang.org/x/time, golang.org/x/tools
+and google.golang.org/protobuf additionally ship a PATENTS file granting
+patent rights on the Go authors' contributions. Each module's full license
+text ships in its own source tree.

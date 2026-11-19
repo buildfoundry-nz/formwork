@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.24.0
+
 ### Added
 
 - **`go/forbidden-type-in-position`, the first `go/types` rule.** It reports a

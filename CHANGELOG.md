@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Changed
+
+- **A single-file check asks git its three questions at once.** Deciding
+  whether one path is gitignored took three git calls in turn — whether the root
+  is the top level, `core.ignorecase`, and the index entries at the path. They
+  do not depend on one another, so they now run concurrently, and the index is
+  listed case-insensitively and folded afterwards as before. On a TakeoffQS Go
+  file a resident `check-content` answer fell from 163-195 ms to 113-132 ms at a
+  load average of 44. The answer is unchanged.
+
 ## 0.23.0
 
 ### Added

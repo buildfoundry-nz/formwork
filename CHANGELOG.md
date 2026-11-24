@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.22.2
+
 ### Fixed
 
 - **Text only the SQL parser reads is not an unread site.** A composition handed

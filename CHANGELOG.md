@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Text only the SQL parser reads is not an unread site.** A composition handed
+  only to pg_query's `Parse`, `ParseToJSON`, `ParsePlPgSqlToJSON`, `Scan`,
+  `Fingerprint`, `FingerprintToUInt64` or `IsUtilityStmt` was an unknown call, so
+  `sql/parses` and `sql/statement-predicate` reported it as SQL that could not be
+  read. Its result is a tree, tokens, a hash or a classification, so the text ends
+  there. `Normalize`, `NormalizeUtility`, `SplitWithParser` and `SplitWithScanner`
+  return statements, so text they return is still followed to wherever it goes. The
+  parser is known by import path (`github.com/pganalyze/pg_query_go`, any major
+  version, and `github.com/wasilibs/go-pgquery`), so it is known under any alias,
+  and another package imported under its name is not. A `Deparse`d tree is new text
+  the flow does not follow.
+
 ## 0.22.1
 
 ### Fixed

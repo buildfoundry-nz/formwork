@@ -72,6 +72,11 @@ func TestTextTheSQLParserAndADriverReadStaysASite(t *testing.T) {
 			"func main() {\n\tq := \"DELETE FROM \" + os.Args[1]\n\tif _, err := pgquery.Parse(q); err != nil {\n\t\tpanic(err)\n\t}\n\tpool.Exec(q)\n}\n"),
 		"parsed under its plain name and run": parserFile(plainPgQuery, parserDrivers+
 			"func main() {\n\tq := \"DELETE FROM \" + os.Args[1]\n\tpg_query.Parse(q)\n\ttx.Query(q)\n}\n"),
+		"parsed deparsed and run": parserFile(aliasedWasi, parserDrivers+
+			"func main() {\n\ttree, _ := pgquery.Parse(\"DELETE FROM \" + os.Args[1])\n\ttext, _ := pgquery.Deparse(tree)\n\tpool.Exec(text)\n}\n"),
+		"parsed returned deparsed and run": parserFile(aliasedPgQuery, parserDrivers+
+			"func parse(q string) *pg.ParseResult {\n\ttree, _ := pg.Parse(q)\n\treturn tree\n}\n\n"+
+			"func main() {\n\ttext, _ := pg.Deparse(parse(\"DELETE FROM \" + os.Args[1]))\n\tpool.Exec(text)\n}\n"),
 		"normalized then run": parserFile(aliasedPgQuery, parserDrivers+
 			"func main() {\n\tn, _ := pg.Normalize(\"DELETE FROM \" + os.Args[1])\n\tdb.QueryRow(n)\n}\n"),
 		"split then run": parserFile(plainWasi, parserDrivers+
@@ -110,6 +115,36 @@ func TestTextParsedWhereItIsBuiltIsNotASiteWithoutATree(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			src := parserFile(tc.imports, "func main() { "+tc.pkg+".Parse(\"DELETE FROM \" + os.Args[1]) }\n")
+			_, sites, err := sqlextract.FromGo("gen/g.go", []byte(src))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := len(sites) != 0; got != tc.site {
+				t.Errorf("reported unread = %v, want %v: %+v", got, tc.site, sites)
+			}
+		})
+	}
+}
+
+func TestTextParseResultIsConsumedBeforeItsInputIsInertWithoutATree(t *testing.T) {
+	for name, tc := range map[string]struct {
+		body string
+		site bool
+	}{
+		"the tree and error are printed": {
+			body: "func main() {\n\tq := \"DELETE FROM \" + os.Args[1]\n\ttree, err := pgquery.Parse(q)\n\tfmt.Print(tree, err)\n}\n",
+		},
+		"the tree is deparsed and run": {
+			body: parserDrivers + "func main() {\n\tq := \"DELETE FROM \" + os.Args[1]\n\ttree, _ := pgquery.Parse(q)\n\ttext, _ := pgquery.Deparse(tree)\n\tpool.Exec(text)\n}\n",
+			site: true,
+		},
+		"the tree is returned": {
+			body: "func parse() *pgquery.ParseResult {\n\tq := \"DELETE FROM \" + os.Args[1]\n\ttree, _ := pgquery.Parse(q)\n\treturn tree\n}\n",
+			site: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			src := parserFile(aliasedWasi, tc.body)
 			_, sites, err := sqlextract.FromGo("gen/g.go", []byte(src))
 			if err != nil {
 				t.Fatal(err)

@@ -13,8 +13,9 @@
   return statements, so text they return is still followed to wherever it goes. The
   parser is known by import path (`github.com/pganalyze/pg_query_go`, any major
   version, and `github.com/wasilibs/go-pgquery`), so it is known under any alias,
-  and another package imported under its name is not. A `Deparse`d tree is new text
-  the flow does not follow.
+  and another package imported under its name is not. `Parse` and `Deparse`
+  preserve the composition's provenance, so a tree that returns to SQL and reaches
+  a driver is still reported.
 
 ## 0.24.0
 

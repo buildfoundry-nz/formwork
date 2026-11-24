@@ -141,11 +141,13 @@ func inertSpans(file *ast.File) []span {
 					continue
 				}
 				writes[id.Obj]++
-				if v.Tok == token.DEFINE && len(v.Lhs) == len(v.Rhs) {
-					values[id.Obj] = v.Rhs[i]
-					if call, ok := v.Rhs[i].(*ast.CallExpr); ok && parserCall(file, call) == "Parse" {
+				if v.Tok == token.DEFINE && len(v.Rhs) == 1 {
+					if call, ok := v.Rhs[0].(*ast.CallExpr); ok && parserCall(file, call) == "Parse" {
 						parseResults[call] = append(parseResults[call], id.Obj)
 					}
+				}
+				if v.Tok == token.DEFINE && len(v.Lhs) == len(v.Rhs) {
+					values[id.Obj] = v.Rhs[i]
 				}
 			}
 		case *ast.ExprStmt:

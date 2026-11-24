@@ -45,16 +45,15 @@ var sqlParsers = map[string]bool{
 // sqlParserName is what both sqlParsers are called where they are imported plainly.
 const sqlParserName = "pg_query"
 
-// parserConsuming are the parsers' entry points whose result is a tree, tokens, a hash
-// or a classification: none is a statement anything runs, so the text ends in them.
-// parserTransparent return statements of their text, so it goes on in their result.
-// Any other function of theirs is an unknown call. DISCLOSED LIMIT: Deparse prints a
-// tree back as text this flow does not follow, as go/format does a go/parser tree.
+// parserConsuming are the parsers' entry points whose result cannot carry their
+// input into a driver. parserTransparent preserve provenance: Parse carries it
+// into the tree, Deparse carries it back into SQL, and the other transforms
+// return statements of their text. Any other parser function is an unknown call.
 var (
-	parserConsuming = map[string]bool{"Parse": true, "ParseToJSON": true, "ParsePlPgSqlToJSON": true, "Scan": true,
+	parserConsuming = map[string]bool{"ParseToJSON": true, "ParsePlPgSqlToJSON": true, "Scan": true,
 		"Fingerprint": true, "FingerprintToUInt64": true, "IsUtilityStmt": true}
-	parserTransparent = map[string]bool{"Normalize": true, "NormalizeUtility": true, "SplitWithParser": true,
-		"SplitWithScanner": true}
+	parserTransparent = map[string]bool{"Parse": true, "Deparse": true, "Normalize": true, "NormalizeUtility": true,
+		"SplitWithParser": true, "SplitWithScanner": true}
 )
 
 // parserCall is the entry point call names when it calls one of sqlParsers under
@@ -106,6 +105,9 @@ func inertSpans(file *ast.File) []span {
 	consumed := map[*ast.Object]int{}
 	values := map[*ast.Object]ast.Expr{}
 	writes := map[*ast.Object]int{}
+	parseCalls := map[*ast.CallExpr]bool{}
+	parseResults := map[*ast.CallExpr][]*ast.Object{}
+	parseIgnored := map[*ast.CallExpr]bool{}
 	consume := func(x ast.Expr) {
 		if id, ok := x.(*ast.Ident); ok && id.Obj != nil {
 			consumed[id.Obj]++
@@ -121,7 +123,12 @@ func inertSpans(file *ast.File) []span {
 				consume(v.Y)
 			}
 		case *ast.CallExpr:
-			if !isConsumingCall(v) && !parserConsuming[parserCall(file, v)] {
+			entry := parserCall(file, v)
+			if entry == "Parse" {
+				parseCalls[v] = true
+				return true
+			}
+			if !isConsumingCall(v) && !parserConsuming[entry] {
 				return true
 			}
 			for _, a := range v.Args {
@@ -136,7 +143,14 @@ func inertSpans(file *ast.File) []span {
 				writes[id.Obj]++
 				if v.Tok == token.DEFINE && len(v.Lhs) == len(v.Rhs) {
 					values[id.Obj] = v.Rhs[i]
+					if call, ok := v.Rhs[i].(*ast.CallExpr); ok && parserCall(file, call) == "Parse" {
+						parseResults[call] = append(parseResults[call], id.Obj)
+					}
 				}
+			}
+		case *ast.ExprStmt:
+			if call, ok := v.X.(*ast.CallExpr); ok && parserCall(file, call) == "Parse" {
+				parseIgnored[call] = true
 			}
 		case *ast.UnaryExpr:
 			if v.Op == token.AND {
@@ -151,6 +165,24 @@ func inertSpans(file *ast.File) []span {
 		}
 		return true
 	})
+	for call := range parseCalls {
+		results := parseResults[call]
+		safe := parseIgnored[call]
+		if len(results) > 0 {
+			safe = true
+			for _, obj := range results {
+				if writes[obj] != 1 || uses[obj]-1 != consumed[obj] {
+					safe = false
+					break
+				}
+			}
+		}
+		if safe {
+			for _, a := range call.Args {
+				consume(a)
+			}
+		}
+	}
 	for obj, value := range values {
 		// Its uses are the declaration plus the reads; each read must be consumed.
 		if writes[obj] == 1 && consumed[obj] > 0 && uses[obj]-1 == consumed[obj] {

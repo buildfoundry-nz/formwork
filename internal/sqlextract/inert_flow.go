@@ -608,8 +608,11 @@ func (ff *flowFile) flow(from string, i int) {
 	}
 }
 
-// isTransparentCall reports whether call is one of transparentFuncs.
-func isTransparentCall(call *ast.CallExpr) bool {
+// isTransparentCall reports whether call is one of transparentFuncs or parserTransparent.
+func (ff *flowFile) isTransparentCall(call *ast.CallExpr) bool {
+	if parserTransparent[parserCall(ff.file, call)] {
+		return true
+	}
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
 		return false
@@ -694,7 +697,7 @@ func (ff *flowFile) flowIntoAssign(from string, p *ast.AssignStmt, cur ast.Node)
 		g.edge(from, badFlow)
 		return
 	}
-	if isTransparentCall(call) {
+	if ff.isTransparentCall(call) {
 		for _, lhs := range p.Lhs {
 			to(lhs)
 		}

@@ -8,8 +8,9 @@ import (
 )
 
 // inert_flow_calls.go — how inert_flow.go follows text into a call: a known consumer
-// ends it, a known transform carries it on, a module function takes it as a parameter,
-// a builder holds it, and anything else is bad.
+// ends it (a SQL parser's among them, known by import path), a known transform carries
+// it on, a module function takes it as a parameter, a builder holds it, and anything
+// else is bad.
 
 // passBuilder links a builder handed to a module function's builder parameter: what
 // one writes the other holds. Anywhere else, the builder is out of sight.
@@ -84,6 +85,12 @@ func (ff *flowFile) flowThroughCall(from string, call *ast.CallExpr, cur ast.Nod
 		if id, ok := f.X.(*ast.Ident); ok && id.Obj != nil && ff.writerParams[id.Obj] != "" && (f.Sel.Name == "Write" || f.Sel.Name == "WriteString") {
 			g.edge(from, ff.writerParams[id.Obj])
 			return nil, true
+		}
+		switch entry := parserCall(ff.file, call); {
+		case parserConsuming[entry]:
+			return nil, true
+		case parserTransparent[entry]:
+			return up, false
 		}
 		if pkg, ok := f.X.(*ast.Ident); ok && pkg.Obj == nil {
 			name := f.Sel.Name

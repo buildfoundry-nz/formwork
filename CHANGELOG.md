@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.22.3
+
+### Fixed
+
+- **SQL cannot hide behind a parse/deparse round trip.** `Parse` and `Deparse`
+  preserve the composition's provenance, so SQL parsed and then returned to text
+  for a driver is still reported. Parse-only analysis remains inert. Single-file
+  checks consume a parse input only when its result is unused or fully consumed;
+  returning or deparsing the tree keeps the site visible.
+
 ## 0.22.2
 
 ### Fixed

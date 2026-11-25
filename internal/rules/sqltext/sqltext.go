@@ -37,6 +37,12 @@
 // parse; and the package doc there records that nothing outside sqlparse
 // imports go-pgquery.
 //
+// An optional `prefilter` literal skips a file before it is parsed. The skip
+// is not "the bytes contain the literal": a '+' chain, a fmt.Sprint, or a
+// strings.Builder can assemble it, and so can a call of a SQL template whose
+// body contains it. Those files are still parsed. A file that cannot name the
+// literal is not, so a syntax error in that file is not this rule's.
+//
 // HEURISTIC LIMITS remain, and are sqlextract's: SQL composed by fmt.Sprintf,
 // by concatenation with an operand that is not a Go constant, or through
 // strings.Builder is not reassembled, so a statement built that way is split
@@ -62,15 +68,18 @@ import (
 )
 
 type params struct {
-	Table   string   `yaml:"table"`
-	Require []string `yaml:"require"`
-	Forbid  []string `yaml:"forbid"`
+	Table     string   `yaml:"table"`
+	Require   []string `yaml:"require"`
+	Forbid    []string `yaml:"forbid"`
+	Prefilter string   `yaml:"prefilter"`
 }
 
 type predicate struct {
-	table   *regexp.Regexp
-	require []*regexp.Regexp
-	forbid  []*regexp.Regexp
+	table     *regexp.Regexp
+	require   []*regexp.Regexp
+	forbid    []*regexp.Regexp
+	prefilter string
+	names     *nameGate
 }
 
 func compileAll(kind string, pats []string) ([]*regexp.Regexp, error) {
@@ -111,7 +120,7 @@ func newPredicate(node *yaml.Node) (rules.Checker, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &predicate{table: table, require: require, forbid: forbid}, nil
+	return &predicate{table: table, require: require, forbid: forbid, prefilter: p.Prefilter, names: &nameGate{}}, nil
 }
 
 // statement is one candidate SQL statement plus the source line it starts on.
@@ -129,12 +138,21 @@ func (c *predicate) CheckFile(f *scan.File) ([]rules.Match, error) {
 		if err != nil {
 			return nil, err
 		}
+		// A .sql file is the statement text. The table regex cannot match a
+		// literal that is not in those bytes, and comment blanking does not
+		// join the bytes it replaces.
+		if c.prefilter != "" && !strings.Contains(string(content), c.prefilter) {
+			return nil, nil
+		}
 		// A .sql file is whole text: it begins outside any literal.
 		stmts = splitStatements(string(content), 1, true)
 	case "go":
 		content, err := f.Content()
 		if err != nil {
 			return nil, err
+		}
+		if c.skipGo(f, content) {
+			return nil, nil
 		}
 		stmts, unread, err = goStatements(f.Tree(), f.Path(), content)
 		if err != nil {

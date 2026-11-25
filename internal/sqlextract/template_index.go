@@ -17,11 +17,12 @@ import (
 // only when some call passes an argument that is not a constant — then the
 // definition cannot be judged whole, and neither can that call.
 //
-// The index is built once per walk (scan.FileSet.Memo through constEnv): every
-// Go file the walk kept is parsed and each call of a template recorded, with
-// its arguments folded. A call inside another template's body takes that
-// template's parameters, so it is instantiated from the outer template's
-// argument sets until nothing new appears.
+// The index is built once per template name (scan.FileSet.Memo through
+// constEnv). A call spells the template's name, so only files that contain
+// that name are parsed, and a template that calls it pulls its own callers in
+// the same way. A call inside another template's body takes that template's
+// parameters, so it is instantiated from the outer template's argument sets
+// until nothing new appears.
 
 type templateKey struct{ path, name string }
 
@@ -60,33 +61,89 @@ func (e *constEnv) useOf(fd *ast.FuncDecl, cf *constFile) *templateUse {
 	if e == nil {
 		return nil
 	}
-	e.usesOnce.Do(e.buildUses)
-	if u, ok := e.uses[templateKey{cf.path, fd.Name.Name}]; ok {
+	return e.indexUses(templateKey{cf.path, fd.Name.Name})
+}
+
+// indexUses records every call of k's name, and of any template that calls
+// it. Files that do not spell one of those names cannot call them.
+func (e *constEnv) indexUses(k templateKey) *templateUse {
+	e.usesMu.Lock()
+	defer e.usesMu.Unlock()
+	if e.uses == nil {
+		e.uses = map[templateKey]*templateUse{}
+		e.usesIndexed = map[string]bool{}
+		e.usesParsed = map[string]bool{}
+	}
+	if e.usesIndexed[k.name] {
+		if u, ok := e.uses[k]; ok {
+			return u
+		}
+		return &templateUse{seen: map[string]bool{}}
+	}
+	pending := []string{k.name}
+	for len(pending) > 0 {
+		batch := map[string]bool{}
+		for _, n := range pending {
+			if n != "" && !e.usesIndexed[n] {
+				batch[n] = true
+			}
+		}
+		pending = pending[:0]
+		if len(batch) == 0 {
+			break
+		}
+		for _, n := range e.scanCallers(batch) {
+			if !e.usesIndexed[n] && !batch[n] {
+				pending = append(pending, n)
+			}
+		}
+		for n := range batch {
+			e.usesIndexed[n] = true
+		}
+	}
+	e.instantiateNested()
+	if u, ok := e.uses[k]; ok {
 		return u
 	}
 	return &templateUse{seen: map[string]bool{}}
 }
 
-func (e *constEnv) buildUses() {
-	e.uses = map[templateKey]*templateUse{}
-	use := func(k templateKey) *templateUse {
-		u := e.uses[k]
-		if u == nil {
-			u = &templateUse{seen: map[string]bool{}}
-			e.uses[k] = u
-		}
-		return u
+func (e *constEnv) use(k templateKey) *templateUse {
+	u := e.uses[k]
+	if u == nil {
+		u = &templateUse{seen: map[string]bool{}}
+		e.uses[k] = u
 	}
-	var nested []nestedCall
+	return u
+}
+
+// scanCallers parses the files that spell a name in want and records the
+// template calls there. It returns template names whose bodies contain such a
+// call and whose own callers have not been read yet.
+func (e *constEnv) scanCallers(want map[string]bool) []string {
+	var outers []string
+	seenOuter := map[string]bool{}
 	for _, f := range e.tree.Files {
 		p := f.Path()
-		if !strings.HasSuffix(p, ".go") {
+		if !strings.HasSuffix(p, ".go") || e.usesParsed[p] {
 			continue
 		}
 		src, err := f.Content()
 		if err != nil || !strings.Contains(string(src), "(") {
 			continue
 		}
+		text := string(src)
+		hit := false
+		for n := range want {
+			if strings.Contains(text, n) {
+				hit = true
+				break
+			}
+		}
+		if !hit {
+			continue
+		}
+		e.usesParsed[p] = true
 		fs := token.NewFileSet()
 		file, err := parser.ParseFile(fs, p, src, 0)
 		if err != nil {
@@ -116,32 +173,40 @@ func (e *constEnv) buildUses() {
 			k := templateKey{fcf.path, fd.Name.Name}
 			set, all, ok := e.bindings(fd, call.Args, cf, nil, 0)
 			if ok && all {
-				use(k).add(set) // constant wherever it stands
+				e.use(k).add(set) // constant wherever it stands
 				return true
 			}
 			for _, b := range bodies {
 				if call.Pos() >= b.lo && call.End() <= b.hi {
 					// Takes the enclosing template's parameters.
-					nested = append(nested, nestedCall{outer: b.key, call: call, cf: cf})
+					e.nested = append(e.nested, nestedCall{outer: b.key, call: call, cf: cf})
+					if !want[b.key.name] && !e.usesIndexed[b.key.name] && !seenOuter[b.key.name] {
+						seenOuter[b.key.name] = true
+						outers = append(outers, b.key.name)
+					}
 					return true
 				}
 			}
-			use(k).dynamic = true
+			e.use(k).dynamic = true
 			return true
 		})
 	}
-	// Instantiate calls inside template bodies from the outer template's
-	// argument sets, to a fixed point. An outer template some call passes a
-	// non-constant makes every template it calls dynamic too.
+	return outers
+}
+
+// instantiateNested fills calls inside template bodies from the outer
+// template's argument sets, to a fixed point. An outer template some call
+// passes a non-constant makes every template it calls dynamic too.
+func (e *constEnv) instantiateNested() {
 	for changed := true; changed; {
 		changed = false
-		for _, nc := range nested {
+		for _, nc := range e.nested {
 			outer := e.uses[nc.outer]
 			fd, fcf := e.templateFunc(nc.call.Fun, nc.cf)
 			if outer == nil || fd == nil {
 				continue
 			}
-			u := use(templateKey{fcf.path, fd.Name.Name})
+			u := e.use(templateKey{fcf.path, fd.Name.Name})
 			if outer.dynamic && !u.dynamic {
 				u.dynamic, changed = true, true
 			}

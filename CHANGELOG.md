@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- **`sql/statement-predicate` takes an optional `prefilter`.** A Go file is
+  still parsed when it contains that literal, composes strings, or calls a SQL
+  template whose body contains it. Template indexing parses the files that
+  spell the template's name.
+
 ### Fixed
 
 - **Text only the SQL parser reads is not an unread site.** A composition handed

@@ -1055,6 +1055,15 @@ schema-qualified `app\.projects` works here, and matches any statement
 mentioning it anywhere. `sql/locking-target`'s `table` is a different thing —
 see its entry below.
 
+`prefilter` is optional. With none, every in-scope file is parsed. With one, a
+`.sql` file is read only when its bytes contain that literal. A `.go` file is
+still parsed when its bytes contain the literal, when it composes strings (a
+`+`, a `Sprint`, or a `strings.Builder` / `WriteString`), or when it names a
+SQL template whose body contains the literal. Those template names are learned
+from files that contain the literal, and indexing parses the files that spell
+the names. A syntax error in a skipped file is not this rule's. The literal
+must not change a verdict: `formwork lint` checks that.
+
 ```yaml
 - id: deletes-name-the-tenant
   type: sql/statement-predicate
@@ -1064,6 +1073,7 @@ see its entry below.
     table: '(?i)\bDELETE\s+FROM\s+app\.orders\b'
     require: ['(?i)\bWHERE\b[^;]*\btenant_id\b']
     forbid: ['(?i)\bWHERE\s+true\b']
+    prefilter: app.orders
 ```
 
 #### `sql/locking-target`

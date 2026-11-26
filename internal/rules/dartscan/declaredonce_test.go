@@ -113,6 +113,13 @@ func TestDartListedDeclarationMissingFromItsFileFails(t *testing.T) {
 	}
 }
 
+func TestDartListedFileOutsideTheTreeIsNotJudged(t *testing.T) {
+	got := dartRunAll(t, dartOnce(t, "lib/a.dart", "type AppCard", "lib/z.dart", "type AppPanel"), map[string]string{"lib/a.dart": appCard})
+	if len(got) != 0 {
+		t.Fatalf("a listed file the tree does not hold says nothing about staleness: %+v", got)
+	}
+}
+
 func TestDartDeclaredOnceConfig(t *testing.T) {
 	factory, _ := rules.Lookup(dartDeclaredOnce)
 	if factory == nil {

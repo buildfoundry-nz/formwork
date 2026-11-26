@@ -15,7 +15,8 @@ import (
 // dart/declared-once is go/declared-once for Dart: each listed top-level
 // declaration is the one declaration of its identity across the scope, and
 // any second declaration of it is a finding naming the owner. A listed
-// declaration its owner file does not declare is a finding too.
+// declaration its owner file does not declare is a finding too; a listed file
+// the scope does not hold is not judged.
 //
 // A top-level declaration is a line at column 0 that starts outside a string
 // and outside a block comment: dart format puts every top-level declaration
@@ -49,8 +50,9 @@ type declaredOnce struct {
 	owners  map[string]string // keyed identity → the file the list says owns it
 	entries []declaredEntry
 
-	mu    sync.Mutex
-	decls map[string][]declSite // listed keyed identity → every declaration of it
+	mu      sync.Mutex
+	scanned map[string]bool       // every file CheckFile read
+	decls   map[string][]declSite // listed keyed identity → every declaration of it
 }
 
 // keyed is the identity a declaration is counted under: a private name is
@@ -70,7 +72,7 @@ func newDeclaredOnce(node *yaml.Node) (rules.Checker, error) {
 	if len(p.Declarations) == 0 {
 		return nil, fmt.Errorf("dart/declared-once: params.declarations is required")
 	}
-	c := &declaredOnce{owners: map[string]string{}, decls: map[string][]declSite{}}
+	c := &declaredOnce{owners: map[string]string{}, scanned: map[string]bool{}, decls: map[string][]declSite{}}
 	for i, d := range p.Declarations {
 		if strings.TrimSpace(d.Path) == "" || d.Path != strings.TrimSpace(d.Path) {
 			return nil, fmt.Errorf("dart/declared-once: params.declarations[%d].path must be a repository path", i)
@@ -216,6 +218,7 @@ func (c *declaredOnce) CheckFile(f *scan.File) ([]rules.Match, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.scanned[f.Path()] = true
 	for _, g := range got {
 		c.decls[g.id] = append(c.decls[g.id], g.site)
 	}
@@ -239,6 +242,9 @@ func (c *declaredOnce) Finalize() []rules.Match {
 			}
 		}
 		if owned == nil {
+			if !c.scanned[e.Path] {
+				continue
+			}
 			out = append(out, rules.Match{Path: e.Path, Line: 1,
 				Message: fmt.Sprintf("%s is listed as declared once in %s, but that file declares no top-level %s; list the file that declares it", e.Decl, e.Path, e.Decl)})
 			for _, s := range c.decls[k] {

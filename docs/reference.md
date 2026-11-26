@@ -796,8 +796,9 @@ identity; any second func, method, type, const or var of that identity in scope
 is a finding that names the owner. Identity is the kind and name, plus the
 receiver type for a method, so a var named like a listed func is a different
 declaration. A listed declaration its file does not declare is itself a
-finding, so the list cannot go stale. Duplicates of unlisted names are not
-judged.
+finding, so the list cannot go stale; a listed file the scope does not hold is
+not judged, so a partial tree such as a fixture can leave it out. Duplicates of
+unlisted names are not judged.
 
 | param | meaning |
 |---|---|
@@ -874,7 +875,8 @@ of the body.
 The Dart form of `go/declared-once`. Each listed top-level declaration is the
 one declaration of its identity across the scope; any second declaration of it
 is a finding that names the owner, and a listed declaration its file does not
-declare is a finding too. A top-level declaration is a column-0 line outside
+declare is a finding too (a listed file the scope does not hold is not
+judged). A top-level declaration is a column-0 line outside
 every string and block comment, so members are never counted. Identity is the
 kind (type, function, getter, setter, variable) and the name; a
 library-private name (`_Body`) is also keyed on its file.

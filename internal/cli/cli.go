@@ -246,6 +246,18 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		pins = append(pins, p)
 		return nil
 	})
+	var capacity []int
+	fs.Func("shard-capacity", shardCapacityUsage, func(spec string) error {
+		if capacity != nil {
+			return fmt.Errorf("--shard-capacity given twice; one list names every shard")
+		}
+		c, err := parseShardCapacity(spec)
+		if err != nil {
+			return err
+		}
+		capacity = c
+		return nil
+	})
 	cfg, ok := parseAndLoad(fs, args, root, stderr)
 	if !ok {
 		return 2
@@ -302,6 +314,22 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "formwork: --shard-pin places rules on a shard of --shard K/N; without --shard it would change nothing")
 		return 2
 	}
+	// Capacity weighs the partition's measured loads: without --shard there is
+	// no partition, without --durations every load is zero, and a list that
+	// does not name each of the N shards cannot be read the same by every job.
+	if capacity != nil {
+		switch {
+		case !sharded:
+			fmt.Fprintln(stderr, "formwork: --shard-capacity weighs the shards of --shard K/N; without --shard it would change nothing")
+			return 2
+		case *durations == "":
+			fmt.Fprintln(stderr, "formwork: --shard-capacity weighs the loads --durations measures; without --durations every load is zero and it would change nothing")
+			return 2
+		case len(capacity) != shardN:
+			fmt.Fprintf(stderr, "formwork: --shard-capacity lists %d capacities for --shard %s; name one per shard\n", len(capacity), *shard)
+			return 2
+		}
+	}
 	// --cost-max and --skip-escapes both narrow by cost and would answer the
 	// same rule two ways; a supplied flag that is silently overridden is the
 	// shape the guards above refuse (#22).
@@ -354,7 +382,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "formwork:", err)
 			return 2
 		}
-		rls = shardRules(rls, prior, pinned, shardK, shardN)
+		rls = shardRules(rls, prior, pinned, capacity, shardK, shardN)
 		shardInfo = &report.Shard{Index: shardK, Count: shardN, Rules: shardedIDs(rls)}
 	}
 	selectedCount := len(rls)

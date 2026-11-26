@@ -211,3 +211,62 @@ func TestCheckShardPinRefusals(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckShardCapacityReportsCoverTheCorpusOnce: --shard-capacity moves ids
+// between shards, and the N reports still cover the corpus exactly once.
+func TestCheckShardCapacityReportsCoverTheCorpusOnce(t *testing.T) {
+	root := shardRepo(t)
+	hint := filepath.Join(t.TempDir(), "durations.json")
+	mustWrite(t, hint, `{"durations":{"no-alpha":60,"no-beta":50,"no-gamma":40,"no-delta":30,"no-epsilon":20,"no-zeta":10}}`)
+	all := []string{"no-alpha", "no-beta", "no-delta", "no-epsilon", "no-gamma", "no-zeta"}
+	var union []string
+	for k := 1; k <= 3; k++ {
+		spec := strconv.Itoa(k) + "/3"
+		code, out, errOut := runCLI(t, "check", "-C", root, "--lane", "ci", "--shard", spec,
+			"--durations", hint, "--shard-capacity", "4,1,1", "-format", "json")
+		if code != 0 && code != 1 {
+			t.Fatalf("--shard %s --shard-capacity 4,1,1: exit = %d\nstderr:\n%s", spec, code, errOut)
+		}
+		var rep shardReport
+		if err := json.Unmarshal([]byte(out), &rep); err != nil {
+			t.Fatalf("--shard %s: %v\n%s", spec, err, out)
+		}
+		if k == 1 && len(rep.Scan.Shard.Rules) < 3 {
+			t.Fatalf("shard 1 of capacity 4 ran %v; want at least half the measured work", rep.Scan.Shard.Rules)
+		}
+		union = append(union, rep.Scan.Shard.Rules...)
+	}
+	slices.Sort(union)
+	if !slices.Equal(union, all) {
+		t.Fatalf("shards together ran %v, want each of %v exactly once", union, all)
+	}
+}
+
+// A capacity list the run cannot apply the same way in every job is refused.
+func TestCheckShardCapacityRefusals(t *testing.T) {
+	root := shardRepo(t)
+	hint := filepath.Join(t.TempDir(), "durations.json")
+	mustWrite(t, hint, `{"durations":{"no-alpha":60}}`)
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no --shard", []string{"--durations", hint, "--shard-capacity", "2,1"}, "without --shard"},
+		{"no --durations", []string{"--shard", "1/2", "--shard-capacity", "2,1"}, "without --durations"},
+		{"too few", []string{"--shard", "1/3", "--durations", hint, "--shard-capacity", "2,1"}, "lists 2 capacities"},
+		{"too many", []string{"--shard", "1/2", "--durations", hint, "--shard-capacity", "2,1,1"}, "lists 3 capacities"},
+		{"given twice", []string{"--shard", "1/2", "--durations", hint, "--shard-capacity", "2,1", "--shard-capacity", "2,1"}, "twice"},
+		{"malformed", []string{"--shard", "1/2", "--durations", hint, "--shard-capacity", "2;1"}, "--shard-capacity"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, out, errOut := runCLI(t, append([]string{"check", "-C", root}, tc.args...)...)
+			if code != 2 {
+				t.Fatalf("exit = %d, want 2\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+			}
+			if !strings.Contains(errOut, tc.want) {
+				t.Fatalf("the refusal must name %q:\n%s", tc.want, errOut)
+			}
+		})
+	}
+}

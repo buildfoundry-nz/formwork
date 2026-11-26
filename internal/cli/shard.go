@@ -24,6 +24,26 @@ const shardPinUsage = "with --shard, place every selected rule the named lane se
 	"before the rest are balanced around it — so the rules that need a toolchain only one matrix job " +
 	"installs all run in that job. Repeatable, one pin per lane; every shard job must pass the same pins"
 
+const shardCapacityUsage = "with --shard and --durations, the relative capacity of each of the N shards, `C1,...,CN` " +
+	"(e.g. each matrix job's vCPU): ids are placed where load over capacity is lowest, so a shard of capacity 8 " +
+	"takes twice the measured work of one of capacity 4. Every shard job must pass the same list"
+
+// maxShardCapacity bounds a capacity so load times capacity cannot overflow.
+const maxShardCapacity = 1024
+
+// parseShardCapacity reads `C1,...,CN`, each C canonical like --shard's K.
+func parseShardCapacity(spec string) ([]int, error) {
+	var out []int
+	for _, cs := range strings.Split(spec, ",") {
+		c, err := canonicalPositive(cs)
+		if err != nil || c > maxShardCapacity {
+			return nil, fmt.Errorf("--shard-capacity %q is not C1,...,CN with each C a positive decimal integer up to %d (e.g. 8,8,4,4)", spec, maxShardCapacity)
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
 // shardPin is one --shard-pin LANE=K: the rules lane selects all run on shard k.
 type shardPin struct {
 	lane string
@@ -126,7 +146,8 @@ func canonicalPositive(s string) (int, error) {
 
 // shardRules returns the rules of shard k (1-based) of n, in declaration order.
 //
-// THE PARTITION IS OVER RULE IDS, and is a pure function of (rules, prior, n):
+// THE PARTITION IS OVER RULE IDS, and is a pure function of (rules, prior,
+// pins, capacity, n):
 // each of the N matrix jobs computes it independently, so anything else it
 // read — the clock, map order, the shard index — would let two jobs disagree
 // about where a rule lives, and a rule both jobs place elsewhere runs nowhere.
@@ -142,12 +163,16 @@ func canonicalPositive(s string) (int, error) {
 // name, not at zero: it is new or below the report's recording floor, and
 // weighing it at nothing would stack every such rule on one shard.
 //
+// capacity (--shard-capacity) weighs each shard: an id goes where load over
+// capacity, counting the id, is lowest. The comparison is cross-multiplied, so
+// equal capacities compare loads exactly as nil does.
+//
 // pinned (--shard-pin) is placed first: each pinned id goes to its named shard
 // and counts toward that shard's load, and only then are the other ids placed
 // heaviest first, so the balance is computed around the pinned work rather
 // than beside it. With no pins the partition is exactly the unpinned one.
-func shardRules(rls []*config.Rule, prior engine.Timing, pinned map[string]int, k, n int) []*config.Rule {
-	home := shardHomes(rls, prior, pinned, n)
+func shardRules(rls []*config.Rule, prior engine.Timing, pinned map[string]int, capacity []int, k, n int) []*config.Rule {
+	home := shardHomes(rls, prior, pinned, capacity, n)
 	var out []*config.Rule
 	for _, r := range rls {
 		if home[r.ID] == k {
@@ -157,7 +182,7 @@ func shardRules(rls []*config.Rule, prior engine.Timing, pinned map[string]int, 
 	return out
 }
 
-func shardHomes(rls []*config.Rule, prior engine.Timing, pinned map[string]int, n int) map[string]int {
+func shardHomes(rls []*config.Rule, prior engine.Timing, pinned map[string]int, capacity []int, n int) map[string]int {
 	rank := map[string]int{}
 	for _, r := range rls {
 		rank[r.ID] = max(rank[r.ID], rules.Rank(r.Cost()))
@@ -173,6 +198,12 @@ func shardHomes(rls []*config.Rule, prior engine.Timing, pinned map[string]int, 
 			return d
 		}
 		return unknown
+	}
+	capOf := func(s int) time.Duration {
+		if capacity == nil {
+			return 1
+		}
+		return time.Duration(capacity[s])
 	}
 	order := slices.Sorted(maps.Keys(rank))
 	slices.SortStableFunc(order, func(a, b string) int {
@@ -192,13 +223,15 @@ func shardHomes(rls []*config.Rule, prior engine.Timing, pinned map[string]int, 
 		if _, ok := pinned[id]; ok {
 			continue
 		}
+		w := weight(id)
 		best := 0
 		for s := 1; s < n; s++ {
-			if load[s] < load[best] || (load[s] == load[best] && count[s] < count[best]) {
+			here, there := (load[s]+w)*capOf(best), (load[best]+w)*capOf(s)
+			if here < there || (here == there && count[s] < count[best]) {
 				best = s
 			}
 		}
-		load[best] += weight(id)
+		load[best] += w
 		count[best]++
 		home[id] = best + 1
 	}

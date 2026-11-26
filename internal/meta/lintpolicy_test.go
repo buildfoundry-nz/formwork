@@ -14,7 +14,7 @@ import (
 // A repo whose empty-scope and exemption-hygiene checks both have real
 // problems: a rule scoped to a directory that does not exist, carrying a dead
 // exclude with no justification comment. This is the shape #89 reports for the
-// palletra-port-* corpora — thin slices of a much larger tree, where those two
+// example corpora — thin slices of a much larger tree, where those two
 // verdicts are properties of the fixture material rather than defects.
 const thinSliceRules = "rules:\n" +
 	"  - id: absent-corpus\n" +
@@ -241,7 +241,7 @@ func TestLintDoesNotRefuseADeadSkipEntryUnderRuleScoping(t *testing.T) {
 // rather than refuse: rules-present is whole-corpus, so a corpus declaring the
 // per-rule checks inapplicable has an empty board for any single rule through
 // no fault of its config — and `lint --rule <valid-id>` on
-// examples/palletra-port-full was exit 2 for exactly that. A valid config plus
+// the full example corpus was exit 2 for exactly that. A valid config plus
 // a valid rule id is not an engine error.
 //
 // What stops that being the vacuity the floor exists to catch is the wording,

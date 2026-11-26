@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// emission_order_test.go — #16031: on a FAILING run the census must name its
+// emission_order_test.go — on a FAILING run the census must name its
 // offenders before it says anything else.
 //
 // THE DEFECT. A type:command finding carries only a head and a tail of the
@@ -26,7 +26,7 @@ import (
 // the FIRST line of a failing run names an offender. Asserting position zero
 // rather than "within N bytes" is deliberate — it holds for any head-first
 // truncation of any size, so it survives a change to snippet()'s constants and
-// needs no second copy of the parser that reads them (#16000 owns that).
+// needs no second copy of the parser that reads them.
 //
 // Calibration is not deleted, only moved. It is instrument provenance: on a
 // PASSING run it is the evidence the census could have seen something, which

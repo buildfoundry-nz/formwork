@@ -114,7 +114,7 @@ func (r *Rule) InPathScope(relPath string) bool {
 }
 
 // governanceDir is the walk root's .formwork: formwork.yaml, the rule YAML and
-// the mutation specs the walk reads since #24467 item 9 (its fixtures it
+// the mutation specs the walk reads (its fixtures it
 // still prunes, scan.BuiltinSkipDirs).
 const governanceDir = ".formwork/"
 

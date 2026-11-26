@@ -1,10 +1,10 @@
 // Relation probes. A set-relation or pair-consistency rule is satisfied by an
 // EMPTY tree, so none of the witness probes in classify.go can read one: "this
 // file satisfies the rule alone" carries no information about where the
-// evidence lives. Until #12178 that put both types outside the class-2
+// evidence lives. That once put both types outside the class-2
 // population entirely — isExistenceObligation admitted only
 // required-pattern(exists) and pattern-count(at-least) — so nothing had ever
-// probed them, and #12180 / #12181 then found live vacuity in exactly those two.
+// probed them, and the probes below then found live vacuity in exactly those two.
 package main
 
 import (
@@ -26,13 +26,13 @@ import (
 // Neither is a witness probe: a relation is satisfied by an empty tree, so
 // "this file satisfies it alone" carries no information.
 //
-//   - INERT-REQUIRED-SIDE (set-relation, #12180) — blank every file the
+//   - INERT-REQUIRED-SIDE (set-relation) — blank every file the
 //     required side (params.b.files) draws from and re-run. If the relation
 //     still holds, nothing on that side was load-bearing: the join is satisfied
 //     by names that appear anyway, and deleting the whole required side is a
 //     green change. That is the measured shape of "68/68 codes survive deleting
 //     every recompute test".
-//   - DEAD-TRIGGER (pair-consistency, #12181) — the `trigger` pattern matches
+//   - DEAD-TRIGGER (pair-consistency) — the `trigger` pattern matches
 //     no line of any in-scope file, so no unit ever enters the obligation and
 //     the rule is green whatever the tree does. This is the pair-consistency
 //     spelling of the engine's own AnchorProbe: a rule that can no longer see
@@ -122,7 +122,7 @@ func relationUndecidedReason(r *config.Rule, m ruleMeta) string {
 
 func setRelationVerdicts(r *config.Rule, root string, m ruleMeta, inScope []*scan.File) []verdict {
 	var out []verdict
-	// EMPTY-SIDE (V4 / #12429): on equal|subset, either side extracting zero
+	// EMPTY-SIDE (V4): on equal|subset, either side extracting zero
 	// elements from the live tree means the join is green by set algebra
 	// (empty=empty / empty⊆B) with no load-bearing evidence. Gate it before
 	// the blank-B probe so a zero-cardinality relation is never OK'd.
@@ -331,7 +331,7 @@ func pairConsistencyVerdicts(r *config.Rule, root string, m ruleMeta, inScope []
 	// in corpus triggers; regexp2 treats them as literal character sets and
 	// falsely reports DEAD-TRIGGER on rules the formwork gate still enforces
 	// (measured: go-compile-gate-disk-probe is live under Go regexp, "dead"
-	// under regexp2 — #12178 / #12181).
+	// under regexp2).
 	re, err := regexp.Compile(m.trigger)
 	if err != nil {
 		return nil
@@ -362,7 +362,7 @@ func pairConsistencyVerdicts(r *config.Rule, root string, m ruleMeta, inScope []
 				}
 				continue
 			}
-			// Dart/proto same-func units live in the engine (#12195). This
+			// Dart/proto same-func units live in the engine. This
 			// census cannot parse those languages, so a trigger that appears
 			// at all is live — not DEAD-TRIGGER for want of a Go parser.
 			if obligationLivePerLine(work, re, alsoRe) {

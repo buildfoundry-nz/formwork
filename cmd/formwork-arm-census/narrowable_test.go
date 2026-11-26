@@ -162,7 +162,7 @@ func TestLangOfClassifiesBySuffix(t *testing.T) {
 // and the census reported 0 flagged while `jobTypesOnly` was still defeated by
 // `.take(1)` on that second line. An arm that only sees the single-line form
 // catches the shape a fixture author writes and misses the shape the formatter
-// produces (#15721).
+// produces.
 func TestNarrowableOnReadsAWrappedDartForIn(t *testing.T) {
 	const wrapped = "        in jobTypes.jobTypesOnly.whereTheNameIsLong) {"
 	got, yes, err := narrowableOn(mustCompile(t, `jobTypesOnly`), wrapped, langDart)

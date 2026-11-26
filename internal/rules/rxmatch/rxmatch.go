@@ -12,7 +12,7 @@ import (
 
 // Package rxmatch is the ONE regex backend every rule type compiles through.
 //
-// It was internal to package pattern until #17979: pair-consistency compiled
+// It used to be internal to package pattern, and pair-consistency compiled
 // with regexp.Compile directly, so `syntax: regexp2` and `multiline: true` were
 // accepted by forbidden-pattern and refused by pair-consistency. A repo
 // converting a rule from one to the other had to drop those params, and
@@ -74,8 +74,7 @@ func (m re2Matcher) FindLine(content string) (int, bool, error) {
 // regexp2MatchTimeout is handed to dlclark/regexp2. regexp2OuterBound is a
 // Go-runtime timer around each call, because regexp2's own MatchTimeout is
 // enforced by a userspace fastclock that starves under CPU load — so the
-// timeout goes unobserved and a match flatlines for tens of minutes
-// (TakeoffQS #18189 / #16809). This timer does not depend on that clock.
+// timeout goes unobserved and a match flatlines for tens of minutes. This timer does not depend on that clock.
 //
 // Both are wall clocks, so a stalled goroutine or a clock tick arriving late can
 // put a match of a few milliseconds past them. The patient pair is the second

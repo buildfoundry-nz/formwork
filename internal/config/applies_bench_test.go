@@ -18,20 +18,20 @@ func (benchChecker) CheckFile(*scan.File) ([]rules.Match, error) { return nil, n
 // globs and paths shaped like a real monorepo's.
 func BenchmarkRuleAppliesMostlyMisses(b *testing.B) {
 	r, err := config.New("bench", "fake", finding.SeverityError, "",
-		[]string{"api-factory/services/core-api/internal/**/*.go", "packages/*/lib/**/providers/**/*.dart", "scripts/dev/*census*/**/*.go"},
+		[]string{"svc/api/internal/**/*.go", "packages/*/lib/**/providers/**/*.dart", "scripts/dev/*census*/**/*.go"},
 		[]string{"**/*_test.go", "**/*.g.dart", "shared/generated/**"}, benchChecker{})
 	if err != nil {
 		b.Fatal(err)
 	}
 	paths := []string{
 		"packages/feature_account/lib/data/account_repository.dart",
-		"api-factory/services/core-api/routes/projects.go",
+		"svc/api/routes/projects.go",
 		"docs/plans/README.md",
 		"frontend/lib/routing/router.dart",
-		"api-factory/services/core-api/internal/metrics/rule_engine.go",
+		"svc/api/internal/metrics/rule_engine.go",
 		"scripts/dev/check-precommit-gate-lanes-partitioned.go",
-		"schema/proto/takeoffqs/api/v1/projects.proto",
-		"packages/tqs_widgets/lib/presentation/buttons/app_button.dart",
+		"schema/proto/example/api/v1/projects.proto",
+		"packages/app_widgets/lib/presentation/buttons/app_button.dart",
 	}
 	b.ReportAllocs()
 	for b.Loop() {

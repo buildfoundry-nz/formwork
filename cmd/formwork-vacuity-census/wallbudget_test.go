@@ -9,7 +9,7 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 )
 
-// TestBuildScopesWithBudgetMatchesIndex pins correctness (#12419): the
+// TestBuildScopesWithBudgetMatchesIndex pins correctness: the
 // budget-enforcing scope builder returns exactly what buildScopeIndex
 // computes when the phase lands inside the budget.
 func TestBuildScopesWithBudgetMatchesIndex(t *testing.T) {
@@ -44,11 +44,11 @@ func TestBuildScopesWithBudgetMatchesIndex(t *testing.T) {
 	}
 }
 
-// TestBuildScopesWithBudgetEnforcesWall is the #12419 lockdown: when the
+// TestBuildScopesWithBudgetEnforcesWall is the scope-budget lockdown: when the
 // O(rules×files) scope-membership phase exceeds the wall budget the builder
 // must return an error naming the budget, so the census FAILs the
 // Architecture Guardrails run instead of silently re-admitting the serial
-// path. The budget is negative rather than sub-nanosecond (#13726): the
+// path. The budget is negative rather than sub-nanosecond: the
 // builder compares MEASURED elapsed time, and a budget below the platform's
 // timer granularity can never be exceeded. A Windows dev box ticks at ~514µs
 // (measured 2026-08-14: 99,998 of 100,000 back-to-back time.Since() samples

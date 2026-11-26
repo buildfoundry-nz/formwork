@@ -470,7 +470,7 @@ var commandOutputTail = regexp.MustCompile(
 // exit code as a firing one.
 //
 // WHY OUTPUT-CONDITIONAL AND NOT ABSOLUTE. Ten command rules in
-// examples/palletra-port-full exit non-zero on their fire path while printing
+// the full example corpus exit non-zero on their fire path while printing
 // nothing at all (measured by evaluating each in its own fire-1 tree; they are
 // exactly the ten whose fire manifests are still bare). Their message is the
 // frame alone, so no substring of it can name a verdict and there is no pin to

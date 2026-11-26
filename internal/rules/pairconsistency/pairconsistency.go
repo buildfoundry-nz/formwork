@@ -46,9 +46,9 @@ type pairParams struct {
 	// Syntax selects the regex backend, exactly as the pattern rule types spell
 	// it: "" / "re2" -> Go RE2; "regexp2" -> the PCRE2-capable engine for the
 	// lookaround a few ported shell gates need. Refused values are a config
-	// error (#17979).
+	// error.
 	//
-	// Until #17979 this type compiled with regexp.Compile directly, so a repo
+	// This type used to compile with regexp.Compile directly, so a repo
 	// converting forbidden-pattern -> pair-consistency had to DROP `syntax:`,
 	// and a trigger carrying a lookaround then failed to compile — or worse,
 	// was rewritten without it and quietly matched something else.
@@ -60,7 +60,7 @@ type pairParams struct {
 	//
 	// That was the sharp edge: dropping `multiline: true` during a conversion
 	// left a rule that still loaded, still reported OK, and no longer matched
-	// anything — a silently disabled guardrail (#17979).
+	// anything — a silently disabled guardrail.
 	Multiline bool `yaml:"multiline"`
 }
 
@@ -78,7 +78,7 @@ const (
 	// package. Some invariants are satisfied by a package COLLECTIVELY: one
 	// file assigns a value and a shared tail in a sibling file answers with it,
 	// one tail serving several handlers. The
-	// examples/palletra-port-full/.formwork/rules/derived-dispatch-claims-ledger.yaml
+	// the derived-dispatch-claims-ledger rule in the full example corpus
 	// shape is the canonical one — the auto-run engine enqueues in engine.go
 	// and records the claim in plan.go, two files reviewed as a unit — and a
 	// same-file rule flags the enqueuing file, condemning a package that is
@@ -218,7 +218,7 @@ func (c *pairConsistency) fileCarriesAlsoPresent(f *scan.File) (bool, error) {
 //
 // same-file has always scanned per line, which is why a cross-line trigger
 // could not match there and why dropping `multiline: true` in a conversion
-// silently disabled the rule (#17979). Routing every same-file match through
+// silently disabled the rule. Routing every same-file match through
 // here makes the two grains one decision instead of three copies of it.
 func (c *pairConsistency) unitText(f *scan.File) ([]string, error) {
 	if c.multiline {
@@ -240,8 +240,8 @@ func (c *pairConsistency) unitText(f *scan.File) ([]string, error) {
 // triggering LINE carries its companion", so a clause with two matching keys is
 // one obligation, not two.
 //
-// Counting occurrences instead silently broke that. Measured on TakeoffQS's
-// pipeline-events-read-ordering-is-total, whose pass fixture is:
+// Counting occurrences instead silently broke that. Measured on a rule
+// requiring every ordering to be total, whose pass fixture is:
 //
 //	a AS (... ORDER BY (x IS NOT NULL) DESC, elapsed_at DESC, occurred_at DESC, CASE ... , id ASC),
 //

@@ -43,7 +43,7 @@ func TestTautologicalLeavesRealPatternsAlone(t *testing.T) {
 		`^CREATE TABLE`,
 		`USING btree`,
 		`^\s*assert_[a-z_]+ `,
-		`takeoffqs\.dev/schema/gen/go/`,
+		`example\.dev/schema/gen/go/`,
 		`^[^#]*file-size-caps\.test\.sh`, // comment-immune, but still pins a token
 		`Path:\s*"`,
 		`^$`, // matches only an empty line — restrictive, not tautological
@@ -69,7 +69,7 @@ func TestTautologicalHonoursRegexp2Syntax(t *testing.T) {
 	if !got {
 		t.Error("regexp2 `(?s).*` not flagged")
 	}
-	got, err = tautological(`claddinggrouptotals\.(List|Queue)\((?![^()]*,\s*nil\))`, "regexp2")
+	got, err = tautological(`grouptotals\.(List|Queue)\((?![^()]*,\s*nil\))`, "regexp2")
 	if err != nil {
 		t.Fatalf("regexp2 real pattern: %v", err)
 	}
@@ -158,9 +158,9 @@ func TestIsLastWitnessShape(t *testing.T) {
 		{arm{Type: "required-pattern", Mode: "exists"}, true},
 		{arm{Type: "pattern-count", Op: "at-least", N: 1}, true},
 		// An explicit n >= 2 is a stated cardinality, not the accidental floor
-		// of one that `exists` confers — tqs-package-consumers-tqs-core is
+		// of one that `exists` confers — a shared-package consumers rule is
 		// `at-least 2` over 42 witnesses because the invariant IS ">= 2
-		// consumers" (#6858).
+		// consumers".
 		{arm{Type: "pattern-count", Op: "at-least", N: 2}, false},
 		{arm{Type: "pattern-count", Op: "at-least", N: 517}, false},
 		{arm{Type: "required-pattern", Mode: "every-file"}, false},

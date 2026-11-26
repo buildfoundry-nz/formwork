@@ -38,7 +38,7 @@ func TestBuildScopeIndexMatchesSerial(t *testing.T) {
 	}
 }
 
-// TestCensusScopeIndexComplexity is the #12419 lockdown: a synthetic corpus
+// TestCensusScopeIndexComplexity is the scope-budget lockdown: a synthetic corpus
 // of R=200 rules × F=5_000 files must finish under a wall budget the naive
 // serial path struggles with on a loaded CI host. Parallel index is the
 // mechanical ceiling.
@@ -67,7 +67,7 @@ func TestCensusScopeIndexComplexity(t *testing.T) {
 	// 2s is generous for parallel index; a reintroduction of pure serial
 	// O(R×F×G) on a cold host still clears it — the pin is "does not hang".
 	if elapsed > 2*time.Second {
-		t.Fatalf("buildScopeIndex took %s for R=%d F=%d — over the 2s wall budget (#12419)", elapsed, R, F)
+		t.Fatalf("buildScopeIndex took %s for R=%d F=%d — over the 2s wall budget", elapsed, R, F)
 	}
 	t.Logf("buildScopeIndex R=%d F=%d in %s", R, F, elapsed)
 }

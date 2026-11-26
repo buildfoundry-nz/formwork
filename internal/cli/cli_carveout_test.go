@@ -83,7 +83,7 @@ func TestCheckStagedFixtureAncestorIsStillExcused(t *testing.T) {
 	}
 }
 
-// Rule YAML is scanned since #24467 item 9, so staging it is a requested path
+// Rule YAML is scanned, so staging it is a requested path
 // the walk produces, and a broad rule does not read it: `**` does not reach
 // .formwork, only a glob rooted there does, so the new rule's own pattern in
 // its own definition is no finding.

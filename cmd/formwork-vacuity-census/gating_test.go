@@ -10,7 +10,7 @@ import (
 
 // The census gates four classes and reports six. Every gated class reports 0
 // while every measured class carries a population, so the run ends
-// "OK: every rule can fail" with ~970 instances on the ungated side (#12178).
+// "OK: every rule can fail" with ~970 instances on the ungated side.
 // These tests pin the promotion of each measured class to a FAILURE, and the
 // two probe defects that kept the gated side empty.
 
@@ -167,12 +167,12 @@ func TestDetectorSatisfiedIsImplementedAndGates(t *testing.T) {
     type: required-pattern
     severity: error
     scope:
-      include: ['scripts/dev/**', 'api-factory/**/*.go']
-    params: { mode: exists, pattern: 'MarkActiveBoqStaleInTx' }
+      include: ['scripts/dev/**', 'svc/**/*.go']
+    params: { mode: exists, pattern: 'MarkActiveOrderStaleInTx' }
     tags: [always]
 `, map[string]string{
-		"scripts/dev/check-boq-stale.go":    "package main\n\nconst want = \"MarkActiveBoqStaleInTx\"\n",
-		"api-factory/routes/boq/handler.go": "package boq\n\nfunc H() {}\n",
+		"scripts/dev/check-order-stale.go": "package main\n\nconst want = \"MarkActiveOrderStaleInTx\"\n",
+		"svc/routes/order/handler.go":      "package order\n\nfunc H() {}\n",
 	})
 
 	_, out := census(t, root)

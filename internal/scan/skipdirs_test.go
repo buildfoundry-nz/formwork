@@ -31,14 +31,14 @@ import (
 // a ported corpus — to 2,474 of the 2,492 tracked files under examples/: every
 // ported corpus lives in examples/<corpus>/.formwork/, so the rule scoped
 // `examples/**` saw 18 files and the porting surface it exists to police —
-// 2,399 files in examples/palletra-port-full — was structurally unreachable.
+// 2,399 files in the full example corpus — was structurally unreachable.
 func TestBuiltinSkipPrunesFormworkAtTheWalkRootOnly(t *testing.T) {
 	for _, tc := range []struct {
 		path     string
 		underAny bool // UnderBuiltinSkip: any component, leaf included
 		underDir bool // UnderBuiltinSkipDir: ancestors only
 	}{
-		// The engine's own: the governance is read since #24467 item 9, and
+		// The engine's own: the governance is read, and
 		// only the fixtures under it stay invisible.
 		{".formwork/rules/r.yaml", false, false},
 		{".formwork/fixtures/no-ghost/fire-1/a.go", true, true},
@@ -46,8 +46,8 @@ func TestBuiltinSkipPrunesFormworkAtTheWalkRootOnly(t *testing.T) {
 		{".formwork", false, false},
 
 		// A corpus's own — ordinary content now.
-		{"examples/palletra-port-full/.formwork/rules/r.yaml", false, false},
-		{"examples/palletra-port-full/.formwork/fixtures/x/fire-1/a.go", false, false},
+		{"examples/full/.formwork/rules/r.yaml", false, false},
+		{"examples/full/.formwork/fixtures/x/fire-1/a.go", false, false},
 		{"sub/.formwork/formwork.yaml", false, false},
 		{"sub/.formwork", false, false},
 
@@ -112,7 +112,7 @@ func TestNotScannedByFollowsTheSameDepthRule(t *testing.T) {
 		t.Errorf("a corpus's own .formwork is scanned content: %+v", v)
 	}
 	if v := scan.NotScannedBy(".formwork/rules/r.yaml", scan.Opts{}); v.Hidden() {
-		t.Errorf("the engine's own governance is scanned content since #24467 item 9: %+v", v)
+		t.Errorf("the engine's own governance is scanned content: %+v", v)
 	}
 	if v := scan.NotScannedBy(".formwork/fixtures/r/fire-1/a.go", scan.Opts{}); !v.Hidden() || !v.Builtin {
 		t.Errorf("the engine's own fixtures must stay builtin-hidden: %+v", v)

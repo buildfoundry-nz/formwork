@@ -1,6 +1,6 @@
 package main
 
-// fixtureinventory.go — the fixture-directory registry (#10838, #12043).
+// fixtureinventory.go — the fixture-directory registry.
 //
 // The class-3 arms judge the fixtures a rule still has: FIRE-FIXTURE-PASSES and
 // PASS-FIXTURE-FIRES ask whether each surviving pair still discriminates,
@@ -8,7 +8,7 @@ package main
 // any fixture at all. None of them can see a fixture that is GONE. Delete one
 // directory from a rule with twelve and every instrument reports success:
 // `formwork test` prints "OK — 11 fixture(s)", `formwork lint`'s
-// [fixture-coverage] is satisfied by the survivors (its reverse arm, #10832,
+// [fixture-coverage] is satisfied by the survivors (its reverse arm
 // answers a rule that no longer exists, not a rule that lost one fixture), and
 // the census stays green. That is the removal path for the by-construction
 // guarantees the corpus rests on: a rule is weakened in two green commits —
@@ -28,7 +28,7 @@ package main
 //                         person remembered to make it, and tomorrow's deletion
 //                         would have nothing to be missing from.
 //
-// #12043 is why it is per rule rather than one repo-global TSV. A single file
+// This is why it is per rule rather than one repo-global TSV. A single file
 // derived from the whole tree has its content rewritten by every rule that
 // lands, so landing one fixture-bearing rule on develop reached into every other
 // open PR's copy: the author met a gate naming directories belonging to a rule
@@ -37,7 +37,7 @@ package main
 // change touches. Co-location does the rest: the rule id is the parent
 // directory, so a manifest cannot name another rule's fixtures, and the manifest
 // travels with the tree — including an orphaned tree whose rule is gone, which
-// is [fixture-coverage]'s FAIL (#10832) and cannot sit here quietly.
+// is [fixture-coverage]'s FAIL and cannot sit here quietly.
 //
 // `<dir>.want` manifests are files beside the directory, not directories, so
 // they are not rows — deleting one already turns `formwork test` red, because a
@@ -217,7 +217,7 @@ func fixtureInventoryVerdicts(onDisk, inv map[fixtureDir]bool, present, required
 				code:   "MISSING-FIXTURE-INVENTORY",
 				gating: true,
 				why: fmt.Sprintf("no rule carries a %s — that per-rule manifest is the registry that makes deleting a "+
-					"fixture directory leave a trace (#10838). Generate them with: go run -C tools/formwork-vacuity-census . --write-inventory <repo-root>",
+					"fixture directory leave a trace. Generate them with: go run ./cmd/formwork-vacuity-census --write-inventory <repo-root>",
 					fixtureManifestName),
 			}}
 		}
@@ -234,7 +234,7 @@ func fixtureInventoryVerdicts(onDisk, inv map[fixtureDir]bool, present, required
 			gating: true,
 			why: fmt.Sprintf("%s lists %s but that directory is gone — the surviving fixtures still behave, so no "+
 				"class-3 arm can see the loss. Restore the fixture, or drop this row in the same change so the "+
-				"coverage loss is reviewable (#10838)", fixtureManifestRel(p.ruleID), p.dir),
+				"coverage loss is reviewable", fixtureManifestRel(p.ruleID), p.dir),
 		})
 	}
 
@@ -247,8 +247,8 @@ func fixtureInventoryVerdicts(onDisk, inv map[fixtureDir]bool, present, required
 			code:   "FIXTURE-UNTRACKED",
 			gating: true,
 			why: fmt.Sprintf("fixture directory %s/%s/%s is not in %s — add the row (or regenerate with "+
-				"--write-inventory) so its deletion cannot go silent (#10838). That manifest belongs to this rule "+
-				"alone, so the finding is about a fixture in your own change, never one another PR landed (#12043)",
+				"--write-inventory) so its deletion cannot go silent. That manifest belongs to this rule "+
+				"alone, so the finding is about a fixture in your own change, never one another PR landed",
 				fixturesRootRel, p.ruleID, p.dir, fixtureManifestRel(p.ruleID)),
 		})
 	}
@@ -259,18 +259,18 @@ func fixtureInventoryVerdicts(onDisk, inv map[fixtureDir]bool, present, required
 // by the renderer for the same reason as its live-include sibling.
 const fixtureManifestHeader = "" +
 	"# fixture directories for this rule — the vacuity census fails if a row's directory\n" +
-	"# is deleted while the row is still listed (FIXTURE-REMOVED, #10838), or if a\n" +
+	"# is deleted while the row is still listed (FIXTURE-REMOVED), or if a\n" +
 	"# directory exists with no row (FIXTURE-UNTRACKED).\n" +
 	"# One directory name per line; the rule id is this file's parent directory, so no\n" +
-	"# other rule's change ever writes this file (#12043). Regenerate:\n" +
-	"#   go run -C tools/formwork-vacuity-census . --write-inventory <repo-root>\n" +
+	"# other rule's change ever writes this file. Regenerate:\n" +
+	"#   go run ./cmd/formwork-vacuity-census --write-inventory <repo-root>\n" +
 	"# Membership is a FLOOR, not a health claim: whether each fixture still\n" +
 	"# discriminates is the class-3 behavioural arms' question, and a fixture tree that\n" +
-	"# never runs is #10968's. Removing a row is a reviewed deletion, never a cleanup.\n"
+	"# never runs is another gate's. Removing a row is a reviewed deletion, never a cleanup.\n"
 
 // renderFixtureManifest renders one rule's manifest — header block and rows — as
 // the exact bytes that belong on disk, the fixture-tree half of what
-// renderIncludeRegistry does for the live-include registries (#13521). This side
+// renderIncludeRegistry does for the live-include registries. This side
 // had drifted further: eight committed manifests carried no header at all.
 // Sorts and de-duplicates its own rows, for the reasons renderIncludeRegistry
 // gives: the conformance test round-trips a committed file through its own parsed
@@ -296,7 +296,7 @@ func renderFixtureManifest(dirs []string) []byte {
 // rather than something CI does for them. Used by --write-inventory.
 //
 // Skips a manifest whose rendered bytes already match, the same contract as the
-// live-include registries (#13521). This side had drifted further: eight committed
+// live-include registries. This side had drifted further: eight committed
 // manifests carried no header block at all.
 func writeFixtureInventory(root string, onDisk map[fixtureDir]bool) (written, total int, err error) {
 	byRule := map[string][]string{}

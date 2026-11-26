@@ -7,7 +7,7 @@
 // CONTENT — a ported corpus under examples/, a vendored subproject, a
 // downstream repository pinning an older binary — and on that surface nothing
 // parses the file as config at all. `make check` at this repo's root scans 616
-// rule files under examples/palletra-port-full alone and loads none of them.
+// rule files under the full example corpus alone and loads none of them.
 //
 // So the class gets a formwork rule as well, .formwork/rules/
 // fixture-exempt-declares-nothing.yaml, and this test is the seam between the

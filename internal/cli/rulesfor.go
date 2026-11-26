@@ -370,7 +370,7 @@ func gitignoreUnanswerable(stderr io.Writer, err error) int {
 }
 
 // notScannedAnswer renders a hidden verdict as the displayed answer — one
-// construction site for every channel, so the snapshot and ghost frames
+// place that builds every channel, so the snapshot and ghost frames
 // cannot drift apart. Every channel is an EXPLICIT arm: a verdict claiming a
 // channel this switch does not know is an internal error, never a silent
 // fall-through to the builtin-skip wording (#125 review — the next channel

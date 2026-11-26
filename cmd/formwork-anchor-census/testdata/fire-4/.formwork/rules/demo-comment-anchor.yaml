@@ -5,11 +5,11 @@ rules:
   type: go/per-func-count-relation
   severity: error
   scope:
-    include: [api-factory/**/*.go]
+    include: [svc/**/*.go]
   params:
     # funcs: ^thisIsNotAnAnchor$
-    left: suppliercollab\.RequireEnabled
-    right: quoteroomaudit\.RecordAccess
+    left: vendorcollab\.RequireEnabled
+    right: accessaudit\.RecordAccess
     relation: '<='
   cure: Record the access alongside the gate.
   tags: [go]

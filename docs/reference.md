@@ -1620,6 +1620,29 @@ Refused with exit 2, never dropped: a pin without `--shard`; a spec that is not
 twice; a lane that selects none of the selected rules (the job that set up for
 them would set up for nothing); and an id two pins place on different shards.
 
+#### Shards of different sizes: `--shard-capacity C1,...,CN`
+
+When the matrix jobs run on runners of different sizes, an even split of the
+measured work leaves the wide runners idle while the narrow ones finish.
+`--shard-capacity` gives each of the N shards a relative capacity, for example
+each job's vCPU:
+
+```sh
+formwork check --lane ci --shard 4/6 --durations prior.json --shard-capacity 8,8,8,4,4,4 -format json > shard-4.json
+```
+
+Each id, heaviest first, goes to the shard where its load plus the id, divided
+by that shard's capacity, is lowest. Ties go to the shard with fewer ids, then
+to the lower index. Pinned ids are placed first and count toward their shard's
+load. Equal capacities give exactly the partition without the flag. The list is
+part of the partition, so **every shard job must pass the same list**. The
+report is unchanged.
+
+Refused with exit 2: the flag without `--shard`; the flag without
+`--durations`, since every load is then zero; a list whose length is not N;
+the flag given twice; and a capacity that is not a canonical positive integer
+up to 1024.
+
 ---
 
 ## Single-content checks

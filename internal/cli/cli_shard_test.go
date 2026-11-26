@@ -1,5 +1,5 @@
-// cli_shard_test.go — `check --shard K/N` runs one shard of the selected rules
-// (TakeoffQS#25657), so a CI matrix can spread one whole-corpus sweep over N
+// cli_shard_test.go — `check --shard K/N` runs one shard of the selected rules,
+// so a CI matrix can spread one whole-corpus sweep over N
 // machines. The partition itself is pinned in shard_internal_test.go; these
 // pin what the command does with it: every shard's report names the rules it
 // ran, the reports together cover the corpus exactly once, and a spec the run

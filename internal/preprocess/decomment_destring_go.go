@@ -9,7 +9,7 @@ func init() { Register("decomment-destring-go", DecommentDestringGo) }
 // call is still made: the symbol surviving in a string literal satisfies the
 // matcher just as a comment used to. For the entitlements lockdowns that is the
 // natural shape of a refactor rather than a contrivance — the package already
-// carries several fmt.Errorf("entitlements.ConsumeTakeoff: %w", err) strings,
+// carries several fmt.Errorf("entitlements.ConsumeCredit: %w", err) strings,
 // so the call can be deleted while the error-wrap string keeps the gate green.
 //
 // The quotes themselves are kept so the result stays recognisably Go and a

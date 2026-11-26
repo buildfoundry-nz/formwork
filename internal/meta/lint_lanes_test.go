@@ -137,7 +137,7 @@ const prefilterRule = "rules:\n" +
 	"  - id: no-cat-default\n" +
 	"    type: forbidden-pattern\n" +
 	"    scope: {include: ['**/*.go']}\n" +
-	"    params: {pattern: 'Category = \"[a-z]+\"', prefilter: material_cat, multiline: true}\n"
+	"    params: {pattern: 'Category = \"[a-z]+\"', prefilter: widget_cat, multiline: true}\n"
 
 // Fixtures so fixture-coverage stays clean. Their CONTENT is load-bearing since
 // #133: the scan still skips .formwork/ for the real-tree differential, but the
@@ -145,7 +145,7 @@ const prefilterRule = "rules:\n" +
 // prefilter literal is what keeps these rules' verdicts down to the single
 // real-tree finding each test asserts.
 var prefilterFixtures = map[string]string{
-	".formwork/fixtures/no-cat-default/fire-1/f.go": "material_cat\nvar Category = \"x\"\n",
+	".formwork/fixtures/no-cat-default/fire-1/f.go": "widget_cat\nvar Category = \"x\"\n",
 	".formwork/fixtures/no-cat-default/pass-1/f.go": "package p\n",
 }
 
@@ -161,14 +161,14 @@ func TestLintFlagsLoadBearingPrefilter(t *testing.T) {
 		".formwork/formwork.yaml": "version: 1\n",
 		".formwork/rules/r.yaml":  prefilterRule,
 		// in-scope, matches the pattern, but LACKS the prefilter literal
-		"consts.go": "package p\nvar Category = \"floor\"\n",
+		"consts.go": "package p\nvar Category = \"red\"\n",
 	}))
 	if failed != 1 {
 		t.Fatalf("failed=%d\n%s", failed, out)
 	}
 	for _, want := range []string{
 		"[prefilter-load-bearing] FAIL — 1 problem(s)",
-		`no-cat-default: prefilter "material_cat" is load-bearing — removing it makes the rule match consts.go; move the scope to require_present: if intended.`,
+		`no-cat-default: prefilter "widget_cat" is load-bearing — removing it makes the rule match consts.go; move the scope to require_present: if intended.`,
 		"formwork lint: 5/6 checks passed",
 	} {
 		if !strings.Contains(out, want) {
@@ -182,7 +182,7 @@ func TestLintPassesRedundantPrefilter(t *testing.T) {
 		".formwork/formwork.yaml": "version: 1\n",
 		".formwork/rules/r.yaml":  prefilterRule,
 		// matches the pattern AND contains the prefilter literal → no difference
-		"consts.go": "package p\n// material_cat\nvar Category = \"floor\"\n",
+		"consts.go": "package p\n// widget_cat\nvar Category = \"red\"\n",
 	}))
 	if failed != 0 {
 		t.Fatalf("failed=%d\n%s", failed, out)
@@ -204,14 +204,14 @@ func TestLintPassesRedundantPrefilterWithMainEngineRun(t *testing.T) {
 	// report OK — guards the reuse path against a false positive.
 	rule := "rules:\n" +
 		"  - id: cat-ok\n    type: forbidden-pattern\n    scope: {include: ['**/*.go']}\n" +
-		"    params: {pattern: 'Category = \"[a-z]+\"', prefilter: material_cat, multiline: true}\n"
+		"    params: {pattern: 'Category = \"[a-z]+\"', prefilter: widget_cat, multiline: true}\n"
 	failed, out := lint(t, map[string]string{
 		".formwork/formwork.yaml":               "version: 1\n",
 		".formwork/rules/r.yaml":                rule,
-		".formwork/fixtures/cat-ok/fire-1/f.go": "material_cat\nvar Category = \"x\"\n",
+		".formwork/fixtures/cat-ok/fire-1/f.go": "widget_cat\nvar Category = \"x\"\n",
 		".formwork/fixtures/cat-ok/pass-1/f.go": "package p\n",
 		// matches the pattern AND contains the prefilter literal → no difference
-		"consts.go": "package p\n// material_cat\nvar Category = \"floor\"\n",
+		"consts.go": "package p\n// widget_cat\nvar Category = \"red\"\n",
 	})
 	if failed != 0 {
 		t.Fatalf("failed=%d\n%s", failed, out)
@@ -231,11 +231,11 @@ func TestLintPrefilterUsesPreprocessedView(t *testing.T) {
 		"    type: forbidden-pattern\n" +
 		"    scope: {include: ['**/*.go']}\n" +
 		"    preprocess: decomment-go\n" +
-		"    params: {pattern: 'Category = \"[a-z]+\"', prefilter: material_cat, multiline: true}\n"
+		"    params: {pattern: 'Category = \"[a-z]+\"', prefilter: widget_cat, multiline: true}\n"
 	failed, out := lint(t, withFixtures(map[string]string{
 		".formwork/formwork.yaml": "version: 1\n",
 		".formwork/rules/r.yaml":  rule,
-		"consts.go":               "package p\n// material_cat\nvar Category = \"floor\"\n",
+		"consts.go":               "package p\n// widget_cat\nvar Category = \"red\"\n",
 	}))
 	if failed != 1 {
 		t.Fatalf("failed=%d\n%s", failed, out)
@@ -277,7 +277,7 @@ func TestLintPrefilterCheckFailsClosedOnEngineError(t *testing.T) {
 		".formwork/rules/r.yaml":  prefilterRule,
 	}))
 	secret := filepath.Join(root, "secret.go")
-	if err := os.WriteFile(secret, []byte("package p\nvar Category = \"floor\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(secret, []byte("package p\nvar Category = \"red\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(secret, 0o000); err != nil {
@@ -329,11 +329,11 @@ func TestLintFlagsLoadBearingPrefilterAllOfMode(t *testing.T) {
 		"  - id: co-occur\n" +
 		"    type: forbidden-pattern\n" +
 		"    scope: {include: ['**/*.go']}\n" +
-		"    params: {all_of: ['alpha', 'beta'], prefilter: material_cat}\n"
+		"    params: {all_of: ['alpha', 'beta'], prefilter: widget_cat}\n"
 	failed, out := lint(t, map[string]string{
 		".formwork/formwork.yaml":                 "version: 1\n",
 		".formwork/rules/r.yaml":                  rule,
-		".formwork/fixtures/co-occur/fire-1/f.go": "material_cat alpha beta\n",
+		".formwork/fixtures/co-occur/fire-1/f.go": "widget_cat alpha beta\n",
 		".formwork/fixtures/co-occur/pass-1/f.go": "package p\n",
 		"both.go": "package p\n// alpha\n// beta\n",
 	})
@@ -341,7 +341,7 @@ func TestLintFlagsLoadBearingPrefilterAllOfMode(t *testing.T) {
 		t.Fatalf("failed=%d\n%s", failed, out)
 	}
 	if !strings.Contains(out, "[prefilter-load-bearing] FAIL — 1 problem(s)") ||
-		!strings.Contains(out, `co-occur: prefilter "material_cat" is load-bearing — removing it makes the rule match both.go`) {
+		!strings.Contains(out, `co-occur: prefilter "widget_cat" is load-bearing — removing it makes the rule match both.go`) {
 		t.Fatalf("expected all_of-mode FAIL naming both.go:\n%s", out)
 	}
 }
@@ -351,18 +351,18 @@ func TestLintReportsEachLoadBearingPathAndRule(t *testing.T) {
 	// redundant → two problem lines for the first rule, none for the second.
 	rules := "rules:\n" +
 		"  - id: cat-a\n    type: forbidden-pattern\n    scope: {include: ['**/*.go']}\n" +
-		"    params: {pattern: 'Category = \"[a-z]+\"', prefilter: material_cat, multiline: true}\n" +
+		"    params: {pattern: 'Category = \"[a-z]+\"', prefilter: widget_cat, multiline: true}\n" +
 		"  - id: cat-b\n    type: forbidden-pattern\n    scope: {include: ['**/*.go']}\n" +
 		"    params: {pattern: 'Widget = \"[a-z]+\"', prefilter: widget_tok, multiline: true}\n"
 	failed, out := lint(t, map[string]string{
 		".formwork/formwork.yaml":              "version: 1\n",
 		".formwork/rules/r.yaml":               rules,
-		".formwork/fixtures/cat-a/fire-1/f.go": "material_cat\nvar Category = \"x\"\n",
+		".formwork/fixtures/cat-a/fire-1/f.go": "widget_cat\nvar Category = \"x\"\n",
 		".formwork/fixtures/cat-a/pass-1/f.go": "package p\n",
 		".formwork/fixtures/cat-b/fire-1/f.go": "widget_tok\nvar Widget = \"x\"\n",
 		".formwork/fixtures/cat-b/pass-1/f.go": "package p\n",
-		"one.go":                               "package p\nvar Category = \"floor\"\n",
-		"two.go":                               "package p\nvar Category = \"roof\"\n",
+		"one.go":                               "package p\nvar Category = \"red\"\n",
+		"two.go":                               "package p\nvar Category = \"blue\"\n",
 		"w.go":                                 "package p\n// widget_tok\nvar Widget = \"blue\"\n",
 	})
 	if failed != 1 {
@@ -370,8 +370,8 @@ func TestLintReportsEachLoadBearingPathAndRule(t *testing.T) {
 	}
 	for _, want := range []string{
 		"[prefilter-load-bearing] FAIL — 2 problem(s)",
-		`cat-a: prefilter "material_cat" is load-bearing — removing it makes the rule match one.go`,
-		`cat-a: prefilter "material_cat" is load-bearing — removing it makes the rule match two.go`,
+		`cat-a: prefilter "widget_cat" is load-bearing — removing it makes the rule match one.go`,
+		`cat-a: prefilter "widget_cat" is load-bearing — removing it makes the rule match two.go`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)

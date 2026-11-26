@@ -169,14 +169,14 @@ func Lint(cfg *config.Config, root string, w io.Writer, devOptOutActive bool, sc
 	// check capable of FAILING on this config ran, which is the stronger property
 	// and would catch a board carrying only checks that cannot fail; that needs
 	// each check to answer whether it was falsifiable on this config, which none
-	// of them can today. examples/palletra-port-full is that board right now, and
+	// of them can today. The full example corpus is that board right now, and
 	// its .formwork/lint.yaml says so in the file itself.
 	//
 	// Under --rule the floor reports instead of refusing, for the same reason
 	// unusedErr disarms there: narrowing to one rule is the operator asking a
 	// question this corpus may simply have no check for, and a valid config plus
 	// a valid rule id must not be exit 2 (the contract reserves that for an
-	// engine or config error). `lint --rule <id>` on examples/palletra-port-full
+	// engine or config error). `lint --rule <id>` on the full example corpus
 	// was exit 2 for exactly that reason — rules-present is whole-corpus, and the
 	// corpus declares the other four inapplicable, so the board is empty through
 	// no fault of the config.

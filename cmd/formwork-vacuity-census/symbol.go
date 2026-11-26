@@ -10,7 +10,7 @@
 // call-confined-to-func-name or guard-precedes-call, which is 41 live rules
 // across the two types. These arms are the census spelling of that probe for
 // the two types the engine skips, exactly as DEAD-TRIGGER is its
-// pair-consistency spelling (#12181).
+// pair-consistency spelling.
 //
 // WHAT "DEAD" MEANS HERE, and why the obvious reading is wrong. A confinement
 // is a BAN. Zero call sites today does not make a ban unfallible — if the
@@ -24,7 +24,7 @@
 // through scope.exclude, so zero call sites in scope is precisely its compliant
 // state.
 //
-// So the verdict needs BOTH halves #12494 asked for: no call site AND no
+// So the verdict needs BOTH halves: no call site AND no
 // declaration. Only a symbol that exists nowhere can never be called.
 //
 // The total-ban case needs no branch of its own: a total ban whose symbol is

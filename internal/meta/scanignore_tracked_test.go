@@ -261,7 +261,7 @@ func TestLintScanIgnoreTrackedNeverReportsBuiltinSkips(t *testing.T) {
 	}
 }
 
-// The governance the walk reads since #24467 item 9 is ordinary scanned
+// The governance the walk reads is ordinary scanned
 // content, so an operator glob hiding it hides tracked files from every rule
 // that names the corpus — the exemption scan-ignore-tracked exists to report.
 func TestLintScanIgnoreTrackedReportsHiddenGovernance(t *testing.T) {

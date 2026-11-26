@@ -40,10 +40,10 @@ func TestAStatementComposedFromConstantsIsJudgedWhole(t *testing.T) {
 		"go.mod":      "module example.com/m\n\ngo 1.22\n",
 		"db/where.go": "package db\n\nconst byOrg = \" WHERE org_id = $1 AND id = $2\"\nconst everyRow = \" WHERE true\"\n",
 		"db/q.go": "package db\n\n" +
-			"func Scoped() string { return \"UPDATE takeoffqs.boqs SET status = $3\" + byOrg }\n\n" +
-			"func Unscoped() string { return \"DELETE FROM takeoffqs.boqs\" + everyRow }\n",
+			"func Scoped() string { return \"UPDATE app.orders SET status = $3\" + byOrg }\n\n" +
+			"func Unscoped() string { return \"DELETE FROM app.orders\" + everyRow }\n",
 	}
-	c := mustChecker(t, "table: 'takeoffqs\\.boqs'\nrequire:\n  - 'org_id'\nforbid:\n  - 'WHERE true'\n")
+	c := mustChecker(t, "table: 'app\\.orders'\nrequire:\n  - 'org_id'\nforbid:\n  - 'WHERE true'\n")
 	ms := check(t, c, walked(t, "db/q.go", files))
 	if len(ms) != 1 || ms[0].Line != 5 {
 		t.Fatalf("want the one statement whose constant hides `WHERE true` (line 5), "+
@@ -62,10 +62,10 @@ func TestSQLTheRuleCannotReadIsAFinding(t *testing.T) {
 		"db/cols.go": "package db\n\nconst cols = \"id, org_id\"\n",
 		"db/q.go": "package db\n\n" +
 			"func Dynamic(tbl string) string { return \"SELECT id FROM \" + tbl + \" WHERE org_id = $1\" }\n\n" +
-			"func Message(id string) string { return \"could not reach the pallet service for \" + id }\n\n" +
-			"func Constant() string { return \"SELECT \" + cols + \" FROM takeoffqs.boqs WHERE org_id = $1\" }\n",
+			"func Message(id string) string { return \"could not reach the billing service for \" + id }\n\n" +
+			"func Constant() string { return \"SELECT \" + cols + \" FROM app.orders WHERE org_id = $1\" }\n",
 	}
-	c := mustChecker(t, "table: 'takeoffqs\\.boqs'\nrequire:\n  - 'org_id'\n")
+	c := mustChecker(t, "table: 'app\\.orders'\nrequire:\n  - 'org_id'\n")
 	ms := check(t, c, walked(t, "db/q.go", files))
 	if len(ms) != 1 || ms[0].Line != 3 || !strings.Contains(ms[0].Message, "could not be read") {
 		t.Fatalf("want the one composition the rule cannot read (line 3), and neither the "+
@@ -83,9 +83,9 @@ func TestARuleScopedToATemplatesPackageJudgesItsInstances(t *testing.T) {
 		"store/frag.go": "package store\n\n" +
 			"func DeleteFrom(table string) string {\n\treturn \"DELETE FROM \" + table + \" WHERE true\"\n}\n",
 		"routes/r.go": "package routes\n\nimport \"example.com/m/store\"\n\n" +
-			"func Q() string { return store.DeleteFrom(\"takeoffqs.boqs\") }\n",
+			"func Q() string { return store.DeleteFrom(\"app.orders\") }\n",
 	}
-	c := mustChecker(t, "table: 'takeoffqs\\.boqs'\nforbid:\n  - 'WHERE true'\n")
+	c := mustChecker(t, "table: 'app\\.orders'\nforbid:\n  - 'WHERE true'\n")
 	ms := check(t, c, walked(t, "store/frag.go", files))
 	if len(ms) != 1 || ms[0].Line != 4 || strings.Contains(ms[0].Message, "could not be read") {
 		t.Fatalf("want the instance judged at the definition (line 4): %+v", ms)
@@ -122,9 +122,9 @@ func TestAClosedHelpersEveryValueIsJudged(t *testing.T) {
 		"go.mod": "module example.com/m\n\ngo 1.22\n",
 		"db/q.go": "package db\n\n" +
 			"func scope(all bool) string {\n\tif all {\n\t\treturn \"\"\n\t}\n\treturn \" WHERE deleted_at IS NULL\"\n}\n\n" +
-			"func Q(all bool) string { return \"SELECT id FROM takeoffqs.boqs\" + scope(all) }\n",
+			"func Q(all bool) string { return \"SELECT id FROM app.orders\" + scope(all) }\n",
 	}
-	c := mustChecker(t, "table: 'takeoffqs\\.boqs'\nrequire:\n  - 'deleted_at'\n")
+	c := mustChecker(t, "table: 'app\\.orders'\nrequire:\n  - 'deleted_at'\n")
 	ms := check(t, c, walked(t, "db/q.go", files))
 	if len(ms) == 0 {
 		t.Fatal("the helper's value without the required clause was not judged")

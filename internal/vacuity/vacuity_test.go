@@ -208,10 +208,10 @@ func TestTotalBanPassFixtureWithoutTheSymbolIsNotBlind(t *testing.T) {
     scope:
       include: ['src/**/*.go']
     params:
-      symbol: '^countWallHeightMetrics$'
+      symbol: '^countWidgetMetrics$'
       allowed_func: '^$'
 `, map[string]string{
-		"src/a.go": "package a\n\nfunc gather() {\n\tcountWallHeightMetricsForPages()\n}\n",
+		"src/a.go": "package a\n\nfunc gather() {\n\tcountWidgetMetricsForPages()\n}\n",
 	})
 	wantVerdict(t, v, vacuity.KindJudged, "")
 }

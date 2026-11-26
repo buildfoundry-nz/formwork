@@ -371,7 +371,7 @@ func TestUnreadableSiteIsAnchoredAtTheWriteNotTheSeed(t *testing.T) {
 // one buries the SQL gate's real gaps under the whole tree.
 func TestUnreadableSitesSkipCompositionsThatAreNotSQL(t *testing.T) {
 	src := "package db\n\nfunc load() string {\n" +
-		"\tmsg := \"could not reach the pallet service\"\n" +
+		"\tmsg := \"could not reach the billing service\"\n" +
 		"\torderIt(&msg)\n" +
 		"\treturn msg\n}\n"
 	if got := sitesFor(t, src); len(got) != 0 {
@@ -614,9 +614,9 @@ func TestBuilderWrittenFromANonSQLLocalStaysUnreported(t *testing.T) {
 // without it, reporting nothing passes.
 func TestCensusSitesSkipFromGoCompositionsThatAreNotSQL(t *testing.T) {
 	src := "package db\n\nimport \"fmt\"\n\nfunc f(id, col string, n int) (string, string, string) {\n" +
-		"\tmsg := \"could not reach the pallet service for \" + id\n" +
+		"\tmsg := \"could not reach the billing service for \" + id\n" +
 		"\tpath := fmt.Sprintf(\"exports/%s/%d.csv\", id, n)\n" +
-		"\tq := \"SELECT \" + col + \" FROM takeoffqs.boqs WHERE id = $1\"\n" +
+		"\tq := \"SELECT \" + col + \" FROM app.orders WHERE id = $1\"\n" +
 		"\treturn msg, path, q\n}\n"
 	for _, ruleType := range []string{"sql/parses", "sql/statement-predicate"} {
 		t.Run(ruleType, func(t *testing.T) {
@@ -637,7 +637,7 @@ func TestCensusSitesSkipFromGoCompositionsThatAreNotSQL(t *testing.T) {
 // same SQL once per node.
 func TestCensusSitesReportAComposedQueryOnce(t *testing.T) {
 	src := "package db\n\nfunc f(col, cond string) string {\n" +
-		"\treturn \"SELECT \" + col + \" FROM takeoffqs.boqs WHERE \" + cond + \" ORDER BY id\"\n}\n"
+		"\treturn \"SELECT \" + col + \" FROM app.orders WHERE \" + cond + \" ORDER BY id\"\n}\n"
 	sites, ok, err := sqlparse.CensusSites(nil, "sql/statement-predicate", "q.go", []byte(src))
 	if err != nil || !ok {
 		t.Fatalf("CensusSites: ok=%v err=%v", ok, err)
@@ -645,7 +645,7 @@ func TestCensusSitesReportAComposedQueryOnce(t *testing.T) {
 	if len(sites) != 1 {
 		t.Fatalf("one composed query, %d census site(s): %+v", len(sites), sites)
 	}
-	if want := "SELECT fw_expr FROM takeoffqs.boqs WHERE fw_expr ORDER BY id"; sites[0].Text != want {
+	if want := "SELECT fw_expr FROM app.orders WHERE fw_expr ORDER BY id"; sites[0].Text != want {
 		t.Fatalf("the site is the whole composition: text %q, want %q", sites[0].Text, want)
 	}
 }

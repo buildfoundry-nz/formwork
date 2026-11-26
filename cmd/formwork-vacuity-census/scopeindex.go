@@ -16,9 +16,9 @@ import (
 // of run one rule at a time. Each rule's own scan stays serial (so file
 // order within a rule's result is preserved exactly), only the rules
 // themselves are fanned out; this is what keeps a large PR's O(R×F)
-// scope-membership check off the wall-clock critical path (#12419).
+// scope-membership check off the wall-clock critical path.
 //
-// #14891: the parallel pool alone stopped fitting the budget once the
+// The parallel pool alone stopped fitting the budget once the
 // corpus reached ~2166 rules × ~21k files (46M glob evaluations — 11.07s
 // on a 4-vCPU CI runner against the pinned 10s wall). Two semantics-
 // preserving reductions, both held to byte-identical results by
@@ -129,7 +129,7 @@ func filesInScope(r *config.Rule, files []*scan.File) []*scan.File {
 // begin with the glob's meta-free literal prefix, so files outside the
 // union of those ranges cannot be in scope. Every candidate is still
 // decided by r.Applies, in the walk's original order — byte-identical
-// results, 6.5× fewer evaluations on the real corpus (#14891).
+// results, 6.5× fewer evaluations on the real corpus.
 func filesInScopeBucketed(r *config.Rule, files []*scan.File, buckets scopeBuckets) []*scan.File {
 	candidates := buckets.candidates(r.Include())
 	matched := make([]*scan.File, 0, len(candidates))

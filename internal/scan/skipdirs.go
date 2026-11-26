@@ -20,7 +20,7 @@ var skipDirs = map[string]bool{".git": true}
 // rule on its own test data, and each fixture is already judged — by the one
 // rule it belongs to, under `formwork test`, rooted at the fixture.
 //
-// IT IS THE ONLY PART OF .formwork THE WALK SKIPS (#24467 item 9). The rest —
+// IT IS THE ONLY PART OF .formwork THE WALK SKIPS. The rest —
 // formwork.yaml, the rule YAML, mutation specs — is the repository's governance,
 // and a rule may now read it like any other file, which is what a check over
 // the corpus itself had to shell out for (`type: command`) while the walk could

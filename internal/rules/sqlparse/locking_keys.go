@@ -18,8 +18,8 @@ import (
 //     relation contributes one row, so it has no siblings to order. A column is
 //     pinned by `col = $1` (or a constant, a cast of one, a function of them),
 //     or by an inner-join or WHERE equality to a column of a relation that is
-//     itself reduced to one row — `JOIN projects p ON p.current_boq_id = b.id
-//     WHERE p.id = $1 FOR UPDATE OF b` locks one boq;
+//     itself reduced to one row — `JOIN projects p ON p.current_cart_id = b.id
+//     WHERE p.id = $1 FOR UPDATE OF b` locks one cart;
 //   - a key column the statement pins also counts toward an ORDER BY: rows
 //     sharing project_id = $1 are totally ordered by ordinal when
 //     (project_id, ordinal) is a key.

@@ -2,7 +2,7 @@ package main
 
 // inventory_registry_conformance_test.go — the committed packed registry is
 // RENDER-NORMALISED: stable sort, no duplicate rows, canonical header and
-// trailing newline (#13521, #12398, #15918).
+// trailing newline.
 //
 // WHAT THIS FILE DOES NOT PROVE, and used to claim it did. Both tests here
 // parse the committed file and re-render WHAT THEY JUST READ, so the expected
@@ -79,10 +79,10 @@ func TestIncludeRegistryCorpusIsRenderNormalised(t *testing.T) {
 	if !bytes.Equal(got, renderIncludeRegistry(pairs)) {
 		t.Errorf("%s is not RENDER-NORMALISED — its rows are mis-sorted, duplicated, or its "+
 			"header/trailing newline drifted, so any regeneration hands the next author a diff "+
-			"full of rows they did not touch (#13521). This is NOT a staleness check: rows "+
+			"full of rows they did not touch. This is NOT a staleness check: rows "+
 			"disagreeing with the live rule scopes are GLOB-UNTRACKED/GLOB-REMOVED at census "+
 			"time. Re-render with:\n"+
-			"  go run -C tools/formwork-vacuity-census . --write-inventory <repo-root>", liveIncludeInventoryRel)
+			"  go run ./cmd/formwork-vacuity-census --write-inventory <repo-root>", liveIncludeInventoryRel)
 	}
 }
 
@@ -104,7 +104,7 @@ func TestWriteIfChangedSkipsIdenticalContent(t *testing.T) {
 		t.Fatalf("second write: %v", err)
 	}
 	if wrote {
-		t.Errorf("writeIfChanged rewrote a file whose bytes already matched — that is the churn of #13521")
+		t.Errorf("writeIfChanged rewrote a file whose bytes already matched — that is the churn this guards against")
 	}
 
 	wrote, err = writeIfChanged(dst, []byte("# header line\nalpha/**\ngamma/**\n"))

@@ -13,7 +13,7 @@ import (
 //
 // The 2026-07-27 prefilter-lint design rejected a *lexical* version of this
 // test — "is the literal a substring of the pattern text" — as noisy and wrong
-// on escaping (`platform\.material_cat` does not contain `platform.material_cat`
+// on escaping (`platform\.widget_cat` does not contain `platform.widget_cat`
 // as a substring). Everything here works on the PARSED pattern instead, so an
 // escape is resolved to the character it denotes before anything is compared.
 //

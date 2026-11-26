@@ -16,7 +16,7 @@ import (
 // enum / extension) nor a control-flow opener starts a brace body, and it
 // closes when the depth returns to the opening depth. Multi-line signatures
 // accumulate into the pending header so they cannot blind the unit (the
-// Dart analogue of #9767). Arrow-bodied members have no brace body and are
+// Dart analogue of the Go multi-line signature shape). Arrow-bodied members have no brace body and are
 // not units; collection-literal initializers open blocks, not units — both
 // residues are pinned by tests and disclosed in spec §5.
 

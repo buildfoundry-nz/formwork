@@ -5,7 +5,7 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/rules/rxmatch"
 )
 
-// The regex backend lives in internal/rules/rxmatch (#17979) so
+// The regex backend lives in internal/rules/rxmatch so
 // pair-consistency compiles through the SAME one instead of calling
 // regexp.Compile directly. This alias keeps the pattern rule types on that one
 // backend and its mandatory CPU meter.

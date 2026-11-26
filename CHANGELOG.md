@@ -4,6 +4,13 @@
 
 ### Added
 
+- **`check --shard-capacity C1,...,CN` sizes the shards.** A sharded run on
+  runners of different sizes can name each shard's relative capacity, such as
+  its vCPU. Ids go where load over capacity is lowest, so an 8-vCPU shard takes
+  twice the measured work of a 4-vCPU one. Equal capacities give the partition
+  without the flag. It needs `--shard` and `--durations` and one capacity per
+  shard.
+
 - **`sql/statement-predicate` takes an optional `prefilter`.** A Go file is
   still parsed when it contains that literal, composes strings, or calls a SQL
   template whose body contains it. Template indexing parses the files that

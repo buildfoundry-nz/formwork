@@ -15,7 +15,7 @@ import (
 // isClassGuard reports whether a subtractive glob names a CLASS of path rather
 // than one named file.
 //
-// This is the discriminating half of the exclude arm (#12178), and the
+// This is the discriminating half of the exclude arm, and the
 // corpus is what forced it. Of the 263 exclude/except globs matching nothing,
 // 232 are wildcards — `**/node_modules/**`, `**/*.pbjson.dart`,
 // `**/.dart_tool/**`, `**/gen/go/**`, `.agent-work/**`, `.claude/worktrees/**` —
@@ -38,7 +38,7 @@ func isClassGuard(glob string) bool {
 	return strings.ContainsAny(glob, "*?[")
 }
 
-// perGlobVerdicts is the per-glob arm (#10626). The whole-rule predicate
+// perGlobVerdicts is the per-glob arm. The whole-rule predicate
 // (Applies) cannot say WHICH include glob earned a match, so a rule with one
 // live glob and five dead ones scores healthy on every whole-rule instrument.
 // Here each declared glob is matched on its own (see perglob.go):
@@ -53,7 +53,7 @@ func isClassGuard(glob string) bool {
 //     the file is gone the carve-out reads as live while excusing nothing, so
 //     the instrument fails closed. Class-guard globs (**/node_modules/** and
 //     friends via isClassGuard) stay measured-not-gated so defensive entries
-//     do not fail the build. Header and instrument must agree (#12382 / I14).
+//     do not fail the build. Header and instrument must agree.
 //
 // A glob declared dead in place (`# glob-dead: <reason>` on the line above)
 // is exempt from every arm — the reviewed escape hatch, never an allowlist.

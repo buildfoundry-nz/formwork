@@ -15,14 +15,14 @@ func TestQualifyProtoGoAlias(t *testing.T) {
 	cases := map[string]struct{ in, want string }{
 		"rewrites top-level message with go_package alias": {
 			in: "syntax = \"proto3\";\n" +
-				"package palletra.domain.v1;\n" +
-				"option go_package = \"example.com/palletra/gen/go/palletra/domain/v1;domainv1\";\n" +
+				"package example.domain.v1;\n" +
+				"option go_package = \"example.com/example/gen/go/example/domain/v1;domainv1\";\n" +
 				"message Foo {\n" +
 				"  string x = 1;\n" +
 				"}\n",
 			want: "syntax = \"proto3\";\n" +
-				"package palletra.domain.v1;\n" +
-				"option go_package = \"example.com/palletra/gen/go/palletra/domain/v1;domainv1\";\n" +
+				"package example.domain.v1;\n" +
+				"option go_package = \"example.com/example/gen/go/example/domain/v1;domainv1\";\n" +
 				"message domainv1.Foo {\n" +
 				"  string x = 1;\n" +
 				"}\n",
@@ -40,12 +40,12 @@ func TestQualifyProtoGoAlias(t *testing.T) {
 				"}\n",
 		},
 		"no go_package leaves messages unchanged": {
-			in:   "package palletra.api.v1;\nmessage Foo {\n}\n",
-			want: "package palletra.api.v1;\nmessage Foo {\n}\n",
+			in:   "package example.api.v1;\nmessage Foo {\n}\n",
+			want: "package example.api.v1;\nmessage Foo {\n}\n",
 		},
 		"go_package without semicolon alias is unchanged": {
-			in:   "option go_package = \"example.com/palletra/gen/go/palletra/api/v1\";\nmessage Foo {\n}\n",
-			want: "option go_package = \"example.com/palletra/gen/go/palletra/api/v1\";\nmessage Foo {\n}\n",
+			in:   "option go_package = \"example.com/example/gen/go/example/api/v1\";\nmessage Foo {\n}\n",
+			want: "option go_package = \"example.com/example/gen/go/example/api/v1\";\nmessage Foo {\n}\n",
 		},
 		"brace-on-next-line is not rewritten": {
 			in:   "option go_package = \"p;domainv1\";\nmessage Foo\n{\n}\n",

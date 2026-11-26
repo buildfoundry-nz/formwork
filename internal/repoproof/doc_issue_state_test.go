@@ -113,7 +113,7 @@ func isPublishedDocPath(p string) bool {
 }
 
 // issueCitation matches a bare issue reference. The trailing boundary keeps
-// "#146" from also matching inside "#1465".
+// "#14" from also matching inside "#146".
 var issueCitation = regexp.MustCompile(`#[0-9]+\b`)
 
 // citedAsOpen matches an issue number annotated with its tracker state:

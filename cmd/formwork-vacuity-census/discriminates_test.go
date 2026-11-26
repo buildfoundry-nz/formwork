@@ -6,7 +6,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// The corrections below answer the SECOND half of #12178: a class promoted to
+// The corrections below answer the SECOND half of the class-2 audit: a class promoted to
 // gating is only worth gating if the detector behind it discriminates. Three of
 // the promoted detectors do not, and one of the instrument defects was measured
 // with a probe that reads a rule type's documented semantics as a defect.
@@ -43,11 +43,8 @@ func TestPairConsistencyDeadTriggerGates(t *testing.T) {
 // load-bearing". The rule below fires on its real defect — the shared element
 // is right there — so the census must stay quiet about it.
 //
-// Measured on this corpus the blank-the-b-side probe reported 23 set-relation
-// rules and 6 of them were exactly this: no-shadow-repo-of-base-endpoint,
-// no-fe-section-policy, deep-link-tables-are-disjoint,
-// slots-uc-mask-has-no-page-metric, promotion-jobtype-not-relitigated-as-a-literal,
-// detail-catalog-no-bespoke-keymap. A disjoint relation is falsified by ADDING
+// Measured on a real corpus the blank-the-b-side probe reported 23
+// set-relation rules and 6 of them were exactly this. A disjoint relation is falsified by ADDING
 // an element to both sides, never by removing one.
 func TestDisjointRelationIsNotProbedByBlankingTheForbiddenSide(t *testing.T) {
 	root := writeCorpus(t, `rules:
@@ -74,11 +71,8 @@ func TestDisjointRelationIsNotProbedByBlankingTheForbiddenSide(t *testing.T) {
 // The other half of the same category error. When the two sides draw from the
 // SAME files, blanking "the b side" blanks the a side with it: A empties
 // alongside B and `A ⊆ B` holds trivially. The probe is not reading the rule,
-// it is reading the fact that one glob appears twice. Five of the 23 were this
-// — queryobs-acquire-claim-has-its-tracer, partition-parents-have-ci-default,
-// admin-jobs-have-machine-twin, no-write-only-takeoffqs-tables,
-// cladding-family-set-lists-every-declared-code — and two more were the same
-// shape spelled as a containing glob. The rule below fires on its real defect:
+// it is reading the fact that one glob appears twice. Five of the 23 were this,
+// and two more were the same shape spelled as a containing glob. The rule below fires on its real defect:
 // add a write with no read and it goes red.
 func TestSameGlobRelationIsNotProbedByBlankingBothSidesAtOnce(t *testing.T) {
 	root := writeCorpus(t, `rules:
@@ -223,8 +217,8 @@ func TestDiffuseEvidenceReachesBeyondThreeWitnesses(t *testing.T) {
 }
 
 // The census excuses every heavy rule (type:command, git-diff) from carrying a
-// fixture on the grounds that "their fire coverage lives in
-// api-factory/internal/lockdowntests/". That excuse is asserted, never checked.
+// fixture on the grounds that "their fire coverage lives in the lockdown synth
+// tree". That excuse is asserted, never checked.
 // A heavy rule no lockdown synth names has nothing, anywhere, demonstrating it
 // can fail.
 func TestHeavyRuleWithNoFixtureAndNoSynthGates(t *testing.T) {
@@ -248,9 +242,9 @@ func TestHeavyRuleWithNoFixtureAndNoSynthGates(t *testing.T) {
 
 // The other half of the same check: a heavy rule whose lockdown synth is a
 // comment-only marker inventory with no test function in it is not witnessed
-// either. api-factory/internal/lockdowntests/synth_form_coverage_markers_test.go
-// is twelve lines of `// FORM(...)` markers and no code.
+// either. The shape is a file of `// FORM(...)` markers and no code.
 func TestHeavyRuleWitnessedOnlyByACommentFileGates(t *testing.T) {
+	withSynthDir(t, "svc/internal/synthtests")
 	root := writeCorpus(t, `rules:
   - id: marker-only-command
     type: command
@@ -263,7 +257,7 @@ func TestHeavyRuleWitnessedOnlyByACommentFileGates(t *testing.T) {
     tags: [always]
 `, map[string]string{
 		"src/a.go": "package a\n",
-		"api-factory/internal/lockdowntests/marker_only_test.go": "//go:build lockdown\n\npackage lockdowntests\n\n" +
+		"svc/internal/synthtests/marker_only_test.go": "//go:build lockdown\n\npackage synthtests\n\n" +
 			"// marker-only-command: class covered elsewhere\n",
 	})
 
@@ -276,6 +270,7 @@ func TestHeavyRuleWitnessedOnlyByACommentFileGates(t *testing.T) {
 // And the true negative: a heavy rule with a real lockdown synth naming it is
 // witnessed, and must stay quiet.
 func TestHeavyRuleWithARealSynthIsQuiet(t *testing.T) {
+	withSynthDir(t, "svc/internal/synthtests")
 	root := writeCorpus(t, `rules:
   - id: witnessed-command
     type: command
@@ -288,8 +283,8 @@ func TestHeavyRuleWithARealSynthIsQuiet(t *testing.T) {
     tags: [always]
 `, map[string]string{
 		"src/a.go": "package a\n",
-		"api-factory/internal/lockdowntests/witnessed_command_synthetic_test.go": "//go:build lockdown\n\n" +
-			"package lockdowntests\n\nimport \"testing\"\n\n" +
+		"svc/internal/synthtests/witnessed_command_synthetic_test.go": "//go:build lockdown\n\n" +
+			"package synthtests\n\nimport \"testing\"\n\n" +
 			"func TestWitnessedCommandFires(t *testing.T) {\n\t_ = \"witnessed-command\"\n}\n",
 	})
 

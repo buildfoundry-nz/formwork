@@ -1,7 +1,7 @@
 package main
 
 // newrules.go — the arm that refuses a rule this change ADDS which the census
-// cannot decide (#15837).
+// cannot decide.
 //
 // Every other arm here answers "is this rule vacuous?". This one answers the
 // question one level up: "was that question even asked?". The census gates what
@@ -34,9 +34,9 @@ package main
 // Measured on the corpus this landed against: 19 of 90 set-relation rules and
 // 38 of 49 symbol-anchored rules, 57 of 2317 in all. Gating the whole corpus
 // would open 57 findings and block every PR until they are closed, and a gate
-// that cannot be turned on is worth nothing. Those 57 are the #15837 backfill.
+// that cannot be turned on is worth nothing. Those 57 are the backfill.
 // This is the same new-rules-first rollout rule-has-mutation-proof used for the
-// identical reason (#11934), and the backfill is the later wave, not something
+// identical reason, and the backfill is the later wave, not something
 // this arm silently skips.
 //
 // # Why it lives INSIDE the census
@@ -46,7 +46,7 @@ package main
 // stated authority — vacuity is never re-derived from rule YAML. There is also
 // a wall-clock reason: the census takes over ten minutes standalone on this
 // tree, and a new type:command rule re-running vacuity analysis would put a
-// second one of those on the Architecture lane's critical path (#14875). This
+// second one of those on the Architecture lane's critical path. This
 // arm reads rule METADATA the census has already loaded and shells out to git
 // once, so it costs a single `git diff` restricted to .formwork/rules.
 //
@@ -151,7 +151,7 @@ func isGitCheckout(root string) bool {
 }
 
 // censusDiffRange applies the same precedence scripts/dev/mutation-proof uses:
-// CI's authoritative PR range env (TDD_TWO_COMMIT_SPLIT_RANGE, the #5938 range
+// CI's authoritative PR range env (TDD_TWO_COMMIT_SPLIT_RANGE, the range
 // ci.yml exports), then merge-base(origin/develop, HEAD)..HEAD — the checkout's
 // own commits. One precedence for both gates so a rule cannot be new to one and
 // old to the other.
@@ -173,7 +173,7 @@ func censusDiffRange(root string) (string, error) {
 // instead of comparing the two endpoints. A two-dot `git diff` on a branch whose
 // base has fallen behind develop reads every develop-side change since the fork
 // point IN REVERSE, so develop's new rules would surface here as this branch's
-// additions and the author would be charged for them (#12104, the identical
+// additions and the author would be charged for them (the identical
 // normalisation scripts/dev/mutation-proof applies for the identical reason).
 // Explicit three-dot ranges and single revs pass through unchanged.
 func mergeBaseDiffRange(rangeExpr string) string {

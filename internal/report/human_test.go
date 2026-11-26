@@ -66,7 +66,7 @@ func TestHumanSummaryLineOnACleanRun(t *testing.T) {
 }
 
 // A mid-port corpus legitimately has hundreds of rules whose scope matches
-// nothing — 572 of the 707 in examples/palletra-port-full — and printing all of
+// nothing — 572 of the 707 in the full example corpus — and printing all of
 // them puts a wall of text between the findings and the verdict line, which
 // buries both. The list is capped, and the cap is DISCLOSED with the exact
 // count dropped and where to get the rest: a silent truncation would read as

@@ -16,14 +16,14 @@
 // same exit code as "the detector fired".
 //
 // WHY THE REQUIREMENT IS OUTPUT-CONDITIONAL RATHER THAN ABSOLUTE. Ten command
-// rules in examples/palletra-port-full exit 1 on their fire path while printing
+// rules in the full example corpus exit 1 on their fire path while printing
 // nothing at all — measured by evaluating each in its own fire-1 tree, and they
 // are exactly the ten whose fire manifests are still bare: gate-scripts-are-
 // wired, gate-synth-test-coverage, go-http-services-use-httpserve-seams,
 // go-services-call-cgroup-configure, golangci-required-linters-stay-enabled,
 // jsonb-key-naming-matches-manifest, local-accept-threshold-declared-once,
 // migration-partman-parent-settings-cascade, migration-partman-retention-
-// preserved-on-replace, shared-internal-tree-excludes-core-api-only-packages.
+// preserved-on-replace, shared-internal-tree-excludes-service-only-packages.
 // Their message is the frame alone, so no substring of it can name a verdict
 // and there is no pin available to write. An opt-out list would let exactly
 // those ten keep accepting arbitrary compile-failure output forever — a checker

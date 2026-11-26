@@ -4,7 +4,7 @@
 // #26's hard constraint is that re-ordering dispatch changes nothing a caller
 // can read. The synthetic tests next door pin the mechanism; this one asks the
 // question of real rule sets — the repo's own `.formwork/`, the teaching corpus,
-// and the five palletra-port corpora, the largest of which carries 704 rules,
+// and the five example corpora, the largest of which carries 704 rules,
 // 177 of them `command` escapes. A scheduling change that was going to
 // disturb a verdict would have to do it somewhere, and a corpus of four rules
 // is not where.

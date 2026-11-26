@@ -23,10 +23,10 @@ const minCorpusForCanaries = 50
 // fixture corpus that has no named canary in it.
 func selfTest() error {
 	files := []string{
-		"packages/feature_measure/lib/presentation/measure_page.dart",
-		"packages/tqs_core/lib/cache/session_cache_lru.dart",
+		"packages/feature_search/lib/presentation/search_page.dart",
+		"packages/app_core/lib/cache/session_cache_lru.dart",
 		"frontend/lib/main.dart",
-		"api-factory/services/core-api/routes/admin/admin_jobs.go",
+		"svc/api/routes/admin/admin_jobs.go",
 		"README.md",
 	}
 	fset := &scan.FileSet{Root: "."}
@@ -41,7 +41,7 @@ func selfTest() error {
 		want    int
 	}{
 		{"doublestar mid-pattern", []string{"packages/*/lib/**/*.dart"}, nil, 2},
-		{"doublestar suffix", []string{"api-factory/**"}, nil, 1},
+		{"doublestar suffix", []string{"svc/**"}, nil, 1},
 		{"single star is not doublestar", []string{"packages/*/*.dart"}, nil, 0},
 		{"exclude subtracts", []string{"**/*.dart"}, []string{"frontend/**"}, 2},
 		{"literal path", []string{"README.md"}, nil, 1},
@@ -84,7 +84,7 @@ func calibrate(cfg *config.Config, scopes map[string][]*scan.File, gm *globMeasu
 	// The class-2 probes are the arms this census is leaned on for, and inside
 	// a proof scratch pruned to one rule they have no content rules left to
 	// classify — so this corpus-independent block is the only thing a mutation
-	// to them can bite (#15917).
+	// to them can bite.
 	if err := class2SelfTest(); err != nil {
 		fmt.Fprintf(stdout, "  class-2 probe self-test            FAILED\n")
 		fmt.Fprintf(stderr, "%s FAIL: %v\n", tag, err)
@@ -96,6 +96,10 @@ func calibrate(cfg *config.Config, scopes map[string][]*scan.File, gm *globMeasu
 		return code
 	}
 
+	if len(calibration) == 0 {
+		fmt.Fprintf(stdout, "  named canaries                     none given (--canary RULE-ID=MIN-FILES)\n")
+		return 0
+	}
 	present, under := 0, 0
 	for _, c := range calibration {
 		n, found := 0, false
@@ -118,14 +122,14 @@ func calibrate(cfg *config.Config, scopes map[string][]*scan.File, gm *globMeasu
 	}
 	if under > 0 {
 		fmt.Fprintf(stderr, "%s FAIL: %d known-live rule(s) reported fewer files than they guard; "+
-			"every zero below would be unfalsifiable. If a canary was legitimately retired, replace it in the "+
-			"calibration list in tools/formwork-vacuity-census/main.go — never lower its floor.\n", tag, under)
+			"every zero below would be unfalsifiable. If a canary was legitimately retired, replace its "+
+			"--canary flag with another known-live rule — never lower its floor.\n", tag, under)
 		return 2
 	}
 	if present == 0 && len(cfg.Rules) > minCorpusForCanaries {
 		fmt.Fprintf(stderr, "%s FAIL: a %d-rule corpus with none of the named known-live rules in it. "+
 			"Either the census is pointed at the wrong tree or every canary has been renamed; "+
-			"update the calibration list in tools/formwork-vacuity-census/main.go.\n", tag, len(cfg.Rules))
+			"update the --canary flags.\n", tag, len(cfg.Rules))
 		return 2
 	}
 	return 0
@@ -137,8 +141,8 @@ func calibrate(cfg *config.Config, scopes map[string][]*scan.File, gm *globMeasu
 // glob that matches everything to prove this failure arm is load-bearing.
 const impossibleGlobEnv = "FORMWORK_VACUITY_CENSUS_SELFTEST_IMPOSSIBLE_GLOB"
 
-// perGlobSelfTest is the per-glob arm's half of calibration (#10626), the
-// direct answer to #10083's 133-false-zeros lesson one level down: a per-glob
+// perGlobSelfTest is the per-glob arm's half of calibration, the
+// direct answer to the false-zeros lesson one level down: a per-glob
 // census that reports zero for a glob covering thousands of live files has
 // reproduced the shell-census bug inside its own fix. Two probes, and the
 // census exits 2 — reporting nothing — if either fails:

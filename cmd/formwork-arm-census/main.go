@@ -1,7 +1,7 @@
 // formwork-arm-census — two ways a rule ARM can be written so that it cannot
 // fail, both invisible to every instrument the repo already runs.
 //
-// Usage: go run -C tools/formwork-arm-census . --check=tautology|multi-witness <repo-root>
+// Usage: go run ./cmd/formwork-arm-census --check=tautology|multi-witness <repo-root>
 //
 // Product enforcement is formwork type:command
 // (.formwork/rules/arm-shape-ratchets.yaml) with origin on this file.
@@ -18,11 +18,11 @@
 // `required-pattern` with `pattern: '.'` is a gate on the file having a line.
 // shell-unit-tests-exist was exactly that over
 // scripts/lib/file-size-caps.test.sh: every one of its fifty assertions about
-// the file-size cap resolver (the #8629/#8630 scar) could be deleted, the file
+// the file-size cap resolver could be deleted, the file
 // replaced with `#!/usr/bin/env bash` + `exit 0`, and the arm stayed green — as
 // did its sibling shell-unit-tests, which only required ci.yml to NAME the
 // script. CI then ran the gutted script, got exit 0, and reported the lane
-// green. The pair was jointly inert (#12182).
+// green. The pair was jointly inert.
 //
 // No instrument saw it. `formwork lint` checks that the scope matches a file,
 // and it did. The vacuity census's class-2 probes ask whether the evidence is a
@@ -45,7 +45,7 @@
 // witnesses in the tree that is a real gate: delete the line and it fires. With
 // dozens it is a gate against the class being deleted ENTIRELY, which is not a
 // regression anyone was going to commit, while the regression its own cure
-// names sails through. Three measured on develop@708fe7a0aa:
+// names sails through. Three measured on a real corpus:
 //
 //	withtenantorg-adopted             74 witnesses. Cure: "convert a
 //	                                  worker-pipeline writer to call
@@ -136,7 +136,7 @@ type offender struct {
 func main() {
 	which := flag.String("check", "", "which question to ask: tautology | multi-witness | narrowable | embedded")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: go run -C tools/formwork-arm-census . --check=tautology|multi-witness|narrowable|embedded <repo-root>")
+		fmt.Fprintln(os.Stderr, "usage: go run ./cmd/formwork-arm-census --check=tautology|multi-witness|narrowable|embedded <repo-root>")
 	}
 	flag.Parse()
 	c, ok := checks[*which]

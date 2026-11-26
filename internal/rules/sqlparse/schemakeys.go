@@ -14,7 +14,7 @@ import (
 // schema file (params.schema).
 //
 // unique_key_columns is one list of column NAMES for every relation, so it
-// cannot say that material_id identifies a row of material_price_overrides
+// cannot say that item_id identifies a row of item_price_overrides
 // and not of materials, that (session_id, row_key) is one key, or that
 // org_id is unique only where site_id IS NULL. A schema says all three. With
 // params.schema set, a relation's keys are its PRIMARY KEY, its UNIQUE

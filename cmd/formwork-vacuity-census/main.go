@@ -1,27 +1,27 @@
 // formwork-vacuity-census — how many formwork rules currently protect nothing?
 //
-// Usage: go run -C tools/formwork-vacuity-census . [--full] [--write-inventory] <repo-root>
+// Usage: go run ./cmd/formwork-vacuity-census [--full] [--write-inventory] <repo-root>
 //
 // Product enforcement is formwork type:command with origin on this file.
 // Exit 0 = no vacuous rules, 1 = offenders listed or the scope-phase wall
-// budget blown (#12419), 2 = usage/env error.
+// budget blown, 2 = usage/env error.
 //
 // A rule that cannot fail is worse than no rule: it burns CI time and reads as
 // coverage in docs/lockdown-enumeration.md while guarding nothing. This census
 // classifies every rule in .formwork/rules/ into the three vacuity classes and
-// fails CI on any of them, so vacuity cannot silently regrow (#10083).
+// fails CI on any of them, so vacuity cannot silently regrow.
 //
 //	class 1  EMPTY SCOPE       scope.include matches no file in the tree.
 //	class 1  EMPTY GLOB        ONE scope.include glob matches no file while a
 //	                           sibling glob keeps the whole rule looking healthy
-//	                           (per-glob arm, #10626 — see below).
+//	                           (per-glob arm — see below).
 //	class 1  GLOB REMOVED      a previously-live include glob was deleted from
-//	                           the rule (inventory arm, #10876 — see below).
+//	                           the rule (inventory arm — see below).
 //	class 1  GLOB UNTRACKED    a live include glob is missing from the inventory.
 //	class 1  SOURCE UNLISTED   a rule DECLARES its scope.include exhaustive over a
 //	                           source directory (`# source-list-exhaustive:`) and a
 //	                           non-test .go file there is covered by no entry
-//	                           (#13517 — the file matches no glob, so every arm
+//	                           (the file matches no glob, so every arm
 //	                           above is blind to it by construction).
 //	class 1  SOURCE-LIST-      that declaration names a directory holding no
 //	         VACUOUS           non-test Go source, so it gates nothing.
@@ -29,22 +29,22 @@
 //	                           it is a comment, its own detector, or a token so
 //	                           generic that any fragment of the file supplies it.
 //	class 2  INERT-REQUIRED    a set-relation whose required side can be blanked
-//	                           ENTIRELY with the relation still holding (#12180).
+//	                           ENTIRELY with the relation still holding.
 //	class 2  DEAD-TRIGGER      a pair-consistency rule whose trigger matches
 //	                           nothing, so no unit ever enters the obligation
-//	                           and the companion is never asked for (#12181).
+//	                           and the companion is never asked for.
 //	class 3  DEAD FIXTURE      the fire/pass pair no longer discriminates.
 //	class 3  EMPTY-SCOPE FIRE  no fire fixture contains a file the rule's scope
 //	                           matches, so each fires on an EMPTY scope and
-//	                           demonstrates nothing about the evidence (#12178).
+//	                           demonstrates nothing about the evidence.
 //	class 3  NO FIRE WITNESS   a heavy rule with no fixture AND no lockdown
 //	                           synth that both names it and declares a test
-//	                           function (#12178).
+//	                           function.
 //	class 3  FIXTURE REMOVED   a fixture directory the rule used to have is gone
-//	                           (registry arm, #10838 — see below).
+//	                           (registry arm — see below).
 //	class 3  FIXTURE UNTRACKED a fixture directory is missing from the registry.
 //
-// # The per-glob arm (#10626)
+// # The per-glob arm
 //
 // config.Rule.Applies is a union predicate: once it returns true, which
 // include glob earned the match is unrecoverable. Every whole-rule instrument
@@ -59,7 +59,7 @@
 // with `# glob-dead: <reason>` on the line above it — the reviewed escape,
 // never a separate allowlist file.
 //
-// scope.exclude globs are GATED (#12178), on the half of them
+// scope.exclude globs are GATED, on the half of them
 // that discriminates. Two things were wrong with reporting and never gating.
 //
 // First the DENOMINATOR. The defensive entries were partly "dead" because they
@@ -91,19 +91,19 @@
 // WRONG files (too broad, or the right count for the wrong reason) is
 // invisible here. That is class 2's territory.
 //
-// # The live-include inventory (#10876)
+// # The live-include inventory
 //
 // EMPTY-GLOB only sees declared globs. Deleting a live include glob — and its
 // fixtures — leaves no EMPTY-GLOB, no class-3 half-fixture, and a green census:
 // the thorough gaming run that dropped admin_app from the global-error-handler
 // rules. tools/formwork-vacuity-census/live-include-globs.tsv is the packed
-// declared-sibling registry (#12398): every LIVE scope.include glob is listed
+// declared-sibling registry: every LIVE scope.include glob is listed
 // as rule-id<TAB>glob, and removing one from a rule without removing the row
 // gates as GLOB-REMOVED. Adding live coverage without a row gates as
 // GLOB-UNTRACKED. Regenerate with --write-inventory. Synthetic corpora (rule
 // count ≤ minCorpusForCanaries) skip the registry unless they plant a file.
 //
-// # The fixture-directory registry (#10838)
+// # The fixture-directory registry
 //
 // The class-3 arms judge the fixtures a rule STILL HAS. None of them can see one
 // that is GONE: delete a directory from a rule with twelve and `formwork test`
@@ -114,7 +114,7 @@
 // deletion leave a trace: a row whose directory is gone gates as
 // FIXTURE-REMOVED, a directory with no row as FIXTURE-UNTRACKED. Same shape,
 // same canary threshold, the same --write-inventory regeneration and the same
-// per-rule keying (#12043) as the live-include registry above — here the rule id
+// per-rule keying as the live-include registry above — here the rule id
 // is the parent directory, so the manifest travels with the tree it registers.
 // Details in fixtureinventory.go.
 //
@@ -134,7 +134,7 @@
 // four-figure count and a deliberately-impossible glob to report zero before
 // any per-glob zero is believed.
 //
-// # The scope-phase wall budget (#12419)
+// # The scope-phase wall budget
 //
 // Building every rule's in-scope file set is O(rules×files) union-predicate
 // work, and the census runs on every Architecture Guardrails pass. Computed
@@ -158,14 +158,14 @@
 //
 //   - COMMENT-SATISFIED — blank every comment-only line of each witness and the
 //     rule stops passing. Then prose is the evidence: the code it names could be
-//     deleted and the rule would still be green (the #9992 class). A rule that
+//     deleted and the rule would still be green. A rule that
 //     legitimately reads comments declares preprocess: comments-only-*, and is
 //     exempt by that declaration rather than by a list.
 //   - DETECTOR-SATISFIED — every witness is a gate source (under scripts/ or
 //     tools/, or the rule's own declared origin). The rule asserts its own
 //     detector still contains some text, not that the detector's invariant holds
 //     (the no-zero-reader-columns class). Documented here from the day the
-//     census landed and unimplemented until #12178; it is a live gate now.
+//     census landed and unimplemented for a while; it is a live gate now.
 //   - DIFFUSE-EVIDENCE — split each witness into 16 contiguous blocks; if at
 //     least 14 blocks satisfy the rule ALONE, the pattern matches something so
 //     common that near-any fragment of the file supplies it.
@@ -175,9 +175,9 @@
 // single-file satisfaction does not mean "the evidence lives here" and every
 // probe above would misread.
 //
-// Relations no longer sit outside the population entirely (#12178 defect 1).
+// Relations no longer sit outside the population entirely.
 // set-relation and pair-consistency were excluded on the same argument, and
-// #12180 and #12181 then found live, execution-proven vacuity in exactly those
+// the relation probes then found live, execution-proven vacuity in exactly those
 // two types — 34 set-relation and 45 pair-consistency rules in one shard alone
 // had never been probed by anything. They get the two probes that ARE valid for
 // a relation, each the mechanical form of the experiment that found the live
@@ -213,12 +213,11 @@
 // Neither is a witness probe, because a relation is satisfied by an empty tree
 // and "this file satisfies it alone" would carry no information.
 //
-// DIFFUSE-EVIDENCE no longer stops at three witnesses (#12178 defect 3). The
+// DIFFUSE-EVIDENCE no longer stops at three witnesses. The
 // verdict requires EVERY witness to be internally redundant, so the arm still
 // exits on the first witness that pins a line; the old cap excluded exactly the
 // rules whose evidence was most redundant. Having MANY witnesses is a separate
-// property and stays out — that grain is tools/formwork-witness-census's
-// (#12182), and the two must not both claim it.
+// property and stays out — that grain is tools/formwork-witness-census's, and the two must not both claim it.
 package main
 
 import (
@@ -228,6 +227,8 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
@@ -256,30 +257,61 @@ import (
 const tag = "[formwork-vacuity-census]"
 
 // calibration rules are known-live gates the instrument must report as live
-// before any zero it prints is believable. dart-file-size-cap is the named
-// canary: the shell census reported it as matching zero files.
-var calibration = []struct {
+// before any zero it prints is believable. They belong to the corpus being
+// censused, so the caller names them with --canary ID=N (repeatable): N is
+// the fewest in-scope files that rule can honestly report. With none named,
+// the canary arm is skipped and says so.
+var calibration []canary
+
+// canary is one known-live rule and the floor its in-scope file count must
+// reach.
+type canary struct {
 	id     string
 	minHit int
-}{
-	{"dart-file-size-cap", 1000},
-	{"no-new-js-ts", 1000},
-	{"routes-goroutine-async-ok", 100},
-	{"dart-magic-dimensions", 100},
-	{"idempotency-not-in-middleware", 1},
+}
+
+// canaryFlag collects repeated --canary ID=N values into calibration.
+type canaryFlag struct{}
+
+func (canaryFlag) String() string { return "" }
+
+func (canaryFlag) Set(v string) error {
+	c, err := parseCanary(v)
+	if err != nil {
+		return err
+	}
+	calibration = append(calibration, c)
+	return nil
+}
+
+// parseCanary reads one ID=N canary. N must be a positive integer: a floor of
+// zero would calibrate nothing.
+func parseCanary(v string) (canary, error) {
+	id, n, ok := strings.Cut(v, "=")
+	if !ok || id == "" {
+		return canary{}, fmt.Errorf("--canary %q: want RULE-ID=MIN-FILES", v)
+	}
+	min, err := strconv.Atoi(n)
+	if err != nil || min < 1 {
+		return canary{}, fmt.Errorf("--canary %q: MIN-FILES must be a positive integer", v)
+	}
+	return canary{id: id, minHit: min}, nil
 }
 
 func main() {
 	full := flag.Bool("full", false, "print the whole per-rule classification table, not just offenders")
 	writeInv := flag.Bool("write-inventory", false, "rewrite the packed live-include registry (live-include-globs.tsv) from current live include globs and .formwork/fixtures/<rule>/INVENTORY.tsv from the fixture directories on disk — and exit 0")
 	inv := flag.String("inventory", "", "path (repo-relative) to the packed live-include registry; default .formwork/census/live-include-globs.tsv")
+	flag.Var(canaryFlag{}, "canary", "RULE-ID=MIN-FILES: a known-live rule that must report at least MIN-FILES in-scope files before any zero is believed (repeatable)")
+	synthDir := flag.String("synth-dir", "", "repo-relative directory whose Go test files may witness a heavy rule that carries no fixture; unset, no heavy rule is witnessed that way")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: formwork-vacuity-census [--full] [--write-inventory] [--inventory PATH] <repo-root>\n")
+		fmt.Fprintf(os.Stderr, "usage: formwork-vacuity-census [--full] [--write-inventory] [--inventory PATH] [--canary RULE-ID=MIN-FILES]... [--synth-dir PATH] <repo-root>\n")
 	}
 	flag.Parse()
 	if *inv != "" {
 		SetInventoryPath(*inv)
 	}
+	SetSynthDir(*synthDir)
 	root := "."
 	if flag.NArg() > 0 {
 		root = flag.Arg(0)
@@ -310,7 +342,7 @@ func run(root string, full, writeInv bool, stdout, stderr io.Writer) int {
 	}
 
 	// The O(rules×files) scope-membership phase runs through the parallel
-	// index under a wall budget (#12419): a serial loop here put the census
+	// index under a wall budget: a serial loop here put the census
 	// on the Architecture Guardrails critical path for minutes, and the
 	// budget is what keeps that shape from coming back.
 	scopes, err := buildScopesWithBudget(cfg.Rules, fset.Files, scopeWallBudget)
@@ -334,7 +366,7 @@ func run(root string, full, writeInv bool, stdout, stderr io.Writer) int {
 	if writeInv {
 		// Both counts say how many files were TOUCHED, not how many exist. A
 		// regeneration that reports "wrote 3094" while changing nothing on disk
-		// is its own small lie, and it is the lie that hid #13521: the author
+		// is its own small lie, and it is the lie that hid a real drift: the author
 		// could not tell a run that cured their finding from one that also
 		// rewrote 56 registries belonging to rules they had never seen.
 		wroteInc, totalInc, err := writeLiveIncludeInventory(root, gm)
@@ -356,7 +388,7 @@ func run(root string, full, writeInv bool, stdout, stderr io.Writer) int {
 	}
 
 	// Calibration is written to a buffer rather than straight out, so report()
-	// can place it AFTER the verdicts on a failing run (#16031). It is the
+	// can place it AFTER the verdicts on a failing run. It is the
 	// census's instrument provenance — the evidence that the instrument could
 	// have seen something — which is what a PASSING run needs and the least
 	// useful text a failing one carries. At 681 bytes it is larger than the
@@ -395,10 +427,10 @@ func run(root string, full, writeInv bool, stdout, stderr io.Writer) int {
 	rows = attachInventoryVerdicts(rows, fixtureInventoryVerdicts(fixtures, fixtureInv, fixtureInvPresent, invRequired))
 	// Unconditional, unlike the two registries above: a source-list declaration
 	// is opt-in per rule, so a synth corpus that declares none draws no verdicts
-	// without needing a corpus-size gate (#13517).
+	// without needing a corpus-size gate.
 	rows = attachInventoryVerdicts(rows, sourceListVerdicts(gm, scannedPaths(fset)))
 
-	// The arm one level up (#15837): every arm above gates what it DECIDES, and
+	// The arm one level up: every arm above gates what it DECIDES, and
 	// the two "NOT decided here" counts report() prints are a hole a new rule can
 	// still land in. A rule this change ADDS must be one the census can decide.
 	// Inert when root is not a git checkout — a proof scratch or a synthetic

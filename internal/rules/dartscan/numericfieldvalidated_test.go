@@ -16,8 +16,7 @@ import (
 // same list, arbitrarily far apart, interleaved with nested invocations that
 // carry argument names of their own — so the checker reads DEPTH-1 arguments
 // only. These tests pin that depth discipline, because it is the whole
-// difference between this rule and the lexical shape that never converges
-// (#8677).
+// difference between this rule and the lexical shape that never converges.
 //
 // The fixtures under .formwork/fixtures/ prove the rule fires and passes
 // end-to-end. These prove the argument walk underneath them, which a fixture
@@ -117,7 +116,7 @@ func TestFiresOnNumericFieldWithoutValidator(t *testing.T) {
 			// written at the field instead of a rule declared beside it. It
 			// paints the field, so a has-a-validator rule would pass it, and
 			// the write path is then free to disagree with it — which is the
-			// whole defect class (#9925).
+			// whole defect class.
 			name: "an open-coded inline predicate is not routing through the seam",
 			src: `Widget b() => TextFormField(
   keyboardType: TextInputType.number,
@@ -205,7 +204,7 @@ func TestPassesValidatedAndNonNumericFields(t *testing.T) {
 			name: "a parameterised rule factory",
 			src: `Widget b() => AppTextField(
   keyboardType: TextInputType.number,
-  validator: framingInputRule(widget.input),
+  validator: sizingInputRule(widget.input),
 );`,
 		},
 		{
@@ -372,7 +371,7 @@ func TestAcceptsReferencesCarryingOperators(t *testing.T) {
 		`rule.validate`,
 		`_gstRule`,
 		`field.validator?.validate`,
-		`framingInputRule(input).validate`,
+		`sizingInputRule(input).validate`,
 		`NumericFieldRule.of(context, min: 0, max: max(1, n)).validate`,
 		`NumericFieldRule.of(context, max: n >= 1 ? n : 1).validate`,
 		`ServerValidationRules.of(ref, kind: k == Kind.a ? x : y).validate`,

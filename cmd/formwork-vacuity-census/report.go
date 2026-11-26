@@ -6,7 +6,7 @@
 // finding keeps only a head and a tail of the detector's output — snippet() in
 // formwork's internal/rules/command/command.go elides the middle, before
 // the finding is constructed, so the CI annotation, the job log and
-// formwork-findings.json all carry the same clipped string (#16031).
+// formwork-findings.json all carry the same clipped string.
 
 package main
 
@@ -89,21 +89,21 @@ func printProvenance(rows []row, cfg *config.Config, fset *scan.FileSet, gm *glo
 		// Said out loud rather than left to be inferred from a zero. A verdict
 		// this instrument cannot decide is a hole in its coverage, and a hole
 		// that goes unnamed reads as coverage — which is the defect the census
-		// exists to catch, one level up (#12178).
+		// exists to catch, one level up.
 		fmt.Fprintf(stdout, "  set-relation rules NOT decided here:            %d\n", n)
 		fmt.Fprintf(stdout, "    (relation: disjoint, or the two sides drawn from overlapping globs. Blanking\n")
-		fmt.Fprintf(stdout, "     the b side cannot falsify either shape, so no verdict is claimed — #12180.)\n")
+		fmt.Fprintf(stdout, "     the b side cannot falsify either shape, so no verdict is claimed.)\n")
 	}
 	// Same obligation, one arm over, for the name-anchored go types. DEAD-SYMBOL and
 	// DEAD-SINK read an absent call site, which only condemns an anchor whose
 	// subject is declared nowhere; a package-qualified pattern names another
 	// package and the census has no type information to resolve it. Those rules
 	// get no verdict either way, so the count is said out loud rather than folded
-	// into the class-2 zero (#12494).
+	// into the class-2 zero.
 	if n := undecidedSymbolAnchors(cfg); n > 0 {
 		fmt.Fprintf(stdout, "  symbol-anchored rules NOT decided here:        %d\n", n)
 		fmt.Fprintf(stdout, "    (the anchor names another package, so an absent call site cannot prove the\n")
-		fmt.Fprintf(stdout, "     symbol unreachable. No verdict is claimed — #12494.)\n")
+		fmt.Fprintf(stdout, "     symbol unreachable. No verdict is claimed.)\n")
 	}
 
 	if full {
@@ -130,7 +130,7 @@ func printProvenance(rows []row, cfg *config.Config, fset *scan.FileSet, gm *glo
 		}
 
 		// The per-glob table is what makes a "N dead globs" claim reproducible
-		// by anyone with a checkout (#10626): every include glob with its own
+		// by anyone with a checkout: every include glob with its own
 		// match count, dead ones marked, declared ones shown with their reason.
 		fmt.Fprintf(stdout, "\n%s per-glob scope.include counts\n", tag)
 		for _, rw := range rows {
@@ -151,7 +151,7 @@ func printProvenance(rows []row, cfg *config.Config, fset *scan.FileSet, gm *glo
 	// keeps those holes from growing is diff-scoped, so a reader must be able to
 	// tell "this change adds no rule" from "the arm did not run". Inert is the
 	// stated base case — a proof scratch or a synthetic corpus, neither of which
-	// has a change to judge — never a verdict (#15837).
+	// has a change to judge — never a verdict.
 	switch {
 	case !inCheckout:
 		fmt.Fprintf(stdout, "  rules ADDED by this change:                    (not a git checkout — arm inert)\n")
@@ -287,9 +287,9 @@ func printVerdict(offenders int, stdout, stderr io.Writer) int {
 			"A dead scope.include glob is deleted when a sibling covers the subject, repointed when the code "+
 			"moved, or declared dead in place with `# glob-dead: <reason>` when it is genuinely aspirational. "+
 			"A GLOB-REMOVED finding means a live include glob was deleted from a rule while still listed in "+
-			"%s — restore the glob or drop that row in the same change so the coverage loss is reviewable (#10876). "+
+			"%s — restore the glob or drop that row in the same change so the coverage loss is reviewable. "+
 			"A FIXTURE-REMOVED finding is the same move one level over: a fixture directory was deleted while still listed in "+
-			"%s/<rule>/%s, and the fixtures left behind cannot report the loss — restore the fixture or drop the row in the same change (#10838).\n",
+			"%s/<rule>/%s, and the fixtures left behind cannot report the loss — restore the fixture or drop the row in the same change.\n",
 			tag, offenders, liveIncludeInventoryRel, fixturesRootRel, fixtureManifestName)
 		return 1
 	}

@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// #15103 — the shape the census could not see.
+// The shape the census could not see.
 //
 // tracked-sh-shrink-only was UNPROVABLE by construction and this census said
 // "OK: every rule can fail". Its scope was two globs: `**/*.sh`, which matched
@@ -236,17 +236,17 @@ func TestLinkedProductPackageIsNotMachinery(t *testing.T) {
     scope:
       include:
         - "tools/thing-census/**"
-        - "api-factory/internal/subject/**"
+        - "svc/internal/subject/**"
     params:
       cmd: [go, run, -C, '{{repo}}/tools/thing-census', ., '{{root}}']
       expect: { exit: 0 }
     origin: tools/thing-census/main.go
     tags: [always]
 `, map[string]string{
-		"api-factory/internal/subject/go.mod":     "module example.com/subject\n\ngo 1.24\n",
-		"api-factory/internal/subject/subject.go": "package subject\n\n// Name is the thing the rule asserts about.\nfunc Name() string { return \"subject\" }\n",
-		"tools/thing-census/go.mod":               "module example.com/thingcensus\n\ngo 1.24\n\nrequire example.com/subject v0.0.0\n\nreplace example.com/subject => ../../api-factory/internal/subject\n",
-		"tools/thing-census/main.go":              "package main\n\nimport \"example.com/subject\"\n\nfunc main() { _ = subject.Name() }\n",
+		"svc/internal/subject/go.mod":     "module example.com/subject\n\ngo 1.24\n",
+		"svc/internal/subject/subject.go": "package subject\n\n// Name is the thing the rule asserts about.\nfunc Name() string { return \"subject\" }\n",
+		"tools/thing-census/go.mod":       "module example.com/thingcensus\n\ngo 1.24\n\nrequire example.com/subject v0.0.0\n\nreplace example.com/subject => ../../svc/internal/subject\n",
+		"tools/thing-census/main.go":      "package main\n\nimport \"example.com/subject\"\n\nfunc main() { _ = subject.Name() }\n",
 	})
 
 	_, out := census(t, root)
@@ -297,16 +297,16 @@ func TestDetectorRootArgumentIsNotAPackageTarget(t *testing.T) {
     scope:
       include:
         - "tools/thing-census/**"
-        - "api-factory/internal/subject/subject.go"
+        - "svc/internal/subject/subject.go"
     params:
       cmd: [go, run, -C, '{{repo}}/tools/thing-census', ., '{{root}}']
       expect: { exit: 0 }
     origin: tools/thing-census/main.go
     tags: [always]
 `, map[string]string{
-		"tools/thing-census/go.mod":               "module example.com/thingcensus\n\ngo 1.24\n",
-		"tools/thing-census/main.go":              "package main\n\nfunc main() {}\n",
-		"api-factory/internal/subject/subject.go": "package subject\n",
+		"tools/thing-census/go.mod":       "module example.com/thingcensus\n\ngo 1.24\n",
+		"tools/thing-census/main.go":      "package main\n\nfunc main() {}\n",
+		"svc/internal/subject/subject.go": "package subject\n",
 	})
 
 	_, out := census(t, root)

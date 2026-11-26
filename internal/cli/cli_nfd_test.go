@@ -144,8 +144,7 @@ func TestCheckStagedCleanNFDNamedFileIsScannedNotRefused(t *testing.T) {
 	}
 	// The count is the disclosure that makes the exit code mean something: a
 	// run that scanned nothing would also be exit 0. Three: the NFD-named
-	// file and the corpus staged beside it, which the walk reads since #24467
-	// item 9.
+	// file and the corpus staged beside it, which the walk reads.
 	if !strings.Contains(out, "scan: 3 path(s) requested by --staged, 3 file(s) scanned") {
 		t.Errorf("the summary must say the requested path was scanned:\n%s", out)
 	}

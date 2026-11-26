@@ -13,7 +13,7 @@ import (
 	"github.com/dlclark/regexp2"
 )
 
-// Moved here with the backend it tests (#17979): the outer bound now lives in
+// Moved here with the backend it tests: the outer bound now lives in
 // rxmatch, which pattern and pair-consistency both compile through, so the test
 // follows its subject rather than being left behind on a package that no longer
 // declares it.
@@ -57,7 +57,7 @@ func TestRegexp2OuterBoundFailsClosed(t *testing.T) {
 
 // A wall clock running out says the machine was busy or the pattern is slow, and
 // only a second attempt tells them apart: a false timeout on a match of a few
-// milliseconds took a whole TakeoffQS run down, with a different rule each time.
+// milliseconds took a whole run down, with a different rule each time.
 func TestATimedOutMatchGetsOnePatientAttempt(t *testing.T) {
 	for name, first := range map[string]error{
 		"regexp2's own timeout": errors.New("match timeout after 1s on input `package a`"),

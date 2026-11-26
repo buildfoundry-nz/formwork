@@ -30,7 +30,7 @@ const (
 // closed at a newline as well as at its quote. Dart's non-triple string forms
 // cannot span lines, and bounding them means an unbalanced quote costs one line
 // of projection rather than blanking the rest of the file — the unbounded
-// blast radius #9272 was filed about.
+// blast radius this bound exists to prevent.
 func CommentsOnlyDart(src []byte) []byte {
 	out := append([]byte(nil), src...)
 	blank(out, 0, len(out))

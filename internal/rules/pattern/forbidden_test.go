@@ -52,7 +52,7 @@ func TestForbiddenPatternFlagsEachMatchingLine(t *testing.T) {
 // skipped — the same contract every other mode already honours.
 func TestForbiddenPlainPatternHonoursPrefilter(t *testing.T) {
 	c := mustChecker(t, "forbidden-pattern",
-		"pattern: 'pgxpool\\.New\\('\nprefilter: material_cat\n")
+		"pattern: 'pgxpool\\.New\\('\nprefilter: widget_cat\n")
 	f := scan.NewMemFile("db.go", []byte("a\npool := pgxpool.New(ctx)\nb\n"))
 	ms, err := c.CheckFile(f)
 	if err != nil {
@@ -68,8 +68,8 @@ func TestForbiddenPlainPatternHonoursPrefilter(t *testing.T) {
 // anything — the unguarded plain pattern still flags every matching line.
 func TestForbiddenPlainPatternPrefilterPresentKeepsEveryLine(t *testing.T) {
 	c := mustChecker(t, "forbidden-pattern",
-		"pattern: 'pgxpool\\.New\\('\nprefilter: material_cat\n")
-	f := scan.NewMemFile("db.go", []byte("material_cat\npool := pgxpool.New(ctx)\nb\nagain pgxpool.New(x)\n"))
+		"pattern: 'pgxpool\\.New\\('\nprefilter: widget_cat\n")
+	f := scan.NewMemFile("db.go", []byte("widget_cat\npool := pgxpool.New(ctx)\nb\nagain pgxpool.New(x)\n"))
 	ms, err := c.CheckFile(f)
 	if err != nil {
 		t.Fatal(err)
@@ -86,11 +86,11 @@ func TestForbiddenPlainPatternPrefilterPresentKeepsEveryLine(t *testing.T) {
 // without this pin a break confined to the combination is invisible.
 func TestForbiddenPrefilterWithGuardsBothConsulted(t *testing.T) {
 	c := mustChecker(t, "forbidden-pattern",
-		"pattern: 'pgxpool\\.New\\('\nprefilter: material_cat\nrequire_present:\n  - 'FromTable'\n")
+		"pattern: 'pgxpool\\.New\\('\nprefilter: widget_cat\nrequire_present:\n  - 'FromTable'\n")
 	// Literal + trigger + required token: exactly one finding, anchored on the
 	// first trigger (guarded rules report once per file).
 	ms, err := c.CheckFile(scan.NewMemFile("a.go",
-		[]byte("material_cat\nFromTable\npool := pgxpool.New(ctx)\nagain pgxpool.New(x)\n")))
+		[]byte("widget_cat\nFromTable\npool := pgxpool.New(ctx)\nagain pgxpool.New(x)\n")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestForbiddenPrefilterWithGuardsBothConsulted(t *testing.T) {
 	}
 	// Literal + trigger, required token absent: the guard must still suppress.
 	ms, err = c.CheckFile(scan.NewMemFile("b.go",
-		[]byte("material_cat\npool := pgxpool.New(ctx)\n")))
+		[]byte("widget_cat\npool := pgxpool.New(ctx)\n")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestForbiddenRequireAbsentGatesOnTheOwnerDeclaration(t *testing.T) {
 
 func TestForbiddenWithoutPrefilterUngates(t *testing.T) {
 	c := mustChecker(t, "forbidden-pattern",
-		"pattern: 'Category = \"[a-z]+\"'\nprefilter: material_cat\nmultiline: true\n")
+		"pattern: 'Category = \"[a-z]+\"'\nprefilter: widget_cat\nmultiline: true\n")
 
 	// Matches the pattern but LACKS the prefilter literal.
 	f := scan.NewMemFile("consts.go", []byte("package p\nvar Category = \"floor\"\n"))
@@ -278,8 +278,8 @@ func TestForbiddenWithoutPrefilterUngates(t *testing.T) {
 	if !ok {
 		t.Fatal("forbidden must implement rules.Prefiltered")
 	}
-	if p.Prefilter() != "material_cat" {
-		t.Fatalf("Prefilter() = %q, want material_cat", p.Prefilter())
+	if p.Prefilter() != "widget_cat" {
+		t.Fatalf("Prefilter() = %q, want widget_cat", p.Prefilter())
 	}
 
 	stripped, err := p.WithoutPrefilter().CheckFile(f)

@@ -2,10 +2,10 @@
 // fail: a `required-pattern` whose pattern is a SUBSTRING of a longer
 // identifier that already appears in its own scope.
 //
-// #11934. `defaulttemplates-formula-validate-item-branch` pinned the literal
+// An arm pinned the literal
 // `it\.Formula` over formula_validate.go. Two branches below, the kit walk
 // reads `kit.Formula` — and `it.Formula` is a substring of `kit.Formula`.
-// Deleting the ENTIRE root-item branch, which is the #8812 regression the arm
+// Deleting the ENTIRE root-item branch, which is the regression the arm
 // is named for, left it green off the kit branch's own text.
 //
 // The verdict is DEMONSTRATED, not inferred from the pattern's spelling. For
@@ -120,7 +120,7 @@ func stripAlignedMatches(m lineMatcher, line string) (string, []string, error) {
 // one surviving, those are two obligations, not a coincidence, and there is
 // nothing an author could bind. Measured on this corpus that gate is the
 // difference between 2 flagged and 1: `dart-tests-import-subject` lists six
-// import prefixes, is held up by `package:tqs_` while `package:takeoffqs_schema`
+// import prefixes, is held up by `package:app_` while `package:example_schema`
 // stands aligned, and has no cure in this class.
 func satisfiedByEmbeddedOnly(m lineMatcher, lines []string) (orig, stripped string, yes bool, err error) {
 	aligned := map[string]bool{}

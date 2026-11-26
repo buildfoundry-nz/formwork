@@ -1,4 +1,4 @@
-# Two count-relation arms in one file (the client-portal-gate shape). The first
+# Two count-relation arms in one file (the portal-gate shape). The first
 # is anchored; the second is not. Anchoring is strictly intra-arm, so the first
 # arm's `funcs:` must not satisfy the second — a whole-file scan would wave the
 # unanchored arm through.
@@ -7,11 +7,11 @@ rules:
   type: go/per-func-count-relation
   severity: error
   scope:
-    include: [api-factory/**/*.go]
+    include: [svc/**/*.go]
   params:
-    funcs: ^mountClientPortal$
+    funcs: ^mountPortal$
     left: shared\.ClaimsOr401
-    right: clientportal\.RequireEnabled
+    right: portal\.RequireEnabled
     relation: '<='
   cure: Consult the rollout gate.
   tags: [go]
@@ -19,9 +19,9 @@ rules:
   type: go/per-func-count-relation
   severity: error
   scope:
-    include: [api-factory/**/*.go]
+    include: [svc/**/*.go]
   params:
-    left: clientportal\.RequireEnabled
+    left: portal\.RequireEnabled
     right: h\.finish
     relation: '<='
   cure: End the handler with h.finish.

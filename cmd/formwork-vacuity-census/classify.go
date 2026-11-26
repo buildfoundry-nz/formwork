@@ -22,7 +22,7 @@ const (
 	class3     = "class3"
 	// classNew is the question one level up from the other three: not "is this
 	// rule vacuous?" but "was that question even asked?". It carries only rules
-	// the change under judgement ADDS — see newrules.go (#15837).
+	// the change under judgement ADDS — see newrules.go.
 	classNew = "class-new"
 )
 
@@ -37,7 +37,7 @@ var classTitle = map[string]string{
 // verdict is one census finding against a rule.
 //
 // gating is retained as a field, and is now true on every verdict the census
-// can emit (#12178). It used to separate "this rule cannot fail" from "this
+// can emit. It used to separate "this rule cannot fail" from "this
 // rule is insensitive", and six classes lived on the second side: dead
 // scope.exclude globs, comment-plane-satisfiable rules,
 // diffuse evidence, absence-only fixtures and rules with no fixture at all —
@@ -81,7 +81,7 @@ type ruleMeta struct {
 	n    int
 
 	// set-relation: the two sides' file globs and the relation between them.
-	// The #12180 probe blanks the REQUIRED side and asks whether the relation
+	// The INERT-REQUIRED-SIDE probe blanks the REQUIRED side and asks whether the relation
 	// still holds — which is only a question when b IS the required side and
 	// blanking it leaves the constrained side standing. See relation.go.
 	// EMPTY-SIDE (V4) re-extracts each side's set with pattern/group so a
@@ -95,7 +95,7 @@ type ruleMeta struct {
 	aPreprocess string
 	bPreprocess string
 	relation    string
-	// pair-consistency: the trigger pattern. The #12181 probe asks whether it
+	// pair-consistency: the trigger pattern. The DEAD-TRIGGER probe asks whether it
 	// still matches anything at all — a trigger that matches nothing obliges
 	// nothing, so the `requires` half is never asked for. also_present and
 	// where are needed so DEAD-TRIGGER uses the same unit semantics as the
@@ -189,21 +189,44 @@ func isExistenceObligation(r *config.Rule, m ruleMeta) bool {
 	return false
 }
 
-// lockdownSynthDirRel is the tree the heavy-rule fixture exemption defers to.
-const lockdownSynthDirRel = "api-factory/internal/lockdowntests"
+// synthDirRel is the repo-relative tree the heavy-rule fixture exemption
+// defers to: Go test files there may witness a heavy rule that carries no
+// fixture. It is the corpus's own layout, so the caller names it with
+// --synth-dir. Empty means the corpus has no such tree, and then no heavy rule
+// is witnessed that way.
+var synthDirRel string
+
+// SetSynthDir points the heavy-rule exemption at the corpus's synth tree.
+func SetSynthDir(rel string) {
+	synthDirRel = ""
+	if rel != "" {
+		synthDirRel = filepath.ToSlash(filepath.Clean(rel))
+	}
+}
+
+// synthDirLabel names the synth tree in a verdict, or says none was given.
+func synthDirLabel() string {
+	if synthDirRel == "" {
+		return "a --synth-dir (none was given)"
+	}
+	return synthDirRel
+}
 
 // lockdownSynthWitnesses returns the set of rule ids some file under
-// lockdownSynthDirRel both NAMES and backs with a test function.
+// synthDirRel both NAMES and backs with a test function.
 //
 // Both halves are load-bearing. Naming alone is what the exemption assumed, and
 // it is not enough: the since-deleted synth_form_coverage_markers_test.go named
 // its subjects in twelve lines of `// FORM(...)` comments under a lockdown
-// build tag, with no code at all (#12238, which also added the
-// synth-form-marker-colocation lockdown against that shape returning). A file
+// build tag, with no code at all. A file
 // with no `func Test` runs nothing, so it can witness nothing, however many
 // rule ids it mentions.
 func lockdownSynthWitnesses(root string) (map[string]bool, error) {
-	entries, err := os.ReadDir(filepath.Join(root, lockdownSynthDirRel))
+	if synthDirRel == "" {
+		return map[string]bool{}, nil
+	}
+	dir := filepath.Join(root, filepath.FromSlash(synthDirRel))
+	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return map[string]bool{}, nil
 	}
@@ -215,7 +238,7 @@ func lockdownSynthWitnesses(root string) (map[string]bool, error) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
 			continue
 		}
-		body, err := os.ReadFile(filepath.Join(root, lockdownSynthDirRel, e.Name()))
+		body, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
 			return nil, err
 		}
@@ -241,9 +264,9 @@ var (
 
 // isRelationObligation reports whether the rule's obligation is a RELATION —
 // set-relation (every element of one side must appear on the other) or
-// pair-consistency (a trigger requires a companion). #12178 defect 1: these
-// were outside the class-2 population entirely, so no probe ever ran on them,
-// and #12180 / #12181 then found live vacuity in exactly those two types.
+// pair-consistency (a trigger requires a companion). These used to be
+// outside the class-2 population entirely, so no probe ever ran on them,
+// and the relation probes then found live vacuity in exactly those two types.
 //
 // They are not admitted to the witness probes, which would misread them — a
 // relation is satisfied by an EMPTY tree, so "this file satisfies the rule
@@ -281,8 +304,7 @@ func classify(cfg *config.Config, root string, scopes map[string][]*scan.File, m
 
 		rw.verdicts = append(rw.verdicts, perGlobVerdicts(r, gm)...)
 
-		// class 2 — the rule whose only in-scope subject is its own detector
-		// (#15103). Runs on every rule on every census, unconditionally: the
+		// class 2 — the rule whose only in-scope subject is its own detector. Runs on every rule on every census, unconditionally: the
 		// diff-scoped mutation-proof runner is the only other instrument that
 		// asks this question, and an untouched rule never reaches it.
 		rw.verdicts = append(rw.verdicts, selfProofVerdicts(r, root, scopes[r.ID])...)
@@ -308,7 +330,7 @@ func classify(cfg *config.Config, root string, scopes map[string][]*scan.File, m
 		// Name-anchored go rule types are in NEITHER population above: a
 		// confinement is not an existence obligation (deleting every file
 		// satisfies it) and not a relation. They get the probe that is valid for
-		// them instead — symbol.go, #12494.
+		// them instead — symbol.go.
 		if rw.scopeN > 0 {
 			rw.verdicts = append(rw.verdicts, symbolAnchorVerdicts(r, root, scopes[r.ID], declared)...)
 		}
@@ -362,7 +384,7 @@ func class2Verdicts(r *config.Rule, root string, ws, inScope []*scan.File) []ver
 		}
 	}
 
-	// DETECTOR-SATISFIED (#12178 defect 2 — documented in main.go's header since
+	// DETECTOR-SATISFIED (documented in main.go's header since
 	// the census landed, never implemented). Every witness is a gate source: the
 	// rule asserts that its own detector still contains some text, not that the
 	// detector's invariant holds. The subject it names could be deleted whole and
@@ -377,7 +399,7 @@ func class2Verdicts(r *config.Rule, root string, ws, inScope []*scan.File) []ver
 		})
 	}
 
-	// DIFFUSE-EVIDENCE. #12178 defect 3: this arm used to be restricted to
+	// DIFFUSE-EVIDENCE. This arm used to be restricted to
 	// len(ws) <= 3, which excluded exactly the rules whose evidence is most
 	// redundant — a rule with 44, 53 or 517 witnesses could never appear in the
 	// reported 4. The restriction was never about witness COUNT: the verdict
@@ -386,7 +408,7 @@ func class2Verdicts(r *config.Rule, root string, ws, inScope []*scan.File) []ver
 	// one, which is also what keeps the loop cheap (it breaks there).
 	//
 	// Having many witnesses is a different property, and it stays out: that is
-	// tools/formwork-witness-census's grain (#12182), and the two must not both
+	// tools/formwork-witness-census's grain, and the two must not both
 	// claim it.
 	{
 		diffuse := true
@@ -452,7 +474,7 @@ func detectorWitnesses(r *config.Rule, ws, inScope []*scan.File) []string {
 
 // cureNote names the cure a COMMENT-SUFFICIENT verdict is answered with.
 //
-// #12178 defect 4, stated precisely. formwork really does carry no decomment-*
+// Stated precisely: formwork really does carry no decomment-*
 // projection for YAML — the registry is code-only-dart, comments-only-{awk,
 // dart,go,sql}, decomment-{go,sh}, decomment-destring-go, destring-{sh,
 // decomment-sh}, strings-only-{go,sh} and raw, and nothing else — so the note
@@ -555,7 +577,7 @@ func fixtureVerdicts(r *config.Rule, root string, rw *row) ([]verdict, error) {
 }
 
 // emptyScopeFireVerdict is what the census's "absence-only fixtures" number was
-// reaching for, expressed so it discriminates (#12178).
+// reaching for, expressed so it discriminates.
 //
 // The measurement it replaces reported every rule whose fire findings all lack
 // a Path, on the reading that such a rule is only ever shown firing on DELETED
@@ -587,25 +609,24 @@ func emptyScopeFireVerdict(rw *row) []verdict {
 	}}
 }
 
-// noFireWitnessVerdict answers the heavy-rule fixture exemption (#12178).
+// noFireWitnessVerdict answers the heavy-rule fixture exemption.
 //
 // fixtureVerdicts lets a type:command or git-diff rule carry no fixture at all,
-// on the grounds that "their fire coverage lives in
-// api-factory/internal/lockdowntests/". That was asserted and never checked,
+// on the grounds that "their fire coverage lives in the lockdown synth
+// tree". That was asserted and never checked,
 // and it demonstrably failed: synth_form_coverage_markers_test.go was twelve
 // lines of `// FORM(...)` markers under a lockdown build tag with no test
-// function in it (deleted in #12238, which locked the shape out with
-// synth-form-marker-colocation). A rule witnessed only by a file like that has
+// function in it (since deleted, and the shape locked out). A rule witnessed only by a file like that has
 // nothing, anywhere, demonstrating it can fail — which is the whole subject of
 // this census. So the exemption is now CONDITIONAL on the coverage it claims:
-// some file under lockdowntests must name the rule AND declare a test function.
+// some file under the --synth-dir tree must name the rule AND declare a test function.
 func noFireWitnessVerdict(r *config.Rule, rw *row, synths map[string]bool) []verdict {
 	if rw.hasFixtures || rules.CostOf(r.Checker) != rules.CostHeavy || synths[r.ID] {
 		return nil
 	}
 	return []verdict{{
 		class: class3, code: "NO-FIRE-WITNESS", gating: true,
-		why: "a heavy rule carries no fixture, and no test function under " + lockdownSynthDirRel +
+		why: "a heavy rule carries no fixture, and no test function under " + synthDirLabel() +
 			" names it — nothing anywhere has ever demonstrated this rule failing. Add the lockdown synth " +
 			"that fires it, or give the rule a fire/pass fixture pair",
 	}}

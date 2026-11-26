@@ -36,7 +36,7 @@
 // hatch, not a copy that went missing.
 //
 // It is not vacuous and it is green on landing, both measured rather than
-// assumed: at #262 seven rules in examples/palletra-port-full carried a
+// assumed: at #262 seven rules in the full example corpus carried a
 // `checks/` tree, seventeen copies between them, and drift across them was
 // zero. Those two figures are a reading taken on the day and not a claim this
 // file holds — every run prints the live count, and what IS asserted is that

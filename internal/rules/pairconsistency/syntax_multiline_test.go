@@ -1,4 +1,4 @@
-// syntax_multiline_test.go — #17979.
+// syntax_multiline_test.go — pair-consistency honours syntax and multiline.
 //
 // pair-consistency compiled with regexp.Compile directly, so `syntax:` and
 // `multiline:` were accepted by the pattern rule types and REFUSED here. The
@@ -17,10 +17,10 @@ import (
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 )
 
-// A lookaround trigger: only a Getenv NOT prefixed by TQS_ obliges the
+// A lookaround trigger: only a Getenv NOT prefixed by APP_ obliges the
 // companion. RE2 cannot express this at all, which is why the rule needs the
 // regexp2 backend rather than a rewritten pattern.
-const lookaroundParams = "syntax: regexp2\ntrigger: '(?<!TQS_)ENVIRONMENT'\nrequires: 'IsLocalDevelopment'\n"
+const lookaroundParams = "syntax: regexp2\ntrigger: '(?<!APP_)ENVIRONMENT'\nrequires: 'IsLocalDevelopment'\n"
 
 func TestSyntaxRegexp2LookaroundFires(t *testing.T) {
 	c := mustChecker(t, lookaroundParams)
@@ -34,18 +34,18 @@ func TestSyntaxRegexp2LookaroundFires(t *testing.T) {
 	}
 }
 
-// The lookaround's whole purpose: the TQS_-prefixed variable is a DIFFERENT
+// The lookaround's whole purpose: the APP_-prefixed variable is a DIFFERENT
 // variable and must not oblige anything. Under RE2 this would fire, which is
-// exactly the false exemption #17979 removed downstream.
+// exactly the false exemption regexp2 support removes.
 func TestSyntaxRegexp2LookaroundSkipsPrefixedName(t *testing.T) {
 	c := mustChecker(t, lookaroundParams)
-	f := scan.NewMemFile("a.go", []byte("package p\nvar x = os.Getenv(\"TQS_ENVIRONMENT\")\n"))
+	f := scan.NewMemFile("a.go", []byte("package p\nvar x = os.Getenv(\"APP_ENVIRONMENT\")\n"))
 	ms, err := c.CheckFile(f)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(ms) != 0 {
-		t.Fatalf("TQS_ENVIRONMENT is a different variable and owes nothing: want 0 findings, got %d: %+v", len(ms), ms)
+		t.Fatalf("APP_ENVIRONMENT is a different variable and owes nothing: want 0 findings, got %d: %+v", len(ms), ms)
 	}
 }
 

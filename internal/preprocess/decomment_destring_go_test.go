@@ -9,7 +9,7 @@ import "testing"
 //	slog.InfoContext(ctx, "quota denied on the plan.CanCreate() fast path")
 //
 // with the real call deleted. That is not hypothetical for the entitlements
-// package: it already carries several fmt.Errorf("entitlements.ConsumeTakeoff:
+// package: it already carries several fmt.Errorf("entitlements.ConsumeCredit:
 // %w", err) strings, so deleting the call while leaving an error-wrap string
 // behind is the natural shape of a refactor, not a contrivance.
 //

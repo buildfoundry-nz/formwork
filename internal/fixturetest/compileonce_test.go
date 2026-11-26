@@ -452,7 +452,7 @@ func TestCompileOnceHashFailureSurfacesOnArm(t *testing.T) {
 }
 
 func TestCompileOnceMultiFileProgArgsForwarded(t *testing.T) {
-	// Majority TakeoffQS shape: go run a.go b.go --flag value
+	// The commonest shape: go run a.go b.go --flag value
 	realGo, err := exec.LookPath("go")
 	if err != nil {
 		t.Fatal(err)

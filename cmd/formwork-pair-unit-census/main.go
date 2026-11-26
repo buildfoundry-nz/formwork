@@ -1,7 +1,7 @@
 // formwork-pair-unit-census — the count-blindness census for pair-consistency
-// arms (#12249).
+// arms.
 //
-// Usage: go run -C tools/formwork-pair-unit-census . <repo-root>
+// Usage: go run ./cmd/formwork-pair-unit-census <repo-root>
 //
 // Product enforcement is formwork type:command
 // (.formwork/rules/pair-consistency-not-for-countable-obligations.yaml) with
@@ -13,7 +13,7 @@
 // pair-consistency with `where: same-file` (the default when `where:` is
 // omitted) and the default presence obligation reports a file only when the
 // companion is absent from it ENTIRELY: the first trigger in a file buys the
-// companion, and every later trigger in that file is free (#12181). When the
+// companion, and every later trigger in that file is free. When the
 // tree itself demonstrates the obligation is countable — one in-scope file
 // carrying more than one trigger line — presence is the wrong semantics for
 // that arm, and the arm must move to a per-occurrence unit
@@ -28,7 +28,7 @@
 //
 // Judged: `type: pair-consistency` arms that OMITTED `where:` (the engine
 // defaults to same-file) and whose obligation is presence (omitted or
-// `presence`). The omitted default is the trap (#12181). An explicit
+// `presence`). The omitted default is the trap. An explicit
 // `where: same-file` is a design act — explain-gate's header forbids both
 // same-func and same-dir — the same class as `where: same-dir`, not a
 // forgotten conversion. An arm at `where: same-func` already owes a companion
@@ -49,7 +49,7 @@
 //
 // Shell evidence stays out of domain: there is no per-unit predicate for
 // .sh, and converting go-compile-gate-disk-probe to same-func would take it
-// from count-blind to totally blind (#12195 work item 4). That arm declares
+// from count-blind to totally blind. That arm declares
 // where: same-file as a signed unit. dart-sse-consumers-use-reconnect-loop
 // carries at most one trigger line per file. This list is prose the detector
 // never reads — the domain test runs per file.
@@ -67,7 +67,7 @@
 // Rule.Applies + File.Variant), so a census verdict and a gate verdict cannot
 // disagree — a hand-rolled scope matcher is what produced the false
 // "133 of 200 rules match zero files" result the vacuity census exists to
-// correct (#10083).
+// correct.
 package main
 
 import (
@@ -87,7 +87,7 @@ type offender struct {
 
 func main() {
 	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: go run -C tools/formwork-pair-unit-census . <repo-root>")
+		fmt.Fprintln(os.Stderr, "usage: go run ./cmd/formwork-pair-unit-census <repo-root>")
 		os.Exit(2)
 	}
 	os.Exit(run(os.Args[1], os.Stdout, os.Stderr))

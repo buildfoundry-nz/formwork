@@ -34,10 +34,10 @@ func TestDetect(t *testing.T) {
 		// Universal cure properly paired with mode: every-file.
 		{tree: "pass-2"},
 		// mode: exists and the universal cure live in DIFFERENT arms (the
-		// api-factory-cmd-lifecycle-class shape).
+		// cmd-lifecycle-class shape).
 		{tree: "pass-3"},
 		// The universal word sits in a COMMENT beside an honest singular
-		// cure (the entitlements-audit-10001 shape).
+		// cure (the audit-each-entitlement shape).
 		{tree: "pass-4"},
 		{
 			// mutation-proof rematerialises keys alphabetically: `id` is

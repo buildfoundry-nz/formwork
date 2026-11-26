@@ -150,7 +150,7 @@ func TestOnlyThisModulesLinkedSourceIsScannedForTheSeam(t *testing.T) {
 		// history is about.
 		{"internal/meta/census_sqlsites_test.go", false},
 		// Corpus material, tracked but never linked.
-		{"examples/palletra-port-full/x/y.go", false},
+		{"examples/full/x/y.go", false},
 		// The definitions themselves.
 		{"internal/rules/sqlparse/unreadable.go", false},
 		{"internal/rules/sqlparse/census_wiring_test.go", false},

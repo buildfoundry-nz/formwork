@@ -1,7 +1,7 @@
 // formwork-universal-cure-census — ratchet R3: no rule arm may pair an
 // EXISTENTIAL detector with a UNIVERSAL cure.
 //
-// Usage: go run -C tools/formwork-universal-cure-census . <repo-root>
+// Usage: go run ./cmd/formwork-universal-cure-census <repo-root>
 //
 // Product enforcement is formwork type:command
 // (.formwork/rules/exists-rule-cure-not-universal.yaml) with origin on this
@@ -31,9 +31,9 @@
 // folded continuation) — not in a nearby comment, not in a sibling arm's
 // cure. A whole-file co-occurrence false-positives on multi-arm files where
 // one arm is existential and a DIFFERENT arm's cure is universal (the
-// api-factory-cmd-lifecycle-class shape, pinned by testdata/pass-3), and a
+// cmd-lifecycle-class shape, pinned by testdata/pass-3), and a
 // proximity window false-positives on an honest cure parked next to a comment
-// that says "each" (the entitlements-audit-10001 shape, pinned by
+// that says "each" (the audit-each-entitlement shape, pinned by
 // testdata/pass-4).
 //
 // # No known debt
@@ -73,7 +73,7 @@ type stats struct {
 // plus any folded continuation (lines more indented than the key). A
 // universal word in a nearby comment or another key is NOT the cure
 // over-promising: pinning the detector to the block is what keeps the
-// entitlements-audit-10001 shape (a comment's "each" beside an honest
+// audit-each-entitlement shape (a comment's "each" beside an honest
 // singular cure) a pass.
 func cureHasUniversal(lines []string, start, end int) bool {
 	for i := start; i < end; i++ {
@@ -108,7 +108,7 @@ func cureHasUniversal(lines []string, start, end int) bool {
 // detection against bare fixture trees.
 //
 // Arms are walked as yaml.Node mappings so rematerialised keys (id not first)
-// still parse the way the engine does, and a comment is never a cure (#14091).
+// still parse the way the engine does, and a comment is never a cure.
 func detect(root string) ([]census.Finding, stats, error) {
 	var st stats
 	var out []census.Finding

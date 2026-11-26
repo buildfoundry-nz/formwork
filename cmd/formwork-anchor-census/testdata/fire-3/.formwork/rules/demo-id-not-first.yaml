@@ -6,9 +6,9 @@ rules:
   type: go/per-func-count-relation
   id: demo-id-not-first
   scope:
-    include: [api-factory/**/*.go]
+    include: [svc/**/*.go]
   params:
-    left: suppliercollab\.RequireEnabled
-    right: quoteroomaudit\.RecordAccess
+    left: vendorcollab\.RequireEnabled
+    right: accessaudit\.RecordAccess
     relation: '<='
   tags: [go]

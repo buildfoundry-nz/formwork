@@ -17,7 +17,7 @@ func findingsExist(known ...string) func(string) bool {
 // A command rule's finding is one message with no path, so the journal that
 // records it cannot say WHICH FILE the rule was about. 71% of all gate fires
 // come from command rules and every one of them is pathless, which is why the
-// repair pairer can pair almost none of them (TakeoffQS #18214).
+// repair pairer can pair almost none of them.
 //
 // Detectors already print paths. What was missing is a contract by which the
 // engine reads them, so the structure the detector already had was thrown away
@@ -27,13 +27,13 @@ func TestParseFindings_OnePerPathLine(t *testing.T) {
 	out := []byte(strings.Join([]string{
 		"docs/architecture/plan-flow.md:19951: stale: regenerate with `derive run`",
 		"schema/out/persist-census.json: census is behind its inputs",
-		"api-factory/internal/db/pool.go:12: under a frozen prefix with no ledger entry",
+		"svc/internal/db/pool.go:12: under a frozen prefix with no ledger entry",
 	}, "\n"))
 
 	got := parseFindings(out, findingsExist(
 		"docs/architecture/plan-flow.md",
 		"schema/out/persist-census.json",
-		"api-factory/internal/db/pool.go",
+		"svc/internal/db/pool.go",
 	))
 
 	if len(got) != 3 {
@@ -96,13 +96,13 @@ func TestParseFindings_ProseThatLooksLikeALocationIsNotAPath(t *testing.T) {
 	out := []byte(strings.Join([]string{
 		"go: downloading gopkg.in/yaml.v3 v3.0.1",
 		"WARNING: scopes flag may not work as expected",
-		"api-factory/internal/db/pool.go:12: the real one",
+		"svc/internal/db/pool.go:12: the real one",
 	}, "\n"))
 
-	got := parseFindings(out, findingsExist("api-factory/internal/db/pool.go"))
+	got := parseFindings(out, findingsExist("svc/internal/db/pool.go"))
 
 	for _, m := range got {
-		if m.Path != "" && m.Path != "api-factory/internal/db/pool.go" {
+		if m.Path != "" && m.Path != "svc/internal/db/pool.go" {
 			t.Fatalf("invented a finding against %q, which is not a path in the tree", m.Path)
 		}
 	}

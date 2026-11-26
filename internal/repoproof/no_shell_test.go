@@ -323,7 +323,7 @@ func TestTrackedFilesIgnoresAHostileGitEnvironment(t *testing.T) {
 // huskyShims enumerates the corpus-fixture exception, path by path.
 //
 // These twenty files are INPUT BYTES a rule is tested against, not tooling
-// this repository runs: examples/palletra-port-full's gate-scripts-are-wired
+// this repository runs: the full example corpus's gate-scripts-are-wired
 // and git-hooks-fully-wired rules are ABOUT husky hooks, and a fire fixture
 // for "the hooks are wired" cannot be anything but a hook. A husky hook is
 // invoked by name — .husky/pre-commit — so it cannot be renamed to .go and it

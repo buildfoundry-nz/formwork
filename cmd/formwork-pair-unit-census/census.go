@@ -143,8 +143,7 @@ func relTo(root, p string) string {
 // (.formwork/mutations/pair-consistency-not-for-countable-obligations.yaml).
 // Judged: a pair-consistency arm that OMITTED `where:` (the engine's default
 // is same-file, pinned upstream by TestPairConsistencyDefaultWhereIsSameFile)
-// with the default presence obligation. That omitted default is the trap
-// (#12181). An explicit `where: same-file` is a design act — explain-gate
+// with the default presence obligation. That omitted default is the trap. An explicit `where: same-file` is a design act — explain-gate
 // argues for file grain because ANALYZE and GENERIC_PLAN cannot share a
 // function, and same-dir would let one EXPLAIN gate buy another in the same
 // package — the same class as same-dir, not a forgotten conversion. A
@@ -166,7 +165,7 @@ func isJudgedArm(a arm) bool {
 // per file — "the offending file has a per-unit predicate" — .go, .dart and
 // .proto, the three languages pair-consistency same-func can unit. Shell
 // stays out: there is no .sh unit, and converting go-compile-gate-disk-probe
-// would take it from count-blind to totally blind (#12195 work item 4). The
+// would take it from count-blind to totally blind. The
 // first draft keyed the domain on the arm's glob list (hasGoInScope), which
 // admitted mixed-scope arms whose evidence is entirely non-Go.
 func countBlind(n int, path string) bool {

@@ -1,6 +1,6 @@
 package main
 
-// widening.go — the base side of the #15837 arm.
+// widening.go — the base side of the new-rules arm.
 //
 // newrules.go answers "which rules does this change ADD?". That question has a
 // recall hole, found independently by two streams and reproduced in
@@ -147,7 +147,7 @@ const maxEntryBytes = 1 << 30
 // above. git archive writes a FILE and the stdlib reads it back: no pipe, and no
 // `tar` binary.
 //
-// No pipe, because `git archive | tar` deadlocked (#16179). The parent held the
+// No pipe, because `git archive | tar` deadlocked. The parent held the
 // pipe's read end for the whole of archive.Run(), so a consumer that exited
 // early left git writing into a full buffer with no EPIPE to end it — a reader
 // still existed — and git blocked indefinitely. That is a hang rather than a
@@ -156,8 +156,7 @@ const maxEntryBytes = 1 << 30
 // to skip the gate.
 //
 // No `tar` binary, because this repo closed the GNU/BSD CLI-divergence class
-// deliberately when it ported its last shell files to Go and deleted them
-// (#15103 / #14888). A general-purpose CLI dependency inside a .go file
+// deliberately when it ported its last shell files to Go and deleted them. A general-purpose CLI dependency inside a .go file
 // re-enters that class where no shell rule watches for it.
 func exportPath(root, rev, path, dst string) error {
 	members := presentMembers(root, rev, path)

@@ -1,6 +1,6 @@
 package main
 
-// existsbirth.go — the birth ratchet on `mode: exists` (#15848).
+// existsbirth.go — the birth ratchet on `mode: exists`.
 //
 // `mode: exists` asks whether the pattern appears ANYWHERE in scope. Over one
 // file that is the same question as the default per-file mode. Over two hundred,

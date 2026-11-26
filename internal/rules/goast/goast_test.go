@@ -310,15 +310,15 @@ func TestCountRelationRejectsBadRelation(t *testing.T) {
 //
 // The count-relation used to match the literal Fun spelling. An import alias
 // (qs.Redeem), a dot-import (bare Redeem), a func-value alias
-// (fn := quoteshare.Redeem; fn()), or a discarded gate call all kept a
+// (fn := sharelink.Redeem; fn()), or a discarded gate call all kept a
 // security rule green. These tests pin each shape closed.
 
 func TestCountRelationResolvesImportAlias(t *testing.T) {
 	c := build(t, "go/per-func-count-relation",
-		"left: '^quoteshare\\.Redeem$'\nright: '^clientportal\\.RequireEnabled$'\nrelation: '<='\n")
+		"left: '^sharelink\\.Redeem$'\nright: '^portal\\.RequireEnabled$'\nrelation: '<='\n")
 	src := `package p
 import (
-	qs "example.com/internal/quoteshare"
+	qs "example.com/internal/sharelink"
 )
 func DownloadArtifact() {
 	qs.Redeem()
@@ -332,9 +332,9 @@ func DownloadArtifact() {
 
 func TestCountRelationResolvesDotImport(t *testing.T) {
 	c := build(t, "go/per-func-count-relation",
-		"left: '^quoteshare\\.Redeem$'\nright: '^clientportal\\.RequireEnabled$'\nrelation: '<='\n")
+		"left: '^sharelink\\.Redeem$'\nright: '^portal\\.RequireEnabled$'\nrelation: '<='\n")
 	src := `package p
-import . "example.com/internal/quoteshare"
+import . "example.com/internal/sharelink"
 func DownloadArtifact() {
 	Redeem()
 }
@@ -347,11 +347,11 @@ func DownloadArtifact() {
 
 func TestCountRelationResolvesFuncValue(t *testing.T) {
 	c := build(t, "go/per-func-count-relation",
-		"left: '^quoteshare\\.Redeem$'\nright: '^clientportal\\.RequireEnabled$'\nrelation: '<='\n")
+		"left: '^sharelink\\.Redeem$'\nright: '^portal\\.RequireEnabled$'\nrelation: '<='\n")
 	src := `package p
-import "example.com/internal/quoteshare"
+import "example.com/internal/sharelink"
 func DownloadArtifact() {
-	redeemFn := quoteshare.Redeem
+	redeemFn := sharelink.Redeem
 	redeemFn()
 }
 `
@@ -363,17 +363,17 @@ func DownloadArtifact() {
 
 func TestCountRelationRequireUsedIgnoresDiscardedRight(t *testing.T) {
 	c := build(t, "go/per-func-count-relation",
-		"left: '^quoteshare\\.Redeem$'\nright: '^clientportal\\.RequireEnabled$'\nrelation: '<='\nrequire_used: right\n")
+		"left: '^sharelink\\.Redeem$'\nright: '^portal\\.RequireEnabled$'\nrelation: '<='\nrequire_used: right\n")
 	// Redeem used; RequireEnabled as bare statement — results discarded.
 	// Without require_used this would be 1 <= 1 (green); with it, 1 <= 0.
 	src := `package p
 import (
-	"example.com/internal/clientportal"
-	"example.com/internal/quoteshare"
+	"example.com/internal/portal"
+	"example.com/internal/sharelink"
 )
 func DownloadArtifact() {
-	_ = quoteshare.Redeem()
-	clientportal.RequireEnabled()
+	_ = sharelink.Redeem()
+	portal.RequireEnabled()
 }
 `
 	ms := check(t, c, "a.go", src)
@@ -384,15 +384,15 @@ func DownloadArtifact() {
 
 func TestCountRelationRequireUsedAcceptsCheckedRight(t *testing.T) {
 	c := build(t, "go/per-func-count-relation",
-		"left: '^quoteshare\\.Redeem$'\nright: '^clientportal\\.RequireEnabled$'\nrelation: '<='\nrequire_used: right\n")
+		"left: '^sharelink\\.Redeem$'\nright: '^portal\\.RequireEnabled$'\nrelation: '<='\nrequire_used: right\n")
 	src := `package p
 import (
-	"example.com/internal/clientportal"
-	"example.com/internal/quoteshare"
+	"example.com/internal/portal"
+	"example.com/internal/sharelink"
 )
 func DownloadArtifact() {
-	_, _ = quoteshare.Redeem()
-	if err := clientportal.RequireEnabled(); err != nil {
+	_, _ = sharelink.Redeem()
+	if err := portal.RequireEnabled(); err != nil {
 		return
 	}
 }
@@ -404,11 +404,11 @@ func DownloadArtifact() {
 
 func TestCountRelationAliasPassWithGate(t *testing.T) {
 	c := build(t, "go/per-func-count-relation",
-		"left: '^quoteshare\\.Redeem$'\nright: '^clientportal\\.RequireEnabled$'\nrelation: '<='\nrequire_used: right\n")
+		"left: '^sharelink\\.Redeem$'\nright: '^portal\\.RequireEnabled$'\nrelation: '<='\nrequire_used: right\n")
 	src := `package p
 import (
-	cp "example.com/internal/clientportal"
-	qs "example.com/internal/quoteshare"
+	cp "example.com/internal/portal"
+	qs "example.com/internal/sharelink"
 )
 func DownloadArtifact() {
 	_, err := qs.Redeem()
@@ -432,9 +432,9 @@ func TestCountRelationRejectsBadRequireUsed(t *testing.T) {
 
 func TestCallConfinedResolvesImportAlias(t *testing.T) {
 	c := build(t, "go/call-confined-to-func-name",
-		"symbol: '^quoteshare\\.Redeem$'\nallowed_func: '^(View|Accept|Decline|DownloadArtifact)$'\n")
+		"symbol: '^sharelink\\.Redeem$'\nallowed_func: '^(View|Accept|Decline|DownloadArtifact)$'\n")
 	src := `package p
-import qs "example.com/internal/quoteshare"
+import qs "example.com/internal/sharelink"
 func helper() {
 	qs.Redeem()
 }

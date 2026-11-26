@@ -1,6 +1,6 @@
 package main
 
-// perglob.go — the per-glob grain (#10626).
+// perglob.go — the per-glob grain.
 //
 // config.Rule.Applies is a UNION predicate: it answers "does this rule watch
 // this file" and destroys, by construction, which include glob earned the
@@ -15,9 +15,9 @@ package main
 // Matching still goes through formwork's own matcher: each glob is compiled
 // into a one-glob config.Rule and counted with Applies, the same code the
 // gate engine runs. Never the shell — `ls`/`find` cannot expand `**`, which
-// is the error that produced #10083's 133 false zeros.
+// is the error that once produced 133 false zeros.
 //
-// YAML aliases are resolved (#10876): `include: *bootstraps` and
+// YAML aliases are resolved: `include: *bootstraps` and
 // `scope: *shared` are AliasNodes when walked as yaml.Node, and without
 // resolving them the rule contributed zero globs and opted out of per-glob
 // scrutiny. The engine's typed unmarshal expands aliases, so the rule still
@@ -66,7 +66,7 @@ type globMeasure struct {
 	totalInclude int // scope.include globs examined, corpus-wide
 
 	// sourceLists are the scope.include lists a rule DECLARES to be exhaustive
-	// over a source directory, via `# source-list-exhaustive: <dir>` (#13517).
+	// over a source directory, via `# source-list-exhaustive: <dir>`.
 	// Read by sourcelist.go; empty for every rule that has not opted in.
 	sourceLists []sourceListDecl
 }
@@ -109,7 +109,7 @@ func measureGlobs(root string, fset *scan.FileSet) (*globMeasure, error) {
 	paths := scannedPaths(fset)
 
 	// An EXCLUDE is measured against the tree WITHOUT the engine's
-	// built-in skip, not against the scanned FileSet (#12178).
+	// built-in skip, not against the scanned FileSet.
 	//
 	// scan.Walk drops .git and .formwork before any rule runs, so an exclude
 	// naming `.formwork/**` matches zero SCANNED files while naming thousands of
@@ -238,7 +238,7 @@ type globRef struct {
 }
 
 // sourceListDecl is one rule's claim that its scope.include enumerates a source
-// directory EXHAUSTIVELY (#13517):
+// directory EXHAUSTIVELY:
 //
 //	scope:
 //	  # source-list-exhaustive: tools/formwork-vacuity-census
@@ -268,11 +268,11 @@ type sourceListDecl struct {
 // declaration must sit. Line numbers also make the declaration work uniformly
 // for block (`- "glob"`) and inline (`include: ["a", "b"]`) forms.
 //
-// AliasNodes are resolved before inspection (#10876): without that,
+// AliasNodes are resolved before inspection: without that,
 // `include: *bootstraps` and `scope: *shared` contribute zero globs and the
 // rule silently opts out of per-glob scrutiny while the engine (typed
 // unmarshal) still expands them.
-// It also returns the `# source-list-exhaustive:` declarations (#13517), read
+// It also returns the `# source-list-exhaustive:` declarations, read
 // from the same line-numbered walk: the marker is a comment, so it exists only
 // in the source text, exactly like the per-entry marker above.
 func parseRuleGlobs(data []byte) ([]globRef, []sourceListDecl, error) {
@@ -290,7 +290,7 @@ func parseRuleGlobs(data []byte) ([]globRef, []sourceListDecl, error) {
 		return reason != "", reason
 	}
 	declaredDead := func(line int) (bool, string) { return declaredWith("# glob-dead:", line) }
-	// `# source-list-exhaustive: <dir>` (#13517) is recognised on the scope.include
+	// `# source-list-exhaustive: <dir>` is recognised on the scope.include
 	// KEY only. The marker above is a per-entry claim; this one is about the
 	// LIST — that every non-test source in <dir> appears in it — so anchoring it to
 	// an entry would make it read as a statement about that entry alone.
@@ -329,7 +329,7 @@ func parseRuleGlobs(data []byte) ([]globRef, []sourceListDecl, error) {
 }
 
 // resolveNode follows YAML alias nodes to their anchors. Typed unmarshal does
-// this automatically; walking yaml.Node does not (#10876).
+// this automatically; walking yaml.Node does not.
 func resolveNode(n *yaml.Node) *yaml.Node {
 	for n != nil && n.Kind == yaml.AliasNode {
 		n = n.Alias
@@ -356,7 +356,7 @@ func mappingValue(n *yaml.Node, key string) *yaml.Node {
 // or 0 when the key is absent. mappingValue deliberately returns the VALUE, and
 // a sequence value's line is its first item — so a declaration written above
 // `include:` would be read against the wrong line. A whole-list marker
-// (`# source-list-exhaustive:`, #13517) is anchored to the key for the same
+// (`# source-list-exhaustive:`) is anchored to the key for the same
 // reason a per-glob one is anchored to its scalar: the line above the thing the
 // claim is about.
 func mappingKeyLine(n *yaml.Node, key string) int {
@@ -384,7 +384,7 @@ func mappingScalar(n *yaml.Node, key string) string {
 // mapping node — or, when n IS the document node, of the sequence under key in
 // the document's root mapping. A nil or non-sequence yields nil. AliasNodes on
 // the sequence itself (include: *alias) and on the parent mapping
-// (scope: *shared) are resolved first (#10876).
+// (scope: *shared) are resolved first.
 func mappingSeq(n *yaml.Node, key string) []*yaml.Node {
 	if n == nil {
 		return nil

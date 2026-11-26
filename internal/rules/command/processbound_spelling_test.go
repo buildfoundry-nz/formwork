@@ -69,7 +69,7 @@ func TestProcessBoundDoesNotBindANonInvocation(t *testing.T) {
 
 // The ACCEPTED over-approximation, pinned so it is a decision rather than a
 // surprise. Inside a shell -c body a data line and a command are textually
-// identical: examples/palletra-port-full's flutter-ci-workflow-structure-checked
+// identical: the full example corpus's flutter-ci-workflow-structure-checked
 // carries the table line `dart run melos exec~melos affected-test runner`, which
 // only ever gets grepped, and binds anyway.
 //
@@ -87,7 +87,7 @@ func TestShellBodyArmOverApproximates(t *testing.T) {
 
 // The position narrowing that keeps that over-approximation from spreading. A
 // non-shell rule's arguments are DATA, never a script body, so they are not
-// scanned at all — measured against examples/palletra-port-full, where a python3
+// scanned at all — measured against the full example corpus, where a python3
 // rule carries `dart = 1` and a workflow-shaped label reads `flutter step:`.
 func TestNonShellArgumentsAreNeverScannedAsAScriptBody(t *testing.T) {
 	for _, params := range []string{

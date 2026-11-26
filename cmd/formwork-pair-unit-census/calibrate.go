@@ -23,7 +23,7 @@ import (
 
 // judgedCalibration pins isJudgedArm on the shapes the census has to tell
 // apart. The same-dir row is the load-bearing one: a package-collective unit
-// is a deliberate design act (#12249 section B), and flagging it would demand
+// is a deliberate design act, and flagging it would demand
 // a `where:` edit that fires on correct code — a rule with that false-positive
 // rate gets disabled, which is worse than the count-blindness it replaced.
 var judgedCalibration = []struct {
@@ -34,7 +34,7 @@ var judgedCalibration = []struct {
 	{arm{Type: "pair-consistency"}, true, "where omitted defaults to same-file; obligation omitted is presence"},
 	{arm{Type: "pair-consistency", Where: "same-file"}, false, "explicit same-file is a design act (explain-gate: the capture is file-scoped); its mechanism is not this census's"},
 	{arm{Type: "pair-consistency", Where: "same-func"}, false, "a per-function unit is per-occurrence already"},
-	{arm{Type: "pair-consistency", Where: "same-dir"}, false, "a package-collective unit is a design act; its mechanism is #12239's"},
+	{arm{Type: "pair-consistency", Where: "same-dir"}, false, "a package-collective unit is a design act with its own mechanism"},
 	{arm{Type: "pair-consistency", Obligation: "countable"}, false, "count(requires) >= count(trigger) per unit enforces the relation"},
 	{arm{Type: "pair-consistency", Where: "same-file", Obligation: "countable"}, false, "countable at file grain is per-occurrence already"},
 	{arm{Type: "required-pattern"}, false, "not a pair arm"},
@@ -43,7 +43,7 @@ var judgedCalibration = []struct {
 
 // countBlindCalibration pins the verdict primitive on both its clauses: the
 // count (>1 trigger line) and the per-file Go domain. The non-Go rows are the
-// #12195 engine limitation, stated per file so a mixed-scope arm's Go evidence
+// engine limitation, stated per file so a mixed-scope arm's Go evidence
 // is judged while its Dart evidence waits for the engine's Dart unit.
 var countBlindCalibration = []struct {
 	n    int
@@ -52,13 +52,13 @@ var countBlindCalibration = []struct {
 	why  string
 }{
 	{2, "internal/x/writer.go", true, "two trigger lines in one Go file is count-blind evidence"},
-	{11, "routes/boq_templates/boq_templates_items.go", true, "the #12181 measured case"},
+	{11, "routes/order_templates/order_templates_items.go", true, "the measured case"},
 	{1, "internal/x/writer.go", false, "one trigger per file is the pass condition"},
 	{0, "internal/x/writer.go", false, "no trigger, no obligation"},
-	{5, "packages/feature_pricing/lib/providers/quote_actions_providers.dart", true, "Dart evidence is in domain now that same-func has a Dart unit (#12195)"},
-	{8, "schema/proto/takeoffqs/domain/v1/priced_item.proto", true, "proto evidence is in domain now that same-func has a proto unit (#12195)"},
-	{3, "scripts/check-go-staticcheck.sh", false, "shell evidence is out of domain (#12195)"},
-	{2, "api-factory/internal/x/writer_test.go", true, "a _test.go file is Go — the domain is the language, not the file's role"},
+	{5, "packages/feature_billing/lib/providers/invoice_actions_providers.dart", true, "Dart evidence is in domain now that same-func has a Dart unit"},
+	{8, "schema/proto/example/domain/v1/line_item.proto", true, "proto evidence is in domain now that same-func has a proto unit"},
+	{3, "scripts/check-go-staticcheck.sh", false, "shell evidence is out of domain"},
+	{2, "svc/internal/x/writer_test.go", true, "a _test.go file is Go — the domain is the language, not the file's role"},
 }
 
 // calibrate runs the self-test and reports it. A disagreement is an ERROR,

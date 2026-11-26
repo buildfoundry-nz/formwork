@@ -35,7 +35,7 @@ func TestIsJudgedArm(t *testing.T) {
 
 // TestCountBlind pins the verdict primitive on both clauses — the count AND
 // the per-file domain. Dart and proto are in domain now that same-func has
-// units for them (#12195); shell stays out (no unit).
+// units for them; shell stays out (no unit).
 func TestCountBlind(t *testing.T) {
 	cases := []struct {
 		name string
@@ -49,7 +49,7 @@ func TestCountBlind(t *testing.T) {
 		{"Dart evidence is judged now that same-func has a Dart unit", 5, "packages/x/lib/y.dart", true},
 		{"proto evidence is judged now that same-func has a proto unit", 8, "schema/proto/x/y.proto", true},
 		{"shell evidence is out of domain", 3, "scripts/check-x.sh", false},
-		{"a _test.go file is Go", 2, "api-factory/internal/x/writer_test.go", true},
+		{"a _test.go file is Go", 2, "svc/internal/x/writer_test.go", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -90,8 +90,7 @@ func TestLoadCorpusReadsPairParams(t *testing.T) {
 // TestDetectFlagsTheFileGrainCountBlindArm is the fire case: of the four arms
 // over the same corpus, only the omitted-where presence arm is judged, and
 // both locks.go (2 trigger lines) and locks.dart (3 lines) offend — extra.go
-// (1 line) passes. Dart is in domain now that same-func has a Dart unit
-// (#12195).
+// (1 line) passes. Dart is in domain now that same-func has a Dart unit.
 func TestDetectFlagsTheFileGrainCountBlindArm(t *testing.T) {
 	root := "testdata/fire-1"
 	arms, err := loadCorpus(root)

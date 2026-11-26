@@ -16,12 +16,12 @@ import (
 const lockingSchemaSQL = `
 CREATE TABLE app.rows (session_id uuid NOT NULL, row_key integer NOT NULL, note text);
 ALTER TABLE ONLY app.rows ADD CONSTRAINT rows_pkey PRIMARY KEY (session_id, row_key);
-CREATE TABLE app.overrides (material_id uuid NOT NULL, price numeric);
-ALTER TABLE ONLY app.overrides ADD CONSTRAINT overrides_pkey PRIMARY KEY (material_id);
+CREATE TABLE app.overrides (item_id uuid NOT NULL, price numeric);
+ALTER TABLE ONLY app.overrides ADD CONSTRAINT overrides_pkey PRIMARY KEY (item_id);
 CREATE TABLE app.profiles (id uuid PRIMARY KEY, org_id uuid NOT NULL, site_id uuid, logo text);
 CREATE UNIQUE INDEX profiles_org_only ON app.profiles USING btree (org_id) WHERE (site_id IS NULL);
-CREATE TABLE app.boqs (id uuid PRIMARY KEY, project_id uuid NOT NULL);
-CREATE TABLE app.projects (id uuid PRIMARY KEY, current_boq_id uuid, UNIQUE (current_boq_id));
+CREATE TABLE app.carts (id uuid PRIMARY KEY, project_id uuid NOT NULL);
+CREATE TABLE app.projects (id uuid PRIMARY KEY, current_cart_id uuid, UNIQUE (current_cart_id));
 CREATE TABLE app.tags (id uuid PRIMARY KEY, label text NOT NULL);
 CREATE UNIQUE INDEX tags_label_lower ON app.tags USING btree (lower(label));
 CREATE TABLE app.labels (id uuid PRIMARY KEY, org_id uuid NOT NULL, label text NOT NULL);
@@ -87,8 +87,8 @@ func TestSchemaKeysPartOfCompositeOrderFires(t *testing.T) {
 
 func TestSchemaKeysNonIDPrimaryKeyOrderPasses(t *testing.T) {
 	_, judge := schemaChecker(t)
-	if ms := judge("SELECT material_id FROM app.overrides WHERE material_id = ANY($1) ORDER BY material_id FOR UPDATE;\n"); len(ms) != 0 {
-		t.Fatalf("ORDER BY a primary key named material_id is a total order: %+v", ms)
+	if ms := judge("SELECT item_id FROM app.overrides WHERE item_id = ANY($1) ORDER BY item_id FOR UPDATE;\n"); len(ms) != 0 {
+		t.Fatalf("ORDER BY a primary key named item_id is a total order: %+v", ms)
 	}
 }
 
@@ -204,15 +204,15 @@ func TestSchemaKeysReadFromEverySchemaListed(t *testing.T) {
 
 func TestSchemaKeysJoinPinnedRelationPasses(t *testing.T) {
 	_, judge := schemaChecker(t)
-	sql := "SELECT b.id FROM app.boqs b JOIN app.projects p ON p.current_boq_id = b.id WHERE p.id = $1 FOR UPDATE OF b;\n"
+	sql := "SELECT b.id FROM app.carts b JOIN app.projects p ON p.current_cart_id = b.id WHERE p.id = $1 FOR UPDATE OF b;\n"
 	if ms := judge(sql); len(ms) != 0 {
-		t.Fatalf("a boq joined on its key to one project row is one row: %+v", ms)
+		t.Fatalf("a cart joined on its key to one project row is one row: %+v", ms)
 	}
 }
 
 func TestSchemaKeysJoinPinnedEitherWayRound(t *testing.T) {
 	_, judge := schemaChecker(t)
-	sql := "SELECT b.id FROM app.boqs b JOIN app.projects p ON b.id = p.current_boq_id WHERE p.id = $1 FOR UPDATE OF b;\n"
+	sql := "SELECT b.id FROM app.carts b JOIN app.projects p ON b.id = p.current_cart_id WHERE p.id = $1 FOR UPDATE OF b;\n"
 	if ms := judge(sql); len(ms) != 0 {
 		t.Fatalf("the join equality pins b.id whichever side it is written on: %+v", ms)
 	}
@@ -227,15 +227,15 @@ func TestSchemaKeysIndexWithAnExpressionColumnIsNoKey(t *testing.T) {
 
 func TestSchemaKeysJoinOnNonKeyFires(t *testing.T) {
 	_, judge := schemaChecker(t)
-	sql := "SELECT b.id FROM app.boqs b JOIN app.projects p ON p.id = b.project_id WHERE p.id = $1 FOR UPDATE OF b;\n"
+	sql := "SELECT b.id FROM app.carts b JOIN app.projects p ON p.id = b.project_id WHERE p.id = $1 FOR UPDATE OF b;\n"
 	if ms := judge(sql); len(ms) != 1 {
-		t.Fatalf("every boq of one project is many rows: %+v", ms)
+		t.Fatalf("every cart of one project is many rows: %+v", ms)
 	}
 }
 
 func TestSchemaKeysOuterJoinQualPinsNothing(t *testing.T) {
 	_, judge := schemaChecker(t)
-	sql := "SELECT b.id FROM app.projects p LEFT JOIN app.boqs b ON p.current_boq_id = b.id WHERE p.id = $1 FOR UPDATE OF b;\n"
+	sql := "SELECT b.id FROM app.projects p LEFT JOIN app.carts b ON p.current_cart_id = b.id WHERE p.id = $1 FOR UPDATE OF b;\n"
 	if ms := judge(sql); len(ms) != 1 {
 		t.Fatalf("an outer join's qual does not restrict its null-extended side: %+v", ms)
 	}
@@ -243,14 +243,14 @@ func TestSchemaKeysOuterJoinQualPinsNothing(t *testing.T) {
 
 func TestSchemaKeysOrPinsNothing(t *testing.T) {
 	_, judge := schemaChecker(t)
-	if ms := judge("SELECT 1 FROM app.overrides WHERE material_id = $1 OR price > 0 FOR UPDATE;\n"); len(ms) != 1 {
+	if ms := judge("SELECT 1 FROM app.overrides WHERE item_id = $1 OR price > 0 FOR UPDATE;\n"); len(ms) != 1 {
 		t.Fatalf("an OR at the top pins no row: %+v", ms)
 	}
 }
 
 func TestSchemaKeysBothLockedRelationsSingleRowPass(t *testing.T) {
 	_, judge := schemaChecker(t)
-	sql := "SELECT b.id FROM app.boqs b JOIN app.projects p ON p.current_boq_id = b.id WHERE p.id = $1 FOR UPDATE;\n"
+	sql := "SELECT b.id FROM app.carts b JOIN app.projects p ON p.current_cart_id = b.id WHERE p.id = $1 FOR UPDATE;\n"
 	if ms := judge(sql); len(ms) != 0 {
 		t.Fatalf("two locked relations, each one row, have no siblings to order: %+v", ms)
 	}

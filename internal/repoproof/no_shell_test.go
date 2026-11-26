@@ -334,26 +334,26 @@ func TestTrackedFilesIgnoresAHostileGitEnvironment(t *testing.T) {
 // .formwork/fixtures/ is not excused, and neither is any other path under
 // examples/. Nothing in this tree invokes one of these.
 var huskyShims = map[string]bool{
-	"examples/palletra-port-full/.formwork/fixtures/gate-scripts-are-wired/fire-1/.husky/pre-commit":               true,
-	"examples/palletra-port-full/.formwork/fixtures/gate-scripts-are-wired/pass-1/.husky/pre-commit":               true,
-	"examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/fire-1/.husky/pre-commit":                true,
-	"examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/fire-1/.husky/pre-push":                  true,
-	"examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/pass-1/.husky/pre-commit":                true,
-	"examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/pass-1/.husky/pre-push":                  true,
-	"examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/fire-2/.husky/pre-push":                  true,
-	"examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/fire-3/.husky/pre-commit":                true,
-	"examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/fire-3/.husky/pre-push":                  true,
-	"examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/fire-4/.husky/pre-push":                  true,
-	"examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/pass-2/.husky/pre-commit":                true,
-	"examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/pass-2/.husky/pre-push":                  true,
-	"examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/pass-3/.husky/pre-commit":                true,
-	"examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/pass-3/.husky/pre-push":                  true,
-	"examples/palletra-port-full/.formwork/fixtures/schema-regen-none-branch-cardinality/fire-1/.husky/pre-commit": true,
-	"examples/palletra-port-full/.formwork/fixtures/schema-regen-none-branch-cardinality/pass-1/.husky/pre-commit": true,
-	"examples/palletra-port-full/.formwork/fixtures/schema-regen-single-assignment/fire-1/.husky/pre-commit":       true,
-	"examples/palletra-port-full/.formwork/fixtures/schema-regen-single-assignment/pass-1/.husky/pre-commit":       true,
-	"examples/palletra-port-full/.formwork/fixtures/schema-regen-skip-branch-cardinality/fire-1/.husky/pre-commit": true,
-	"examples/palletra-port-full/.formwork/fixtures/schema-regen-skip-branch-cardinality/pass-1/.husky/pre-commit": true,
+	"examples/sample-corpus-full/.formwork/fixtures/gate-scripts-are-wired/fire-1/.husky/pre-commit":               true,
+	"examples/sample-corpus-full/.formwork/fixtures/gate-scripts-are-wired/pass-1/.husky/pre-commit":               true,
+	"examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/fire-1/.husky/pre-commit":                true,
+	"examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/fire-1/.husky/pre-push":                  true,
+	"examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/pass-1/.husky/pre-commit":                true,
+	"examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/pass-1/.husky/pre-push":                  true,
+	"examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/fire-2/.husky/pre-push":                  true,
+	"examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/fire-3/.husky/pre-commit":                true,
+	"examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/fire-3/.husky/pre-push":                  true,
+	"examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/fire-4/.husky/pre-push":                  true,
+	"examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/pass-2/.husky/pre-commit":                true,
+	"examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/pass-2/.husky/pre-push":                  true,
+	"examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/pass-3/.husky/pre-commit":                true,
+	"examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/pass-3/.husky/pre-push":                  true,
+	"examples/sample-corpus-full/.formwork/fixtures/schema-regen-none-branch-cardinality/fire-1/.husky/pre-commit": true,
+	"examples/sample-corpus-full/.formwork/fixtures/schema-regen-none-branch-cardinality/pass-1/.husky/pre-commit": true,
+	"examples/sample-corpus-full/.formwork/fixtures/schema-regen-single-assignment/fire-1/.husky/pre-commit":       true,
+	"examples/sample-corpus-full/.formwork/fixtures/schema-regen-single-assignment/pass-1/.husky/pre-commit":       true,
+	"examples/sample-corpus-full/.formwork/fixtures/schema-regen-skip-branch-cardinality/fire-1/.husky/pre-commit": true,
+	"examples/sample-corpus-full/.formwork/fixtures/schema-regen-skip-branch-cardinality/pass-1/.husky/pre-commit": true,
 }
 
 // #264 r2 — the corpus-fixture exception must be an enumerated pin, not a
@@ -372,7 +372,7 @@ var huskyShims = map[string]bool{
 // it is reported too.
 func TestCorpusFixtureExceptionIsPinnedNotShaped(t *testing.T) {
 	const (
-		corpus     = "examples/palletra-port-full/.formwork/fixtures/git-hooks-fully-wired/"
+		corpus     = "examples/sample-corpus-full/.formwork/fixtures/git-hooks-fully-wired/"
 		pinned     = corpus + "fire-1/.husky/pre-commit"
 		alsoPinned = corpus + "pass-1/.husky/pre-push"
 		unpinned   = corpus + "fire-2/.husky/pre-commit"

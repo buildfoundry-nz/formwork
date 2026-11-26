@@ -1,0 +1,4 @@
+CREATE TABLE sample.projects (id uuid PRIMARY KEY);
+CREATE TABLE sample.pages (id uuid PRIMARY KEY);
+ALTER TABLE sample.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sample.pages ENABLE ROW LEVEL SECURITY;

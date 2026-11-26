@@ -1,1 +1,0 @@
-- FAIL: handler FetchForCollaborator (scoped in freightworks/services/core-api/routes/quote_bundle/register.go) never calls suppliercollab.RequireActive

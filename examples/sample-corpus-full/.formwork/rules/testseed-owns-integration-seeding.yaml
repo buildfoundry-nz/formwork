@@ -1,0 +1,26 @@
+# Ported from Sample scripts/check-testseed-owns-integration-seeding.sh
+# (#1971, collapsed to a plain ban by #5068). Any appcore *_test.go carrying a
+# raw seed INSERT into sample.projects or platform.organizations must instead
+# seed via appcore/internal/testseed. The shipped gate matches case-insensitively
+# and whitespace-tolerantly with a word boundary after the table name; RE2 gives us
+# `(?i)`, `\s+` and `\b` for a faithful port.
+# Structural exemptions carried across as scope.exclude: migrations/ (raw SQL is the
+# point), routes/ (its own testsupport seeder), gatetests/ (fixtures embed the
+# banned INSERT by design), and the one file-exact bulk-seed keep
+# pagerefresh/query_speed_integration_test.go.
+rules:
+  - id: testseed-owns-integration-seeding
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "appcore/**/*_test.go"
+      exclude:
+        - "**/migrations/**"
+        - "appcore/services/core-api/routes/**"
+        - "**/gatetests/**"
+        - "appcore/services/core-api/internal/pagerefresh/query_speed_integration_test.go"
+    params:
+      pattern: '(?i)INSERT\s+INTO\s+(sample\.projects|platform\.organizations)\b'
+    cure: "Seed the org->project->version->page chain via appcore/internal/testseed (PrimeProjectChain / PrimeProject / PrimeOrgUser), not a raw INSERT (#5068)."
+    origin: scripts/check-testseed-owns-integration-seeding.sh

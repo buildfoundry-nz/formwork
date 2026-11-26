@@ -300,7 +300,7 @@ selftest:
 #
 # Wiring the loop needed a mechanism first, and the mechanism is deliberately NOT
 # a flag here: the corpora are not uniformly small ports of a 13k-file tree —
-# `palletra-port-full` carries no source tree at all, so a scope-reading check
+# `sample-corpus-full` carries no source tree at all, so a scope-reading check
 # over it reports its whole domain instead of discriminating within it — and a
 # skip list living in a Makefile recipe is an exemption nobody reviews. #324 is
 # what the difference cost: for as long as that condition read as incidental,
@@ -313,7 +313,7 @@ selftest:
 #
 # What the loop does NOT assert is that each corpus still has a falsifiable
 # check left: lint refuses a run where NO check ran, but it cannot yet refuse
-# one where only unfalsifiable checks did. `palletra-port-full` is the corpus
+# one where only unfalsifiable checks did. `sample-corpus-full` is the corpus
 # where that gap would show, and this is its board:
 #
 #   formwork lint: 5/5 checks passed (2 skipped: empty-scope, exemption-hygiene — see .formwork/lint.yaml)
@@ -335,8 +335,8 @@ lint:
 		go run ./cmd/formwork lint -C "$$d" || fail=1; \
 	done; exit $$fail
 
-## corpus-disclosure-proof: re-derive every figure the palletra-port-full disclosures state and refuse one the tree contradicts
-# WHY THIS TARGET EXISTS. Three tracked files describe examples/palletra-port-full
+## corpus-disclosure-proof: re-derive every figure the sample-corpus-full disclosures state and refuse one the tree contradicts
+# WHY THIS TARGET EXISTS. Three tracked files describe examples/sample-corpus-full
 # to a reader: that corpus's own `.formwork/lint.yaml`, the `lint:` and
 # `quickstart-proof:` comments in this Makefile, and the empty-scope bullet in
 # docs/specs/2026-07-09-formwork-design.md. Until this target none of them was
@@ -387,7 +387,7 @@ lint:
 # AND THE TWO AGENT MANUALS ARE SUBJECTS (#324, #263.4). The last surviving
 # false clause of #324 sat in AGENTS.md and in its published counterpart,
 # tools/publication/public-AGENTS.md. Both told a reader that every one of the
-# palletra-port corpora has a source tree to check its rules against — a
+# sample-corpus corpora has a source tree to check its rules against — a
 # distributive claim, false for the flagship, which is the corpus this whole
 # target is about. Neither file was a subject, so nothing here reached them:
 # AGENTS.md carried the exact wording the vocabulary arm bans and every run was
@@ -445,7 +445,7 @@ lint:
 # disagrees with, or a skip whose check reports nothing once the skip is gone:
 # each is exit 2 rather than a quiet pass.
 corpus-disclosure-proof:
-	@corpus=examples/palletra-port-full; \
+	@corpus=examples/sample-corpus-full; \
 	yaml="$$corpus/.formwork/lint.yaml"; \
 	spec=docs/specs/2026-07-09-formwork-design.md; \
 	pubmanual=tools/publication/public-AGENTS.md; \
@@ -485,10 +485,10 @@ corpus-disclosure-proof:
 	tracked=$$(wc -l < "$$tmp/tracked.txt" | tr -d ' '); \
 	[ "$$tracked" -gt 0 ] || { echo "corpus-disclosure-proof: git ls-files $$corpus matched nothing — refusing" >&2; exit 2; }; \
 	srcfiles=$$(grep -vc '/\.formwork/' "$$tmp/tracked.txt" || true); \
-	git ls-files -- 'examples/palletra-port-*' > "$$tmp/corpora.txt" || { echo "corpus-disclosure-proof: git ls-files failed over examples/palletra-port-*, so the count of corpora the agent manuals state cannot be derived" >&2; exit 2; }; \
+	git ls-files -- 'examples/sample-corpus-*' > "$$tmp/corpora.txt" || { echo "corpus-disclosure-proof: git ls-files failed over examples/sample-corpus-*, so the count of corpora the agent manuals state cannot be derived" >&2; exit 2; }; \
 	ncorpora=$$(sed 's|^\(examples/[^/]*\)/.*|\1|' "$$tmp/corpora.txt" | sort -u | grep -c . || true); \
-	[ "$$ncorpora" -ge 1 ] || { echo "corpus-disclosure-proof: git tracks no examples/palletra-port-* corpus at all, so a figure derived over them would describe nothing" >&2; exit 2; }; \
-	grep -q "^$$corpus/" "$$tmp/corpora.txt" || { echo "corpus-disclosure-proof: $$corpus is not among the examples/palletra-port-* corpora git tracks, so a count derived over them says nothing about the corpus this target judges" >&2; exit 2; }; \
+	[ "$$ncorpora" -ge 1 ] || { echo "corpus-disclosure-proof: git tracks no examples/sample-corpus-* corpus at all, so a figure derived over them would describe nothing" >&2; exit 2; }; \
+	grep -q "^$$corpus/" "$$tmp/corpora.txt" || { echo "corpus-disclosure-proof: $$corpus is not among the examples/sample-corpus-* corpora git tracks, so a count derived over them says nothing about the corpus this target judges" >&2; exit 2; }; \
 	srccorpora=$$(grep -v '/\.formwork/' "$$tmp/corpora.txt" | sed 's|^\(examples/[^/]*\)/.*|\1|' | sort -u | grep -c . || true); \
 	go run ./cmd/formwork check -C "$$corpus" --format json > "$$tmp/check.json" 2> "$$tmp/check.err" || true; \
 	scanned=$$(sed -n 's/^ *"files_scanned": \([0-9][0-9]*\),*$$/\1/p' "$$tmp/check.json"); \
@@ -521,7 +521,7 @@ corpus-disclosure-proof:
 	grep -q '^formwork lint: ' "$$tmp/noskip.txt" || { echo "corpus-disclosure-proof: the skip-free re-run printed no board line, so no skip's problem count can be derived; it said: $$(tail -2 "$$tmp/noskip.err" | tr '\n' ' ')" >&2; exit 2; }; \
 	printf 'derived: %s rules, %s of them command rules; %s tracked file(s); %s source file(s)\n' "$$rules" "$$cmdrules" "$$tracked" "$$srcfiles"; \
 	printf 'derived: %s\n' "$$board"; \
-	printf 'derived: %s of %s palletra-port corpora carry a source file; the corpus declares %s skip(s): %s\n' "$$srccorpora" "$$ncorpora" "$$nskips" "$$skiplist"; \
+	printf 'derived: %s of %s sample-corpus corpora carry a source file; the corpus declares %s skip(s): %s\n' "$$srccorpora" "$$ncorpora" "$$nskips" "$$skiplist"; \
 	claim "$$tmp/yaml.norm" "lint.yaml: board line" "formwork lint: [0-9]+/[0-9]+ checks passed \([0-9]+ skipped: [^)]*\)" "$$board"; \
 	claim "$$tmp/make.norm" "Makefile: board line" "formwork lint: [0-9]+/[0-9]+ checks passed \([0-9]+ skipped: [^)]*\)" "$$board"; \
 	claim "$$tmp/yaml.norm" "lint.yaml: checks-passed ratio" "[0-9]+/[0-9]+ checks passed" "$$ratio checks passed"; \
@@ -543,7 +543,7 @@ corpus-disclosure-proof:
 		norm "$$m" > "$$tmp/manual.norm"; \
 		claim "$$tmp/manual.norm" "$$m: board line" "formwork lint: [0-9]+/[0-9]+ checks passed \([0-9]+ skipped: [^)]*\)" "$$board"; \
 		claim "$$tmp/manual.norm" "$$m: checks-passed ratio" "[0-9]+/[0-9]+ checks passed" "$$ratio checks passed"; \
-		claim "$$tmp/manual.norm" "$$m: corpora with a source tree" "[0-9]+ of the [0-9]+ palletra-port corpora carry a source tree" "$$srccorpora of the $$ncorpora palletra-port corpora carry a source tree"; \
+		claim "$$tmp/manual.norm" "$$m: corpora with a source tree" "[0-9]+ of the [0-9]+ sample-corpus corpora carry a source tree" "$$srccorpora of the $$ncorpora sample-corpus corpora carry a source tree"; \
 		claim "$$tmp/manual.norm" "$$m: the corpus's declared skips" "[0-9]+ skipped: [a-z][a-z-]*(, [a-z][a-z-]*)*" "$$boardskips skipped: $$skiplist"; \
 	done; \
 	for s in $$skips; do \
@@ -590,9 +590,9 @@ corpus-disclosure-proof:
 ## quickstart-proof: the teaching corpus governs its own tree, and every figure stated about it — here and in docs/quickstart.md — is re-derived
 # `lint` and `selftest` both loop the corpora now (#89/#39). `check` still does
 # not, and the asymmetry is deliberate — but not for the reason this comment
-# gave until #324. It said palletra-port-full's TREE legitimately carries 91
+# gave until #324. It said sample-corpus-full's TREE legitimately carries 91
 # findings. That tree carries nothing: `formwork check -C
-# examples/palletra-port-full` opens with `scan: 618 file(s) scanned` — every one
+# examples/sample-corpus-full` opens with `scan: 618 file(s) scanned` — every one
 # the corpus's own .formwork, none of them source — and every
 # figure in the next two sentences is re-derived from that same run by
 # `corpus-disclosure-proof` above. Of the 91 findings, 87 are command-rule

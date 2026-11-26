@@ -1,6 +1,6 @@
 # `go/types` rule family, run as one vettool
 
-Status: design. Consumer driver: TakeoffQS epic #24306, Phase 2 (W2, "formwork
+Status: design. Consumer driver: a downstream epic #24306, Phase 2 (W2, "formwork
 `go/types` rule family compiled into one vettool").
 
 ## 1. Problem

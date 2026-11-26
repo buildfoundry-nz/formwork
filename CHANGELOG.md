@@ -75,7 +75,7 @@
   whether one path is gitignored took three git calls in turn — whether the root
   is the top level, `core.ignorecase`, and the index entries at the path. They
   do not depend on one another, so they now run concurrently, and the index is
-  listed case-insensitively and folded afterwards as before. On a TakeoffQS Go
+  listed case-insensitively and folded afterwards as before. On a downstream Go
   file a resident `check-content` answer fell from 163-195 ms to 113-132 ms at a
   load average of 44. The answer is unchanged.
 
@@ -97,7 +97,7 @@
 
 - **`check-content` evaluates rules that declare `scope.min_files`.** It deferred
   every one of them as `scope_min_files`, although the floor is checked outside
-  the rule's evaluation and one file's content cannot move it. On four TakeoffQS
+  the rule's evaluation and one file's content cannot move it. On four downstream
   files (a Go route, a Go tool, two Dart files) the rules evaluated went from 277
   to 309, 50 to 55, 158 to 173 and 124 to 140; 295 files sampled from that tree
   gave no finding. The per-file verdict is the one `check` gives. `check` still
@@ -112,7 +112,7 @@
   `check-content`, with supplied unsaved content or the confined on-disk file.
   Filesystem events invalidate the resident compiled corpus, watcher failures
   force strict reloads, and a short text summary avoids serializing the full
-  report twice. On the TakeoffQS corpus, 50 warm calls measured 186 ms p50 and
+  report twice. On a downstream corpus, 50 warm calls measured 186 ms p50 and
   210 ms p95.
 
 ## 0.21.1
@@ -129,7 +129,7 @@
   gitlinks. The prune set holds exactly the records the whole listing held for those
   paths. A nested repository that is not ignored, a `dir/*`-style pattern that matches
   only the slash spelling of an untracked directory, and a root below the top level
-  still take the whole listing. A one-file `check-content` on TakeoffQS went from
+  still take the whole listing. A one-file `check-content` on a downstream repository went from
   6.7 s to 0.4 s with an identical report. `check` and `lint` walk the whole tree and
   keep the whole listing.
 
@@ -585,7 +585,7 @@
   credential now carries the literal gate `autoPrefilter` already derives for
   a pattern: a file holding none of the credential's guaranteed literals holds
   none of its lines, so it is skipped without changing the count. On
-  TakeoffQS's 243 home-carrying rules over the whole tree, CPU went from 128 s
+  a downstream repository's 243 home-carrying rules over the whole tree, CPU went from 128 s
   to 82 s.
 
 ## 0.14.2
@@ -998,7 +998,7 @@
   failed first, and the ordering is a permutation — so verdicts, findings and
   error selection are byte-identical with and without a hint, under any hint.
   Proved over this repository's own corpora, including the 704-rule
-  `examples/palletra-port-full`, against an inverted hint
+  `examples/sample-corpus-full`, against an inverted hint
   (`TestDispatchOrderChangesNoVerdictOnTheRepoCorpora`). Without the flag,
   output is byte-identical to 0.6.3 across all seven corpora and all three
   formats. Pool widths, the heavy gate and the cost partition are unchanged

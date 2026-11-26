@@ -200,10 +200,10 @@ they gate `make verify` exactly like this repo's own rules do.
 - **`examples/quickstart/`** — the teaching corpus: five rules, ten fixtures,
   each rule commented to introduce one concept. Keep it small enough to read end
   to end; new coverage belongs in the port corpora.
-- **`examples/palletra-port-*`** — five scale corpora set in a fictional
-  warehouse fit-out domain, each with its own `.formwork/`. 4 of the 5
-  palletra-port corpora carry a source tree to check those rules against; the
-  fifth, `examples/palletra-port-full`, carries none at all, so its board reads
+- **`examples/sample-corpus-*`** — five scale corpora set in a generic
+  service domain, each with its own `.formwork/`. 4 of the 5
+  sample-corpus corpora carry a source tree to check those rules against; the
+  fifth, `examples/sample-corpus-full`, carries none at all, so its board reads
   `formwork lint: 5/5 checks passed (2 skipped: empty-scope, exemption-hygiene —
   see .formwork/lint.yaml)` — over no files both of those skipped checks would
   report 100% of what they can see and discriminate nothing, and

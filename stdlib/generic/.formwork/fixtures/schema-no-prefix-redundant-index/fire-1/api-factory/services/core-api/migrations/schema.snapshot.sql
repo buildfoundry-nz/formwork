@@ -1,1 +1,1 @@
-CREATE INDEX idx_metrics_project ON takeoffqs.metrics USING btree (project_id); -- want: schema-no-prefix-redundant-index
+CREATE INDEX idx_metrics_project ON app.metrics USING btree (project_id); -- want: schema-no-prefix-redundant-index

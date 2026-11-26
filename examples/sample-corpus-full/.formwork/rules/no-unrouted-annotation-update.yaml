@@ -1,0 +1,20 @@
+# Ported from Sample scripts/check-no-unrouted-annotation-update.sh. Every
+# mutation of sample.annotations must go through the markupwrite seam
+# (which writes a sample.annotation_timeline row in the same pgx.Tx), so a raw
+# `UPDATE sample.annotations` is banned everywhere under appcore except
+# the seam package, the migrations dir and _test.go files.
+rules:
+  - id: no-unrouted-annotation-update
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "appcore/**/*.go"
+      exclude:
+        - "appcore/services/core-api/internal/markupwrite/**"
+        - "appcore/services/core-api/migrations/**"
+        - "**/*_test.go"
+    params:
+      pattern: 'UPDATE\s+sample\.annotations\b'
+    cure: "Route the mutation through markupwrite.LogAndUpdate<Field>(ctx, tx, ...) so the same pgx.Tx also writes a sample.annotation_timeline row."
+    origin: scripts/check-no-unrouted-annotation-update.sh

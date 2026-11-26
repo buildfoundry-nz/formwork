@@ -4,6 +4,7 @@ package cli
 
 import (
 	"cmp"
+	"flag"
 	"fmt"
 	"maps"
 	"slices"
@@ -42,6 +43,42 @@ func parseShardCapacity(spec string) ([]int, error) {
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// shardCapacityFlag registers --shard-capacity on fs. The list it points to
+// stays nil when the flag is absent.
+func shardCapacityFlag(fs *flag.FlagSet) *[]int {
+	var capacity []int
+	fs.Func("shard-capacity", shardCapacityUsage, func(spec string) error {
+		if capacity != nil {
+			return fmt.Errorf("--shard-capacity given twice; one list names every shard")
+		}
+		c, err := parseShardCapacity(spec)
+		if err != nil {
+			return err
+		}
+		capacity = c
+		return nil
+	})
+	return &capacity
+}
+
+// checkShardCapacity refuses a capacity list the run cannot apply. Capacity
+// weighs the partition's measured loads: without --shard there is no
+// partition, without --durations every load is zero, and a list that does not
+// name each of the N shards cannot be read the same by every job.
+func checkShardCapacity(capacity []int, sharded, hinted bool, shard string, n int) error {
+	switch {
+	case capacity == nil:
+		return nil
+	case !sharded:
+		return fmt.Errorf("--shard-capacity weighs the shards of --shard K/N; without --shard it would change nothing")
+	case !hinted:
+		return fmt.Errorf("--shard-capacity weighs the loads --durations measures; without --durations every load is zero and it would change nothing")
+	case len(capacity) != n:
+		return fmt.Errorf("--shard-capacity lists %d capacities for --shard %s; name one per shard", len(capacity), shard)
+	}
+	return nil
 }
 
 // shardPin is one --shard-pin LANE=K: the rules lane selects all run on shard k.

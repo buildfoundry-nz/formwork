@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Changed
+
+- **`go/declared-once` and `dart/declared-once` replace the marked types.**
+  Each takes `declarations`, a list of `{path, decl}` naming the file that
+  owns a declaration and its identity, and holds that identity to one
+  declaration across the scope. Nothing is read from comments. A listed
+  declaration its file does not declare is a finding, so the list cannot go
+  stale. `go/marked-single-home` and `dart/marked-single-home` are removed;
+  list each marked declaration under the new type instead.
+
 ### Added
 
 - **`check --shard-capacity C1,...,CN` sizes the shards.** A sharded run on

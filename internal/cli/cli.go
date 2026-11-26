@@ -246,6 +246,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		pins = append(pins, p)
 		return nil
 	})
+	capacity := shardCapacityFlag(fs)
 	cfg, ok := parseAndLoad(fs, args, root, stderr)
 	if !ok {
 		return 2
@@ -302,6 +303,10 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "formwork: --shard-pin places rules on a shard of --shard K/N; without --shard it would change nothing")
 		return 2
 	}
+	if err := checkShardCapacity(*capacity, sharded, *durations != "", *shard, shardN); err != nil {
+		fmt.Fprintln(stderr, "formwork:", err)
+		return 2
+	}
 	// --cost-max and --skip-escapes both narrow by cost and would answer the
 	// same rule two ways; a supplied flag that is silently overridden is the
 	// shape the guards above refuse (#22).
@@ -354,7 +359,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "formwork:", err)
 			return 2
 		}
-		rls = shardRules(rls, prior, pinned, shardK, shardN)
+		rls = shardRules(rls, prior, pinned, *capacity, shardK, shardN)
 		shardInfo = &report.Shard{Index: shardK, Count: shardN, Rules: shardedIDs(rls)}
 	}
 	selectedCount := len(rls)

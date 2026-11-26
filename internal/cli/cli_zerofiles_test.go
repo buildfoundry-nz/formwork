@@ -72,8 +72,7 @@ func TestZeroFilesControlViolationIsStillFound(t *testing.T) {
 // Rows 1-2: a root holding only .formwork/ — a sparse or partial checkout, a
 // stale worktree, or simply the wrong directory that happens to carry config.
 // A scan that reached no source must not read like a clean tree. The two files
-// it does count are the corpus itself, which the walk reads since #24467
-// item 9.
+// it does count are the corpus itself, which the walk reads.
 func TestCheckZeroFilesScannedIsDisclosed(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"), "version: 1\n")
@@ -578,8 +577,8 @@ func TestCheckStagedInsideAGlobStillOnDiskReportsTheChannel(t *testing.T) {
 // counting it manufactures a requested-vs-scanned gap on the most ordinary
 // commit there is — adding a fixture. A signal that fires on every
 // fixture-only commit is one readers learn to skip, which is the failure this
-// whole block is meant to avoid. A rule file is scanned since #24467 item 9,
-// and counted, and scanned: no gap either way.
+// whole block is meant to avoid. A rule file is scanned, and counted, and
+// scanned: no gap either way.
 //
 // DIRECTORY is the operative word, and the count got it wrong until review: the
 // walk consults its skip set only for directories, so a regular file NAMED

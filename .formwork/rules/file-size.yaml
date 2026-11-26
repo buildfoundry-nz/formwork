@@ -1,6 +1,6 @@
 # formwork's own source is vendored into consumers that enforce a hard 750-line
 # cap over *.go (the validating port's scripts/lib/file-size-caps.sh, ported in
-# examples/palletra-port-full/.formwork/rules/file-size-guardrails.yaml). Until
+# examples/sample-corpus-full/.formwork/rules/file-size-guardrails.yaml). Until
 # now that ceiling was enforced only downstream, so an over-cap file was
 # discovered after it was written and merged — twice, each costing a dedicated
 # follow-up PR (#32 splitting lint_test.go, #61 splitting the CLI rule-filter

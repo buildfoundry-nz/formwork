@@ -2,7 +2,7 @@
 // unanchored: it must declare either the funcs it applies to or the side of
 // the relation that constrains.
 //
-// Usage: go run -C tools/formwork-anchor-census . <repo-root>
+// Usage: go run ./cmd/formwork-anchor-census <repo-root>
 //
 // Product enforcement is formwork type:command
 // (.formwork/rules/count-relation-arm-is-anchored.yaml) with origin on this
@@ -16,7 +16,7 @@
 // rule passes its fixture, somebody renames the subject for an unrelated
 // reason, and the invariant is retired with no signal — a gate that is green
 // because it can no longer see its own subject, which is worse than a missing
-// gate because the dashboard says the invariant is held (#10517).
+// gate because the dashboard says the invariant is held.
 //
 // The ENGINE closes that for the anchors it can see. `go/call-order-in-func`
 // and `dart/method-delegates` take their anchors as REQUIRED params, so an arm
@@ -52,7 +52,7 @@
 //
 // First-run census (2026-07-29): NONE. All eleven pre-existing unanchored
 // arms were cured with `require_symbol: left` in the change that installed
-// this ratchet, so #15103 ABOLISHED the known-debt list: every unanchored arm
+// this ratchet, so the ratchet ABOLISHED the known-debt list: every unanchored arm
 // is a finding and there is nowhere to record an exception.
 package main
 
@@ -126,7 +126,7 @@ func paramsHaveAnchor(lines []string, start, end int) bool {
 // exercise detection against bare fixture trees.
 //
 // Arms are walked as yaml.Node mappings so rematerialised keys (id not first)
-// and comment-only "funcs:" still parse the way the engine does (#14091).
+// and comment-only "funcs:" still parse the way the engine does.
 func detect(root string) ([]census.Finding, stats, error) {
 	var st stats
 	var out []census.Finding
@@ -246,10 +246,10 @@ func main() {
 	fmt.Printf("count-relation anchor census: %d rule files, %d arms, %d go/per-func-count-relation arms\n",
 		st.files, st.arms, st.countArms)
 
-	// UNCONDITIONAL since #15103. Every flagged arm is a finding; there is no
+	// UNCONDITIONAL. Every flagged arm is a finding; there is no
 	// known-debt list, and the shared helper has none to offer. The verdict is
 	// written out here because its message names the cure.
-	const why = "declares neither funcs: nor require_symbol: — the relation holds vacuously when both sides count zero, so renaming the constraining symbol retires the invariant silently (#10517)"
+	const why = "declares neither funcs: nor require_symbol: — the relation holds vacuously when both sides count zero, so renaming the constraining symbol retires the invariant silently"
 	for _, fl := range flags {
 		fmt.Printf("NEW %s:%d: arm %q %s\n", fl.File, fl.Line, fl.Arm, why)
 	}
@@ -258,7 +258,7 @@ func main() {
 		for _, fl := range flags {
 			files[fl.File] = true
 		}
-		fmt.Printf("count-relation-arm-is-anchored: %d problem(s); %d flagged arm(s) in %d file(s). Anchor each with require_symbol: (or funcs:) — there is no known-debt list to record it in; #15103 abolished it.\n",
+		fmt.Printf("count-relation-arm-is-anchored: %d problem(s); %d flagged arm(s) in %d file(s). Anchor each with require_symbol: (or funcs:) — there is no known-debt list to record it in.\n",
 			len(flags), len(flags), len(files))
 		os.Exit(1)
 	}

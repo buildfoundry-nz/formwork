@@ -19,7 +19,7 @@ expression** — a string literal, a `+`-chain, or a `fmt.Sprint{,f,ln}` call.
 A query assembled **across two statements** is invisible to it:
 
 ```go
-q := `SELECT ... FROM palletra.projects WHERE id = ANY($1) ...`  // no lock here
+q := `SELECT ... FROM sample.projects WHERE id = ANY($1) ...`  // no lock here
 if forUpdate {
     q += "\n\t\t ORDER BY id FOR UPDATE"                          // lock in a 2nd statement
 }
@@ -33,7 +33,7 @@ rule reports nothing — however unsafe the real query is.
 **A clean run is then read as "no deadlock risk" when it actually means "not
 analyzed".** That is worse than having no rule, because the rule is believed.
 Reproduced against the validating target: the shape above is live at
-`freightworks/services/core-api/internal/deskallocation/commit.go:271-278`
+`appcore/services/core-api/internal/deskallocation/commit.go:271-278`
 (`loadAssignmentStates`, called by `LoadAssignmentStatesForUpdate`). Copy that
 file out and delete its `ORDER BY id` to manufacture a genuine violation, and
 the rule still produces **no finding** — the outcome the new

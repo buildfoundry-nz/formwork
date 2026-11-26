@@ -34,7 +34,7 @@ func evidenceOf(out map[string][]verdict, ruleID string) string {
 	return b.String()
 }
 
-// The #13517 defect, stated as a test: a source lands in the package and the
+// The SOURCE-UNLISTED defect, stated as a test: a source lands in the package and the
 // hand-written list is not updated. It matches no glob, so no other arm in this
 // census can see it.
 func TestSourceList_FiresOnUnlistedSource(t *testing.T) {
@@ -175,7 +175,7 @@ func TestSourceList_NoDeclarationDrawsNoVerdicts(t *testing.T) {
 	}
 }
 
-// Every verdict this census emits gates (#12178): a detected class credited as
+// Every verdict this census emits gates: a detected class credited as
 // coverage while enforcing nothing is the same failure the census exists to
 // catch. A non-gating verdict must be written and reviewed as a deliberate
 // false, never arrived at by leaving a field unset.

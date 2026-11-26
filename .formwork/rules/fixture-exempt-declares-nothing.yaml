@@ -14,11 +14,11 @@
 # those as config, and `make check` walks them all. Measured on this tree by
 # planting the value in a real tracked corpus rule file:
 #
-#   examples/palletra-port-full/.formwork/rules/dart-format-clean.yaml
+#   examples/sample-corpus-full/.formwork/rules/dart-format-clean.yaml
 #       fixture_exempt: "   "
 #   $ make check
 #   formwork: 4/4 rules passed, 0 finding(s)
-#   $ formwork lint -C examples/palletra-port-full
+#   $ formwork lint -C examples/sample-corpus-full
 #   formwork: config: ... rule dart-format-clean: fixture_exempt is "   ",
 #     which declares nothing
 #

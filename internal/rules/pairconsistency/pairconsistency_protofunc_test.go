@@ -49,7 +49,7 @@ message LegacyItem {
 func TestPairConsistencySameFuncProtoGreenwashMessageDoesNotSatisfy(t *testing.T) {
 	src := `syntax = "proto3";
 
-message PricedItem {
+message LineItem {
   // deprecation-anchor: successor of LegacyItem
   string id = 1;
 }
@@ -76,7 +76,7 @@ message LegacyItem {
 
 func TestPairConsistencySameFuncProtoAnchoredMessagePasses(t *testing.T) {
 	src := `message LegacyItem {
-  // deprecation-anchor: superseded by PricedItem
+  // deprecation-anchor: superseded by LineItem
   string id = 1 [deprecated = true];
 }
 `

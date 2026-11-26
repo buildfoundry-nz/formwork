@@ -40,7 +40,7 @@ func sameFuncUnits(path string, content []byte) ([]funcUnit, error) {
 // func literals via go/parser. A parse failure is an engine error so a
 // broken fixture cannot silently pass. Nested func-literals are not separate
 // units — their text is part of the enclosing unit's span, which is what
-// lets a projectreadscope.Memo(ctx, key, func() { …trigger… }) satisfy the
+// lets a scopecache.Memo(ctx, key, func() { …trigger… }) satisfy the
 // unit.
 func goFuncUnits(path string, content []byte) ([]funcUnit, error) {
 	fset := token.NewFileSet()
@@ -115,7 +115,7 @@ func outermostFuncLits(e ast.Expr) []*ast.FuncLit {
 
 // funcDeclName is the short name used in findings: "Name" for a function,
 // "(*T).Name" / "(T).Name" for a method — enough to tell free functions from
-// ProjectScope methods in a pagerecompute-style lockdown.
+// ProjectScope methods in a recompute-style lockdown.
 func funcDeclName(fn *ast.FuncDecl) string {
 	if fn.Recv == nil || len(fn.Recv.List) == 0 {
 		return fn.Name.Name

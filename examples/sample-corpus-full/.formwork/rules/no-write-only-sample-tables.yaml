@@ -1,0 +1,48 @@
+# Ported from Sample scripts/check-no-write-only-sample-tables.sh (#5/#6,
+# sweep-21-closeout). A sample.* table INSERTed in non-test Go but never
+# referenced by a FROM/JOIN anywhere in non-test Go is WRITE-ONLY: rows are
+# persisted that nothing consumes.
+#
+# Ported as a set-relation SUBSET: side A = every table `INSERT INTO
+# sample.<t>` writes; side B = every table a `FROM`/`JOIN sample.<t>`
+# reads (a `DELETE FROM sample.<t>` reader is already covered — it contains
+# `FROM sample.<t>`). strings-only-go blanks Go code and comments so only SQL
+# carried in string literals is scanned.
+#
+# FALSE-POSITIVE FIX. The oracle ALSO counts an upsert self-read — `INSERT INTO
+# sample.<t> … ON CONFLICT … RETURNING …` — as a reader (statement-scoped via
+# sql-statements-go.awk). sample.user_bulletin_views is written+consumed
+# ONLY through that upsert's RETURNING in routes/changelog/changelog.go, never a
+# standalone FROM, so the FROM/JOIN-only port read it as write-only on clean
+# develop. formwork's set-relation matches PER LINE, so it cannot span the
+# multi-line `INSERT … ON CONFLICT … RETURNING` statement to detect the
+# self-read; the one documented upsert-RETURNING file is therefore excluded from
+# scope (the port of that carve-out). Every OTHER file's plain append-only
+# STOREs stay covered, and the fixture's write-only sample.audit_events still
+# fires. (A NEW upsert-RETURNING table in a different file would need the same
+# carve-out or the statement-scoped detection the shell gate has.)
+rules:
+  - id: no-write-only-sample-tables
+    type: set-relation
+    severity: error
+    scope:
+      include:
+        - "appcore/**/*.go"
+      exclude:
+        - "**/*_test.go"
+        - "appcore/services/core-api/routes/changelog/changelog.go"
+    preprocess: strings-only-go
+    params:
+      a:
+        files:
+          - "appcore/**/*.go"
+        pattern: 'INSERT INTO sample\.([a-z_][a-z0-9_]*)'
+        group: 1
+      b:
+        files:
+          - "appcore/**/*.go"
+        pattern: '(?:FROM|JOIN)\s+sample\.([a-z_][a-z0-9_]*)'
+        group: 1
+      relation: subset
+    cure: "Give the INSERTed sample.* table a genuine reader (a SELECT FROM/JOIN that serves its rows, or an upsert ON CONFLICT … RETURNING self-read) — a table written but never read is a write-only fact-table dead-end (#5/#6)."
+    origin: scripts/check-no-write-only-sample-tables.sh

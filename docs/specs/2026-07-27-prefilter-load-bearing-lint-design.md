@@ -190,8 +190,8 @@ Failure lines follow the existing `emit` model:
 
 ```
 [prefilter-load-bearing] FAIL — 2 problem(s)
-  no-invented-material-category-default: prefilter "platform.material_cat" is load-bearing — removing it makes the rule match freightworks/services/core-api/internal/metricregistry/categories.go (a match the prefilter currently suppresses); move the scope to require_present: if intended.
-  annotation-metrics-page-where-uses-constant: prefilter "AnnotationMetricFromTable" is load-bearing — removing it makes the rule match freightworks/services/core-api/routes/wall_heights/wall_height_groups.go; move the scope to require_present: if intended.
+  no-invented-material-category-default: prefilter "platform.material_cat" is load-bearing — removing it makes the rule match appcore/services/core-api/internal/metricregistry/categories.go (a match the prefilter currently suppresses); move the scope to require_present: if intended.
+  annotation-metrics-page-where-uses-constant: prefilter "AnnotationMetricFromTable" is load-bearing — removing it makes the rule match appcore/services/core-api/routes/wall_heights/wall_height_groups.go; move the scope to require_present: if intended.
 ```
 
 One line per (rule, disagreeing path), so a rule load-bearing on several files

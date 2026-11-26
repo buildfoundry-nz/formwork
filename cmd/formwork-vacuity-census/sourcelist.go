@@ -1,12 +1,11 @@
 // sourcelist.go — the class-1 arm that pins a rule's DECLARED source list to
-// the sources it claims to cover (#13517).
+// the sources it claims to cover.
 //
 // THE DEFECT. formwork-rules-not-vacuous enumerates, file by file, the Go
 // sources the vacuity census is built from. Nothing checked that enumeration
-// against the package on disk, and it drifted by three files — scopeglobs.go
-// (#10777), scopeindex.go and wallbudget.go (#12419) — across three separate
+// against the package on disk, and it drifted by three files — scopeglobs.go, scopeindex.go and wallbudget.go — across three separate
 // changes over months, with every gate green throughout. The control is the
-// identical classify.go split that produced relation.go (#12178): same
+// identical classify.go split that produced relation.go: same
 // operation, list updated, no gate between them either way. The rule that
 // proves no other rule has quietly stopped protecting anything was itself
 // maintained by a comment asking the next person to remember, and that comment
@@ -79,7 +78,7 @@ func sourcesIn(dir string, paths []string) []string {
 // shape attachInventoryVerdicts folds.
 //
 // SOURCE-UNLISTED — a non-test .go file directly in the declared directory that
-// no include glob covers. This is the #13517 defect itself. One verdict per
+// no include glob covers. This is the SOURCE-UNLISTED defect itself. One verdict per
 // rule, carrying every missing source as evidence: the cure is one edit to one
 // list, so splitting it per file would report one problem as several.
 //
@@ -89,7 +88,7 @@ func sourcesIn(dir string, paths []string) []string {
 // a path under .formwork/, which scan.Walk drops before any rule runs.
 //
 // Coverage goes through formwork's own matcher, never a re-implementation — the
-// same choice countGlobMatches makes, and for the same reason (#10083: the shell
+// same choice countGlobMatches makes, and for the same reason (the shell
 // cannot expand `**`, and 133 false zeros came of assuming it could). Matching
 // the include globs ALONE is deliberate: the marker is a claim about the include
 // list, so a rule's exclude entries must not be able to retire a source
@@ -106,7 +105,7 @@ func sourceListVerdicts(gm *globMeasure, paths []string) map[string][]verdict {
 					"over a directory holding no non-test Go source — the declaration reads as a guard "+
 					"while gating nothing. Point it at the real package directory, or drop the marker. "+
 					"A path under .formwork/ is always this finding: scan.Walk drops that directory "+
-					"before any rule runs, so nothing there can ever be matched (#13517)", d.dir),
+					"before any rule runs, so nothing there can ever be matched", d.dir),
 				evidence: []string{d.dir},
 			})
 			continue
@@ -147,7 +146,7 @@ func sourceListVerdicts(gm *globMeasure, paths []string) map[string][]verdict {
 				"but %d of its %d non-test Go source(s) are not covered by any entry. A source absent from "+
 				"the list matches no glob, so no other arm here can see it — EMPTY-GLOB and GLOB-UNTRACKED "+
 				"both judge globs that ARE declared. Add the missing entries, and regenerate the rule's "+
-				"live-include registry in the same change (#13517)", dir, len(missing), len(sources)),
+				"live-include registry in the same change", dir, len(missing), len(sources)),
 			evidence: missing,
 		})
 	}

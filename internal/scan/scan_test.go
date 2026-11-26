@@ -36,7 +36,7 @@ func TestWalkReturnsSortedRelativePathsSkippingGitAndRootFixtures(t *testing.T) 
 	for _, f := range fset.Files {
 		got = append(got, f.Path())
 	}
-	// The root's governance is walked (#24467 item 9); its fixtures are not.
+	// The root's governance is walked; its fixtures are not.
 	want := []string{".formwork/formwork.yaml", "README.md", "src/a.go", "src/b.go"}
 	if len(got) != len(want) {
 		t.Fatalf("paths: got %v want %v", got, want)
@@ -152,7 +152,7 @@ func TestWalkSkipsNonSourceSymlinks(t *testing.T) {
 // does enumerate is not excused from that check.
 func TestUnderBuiltinSkip(t *testing.T) {
 	for path, want := range map[string]bool{
-		".formwork/rules/r.yaml":     false, // the governance: walked since #24467 item 9
+		".formwork/rules/r.yaml":     false, // the governance: walked
 		".formwork/fixtures/r/a.go":  true,
 		".git/config":                true,
 		"a/b/.git/hooks/pre-commit":  true,

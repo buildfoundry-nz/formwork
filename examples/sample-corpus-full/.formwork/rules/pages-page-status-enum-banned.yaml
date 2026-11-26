@@ -1,0 +1,21 @@
+rules:
+  - id: pages-page-status-enum-banned
+    type: forbidden-pattern
+    severity: error
+    # Rule 3 of check-page-status-schema-drift.sh — comment lines are excluded, so
+    # blank Go comments first (line numbers preserved).
+    preprocess: decomment-go
+    scope:
+      include:
+        - "appcore/**/*.go"
+      exclude:
+        - "**/vendor/**"
+        - "**/shared/generated/**"
+        - "**/gen/go/**"
+        - "**/internal/proto/**"
+        - "**/*.pb.go"
+    params:
+      # A cast to the retired sample.page_phase enum type.
+      pattern: 'sample\.page_phase\b'
+    cure: "Use sample.intake_status — the page_phase enum was never on this table."
+    origin: scripts/check-page-status-schema-drift.sh

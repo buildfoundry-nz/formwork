@@ -18,7 +18,7 @@ func TestUnderBuiltinSkipDirExcludesTheLeaf(t *testing.T) {
 		underAny bool
 	}{
 		{"src/a.go", false, false},
-		// The governance the walk reads since #24467 item 9, and the fixtures
+		// The governance the walk reads, and the fixtures
 		// it still prunes.
 		{".formwork/rules/r.yaml", false, false},
 		{".formwork/fixtures/r/fire-1/a.go", true, true},

@@ -99,7 +99,7 @@ func TestPairConsistencyRejectsBadWhere(t *testing.T) {
 		t.Fatal("unsupported where accepted")
 	}
 	// Strict decoding is only useful if the error tells the author what IS
-	// accepted — same-file, same-dir, and same-func (#9767) must all be named.
+	// accepted — same-file, same-dir, and same-func must all be named.
 	for _, want := range []string{"same-file", "same-dir", "same-func"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("unknown-where error %q does not name the accepted value %q", err, want)
@@ -132,7 +132,7 @@ func TestPairConsistencyRejectsMissingOrBadParams(t *testing.T) {
 // package, for Go. Some invariants are only expressible that way: the
 // motivating case is a package that satisfies the contract collectively, one
 // file assigning a value and a shared tail in a sibling file answering with it
-// (the derived-dispatch-claims-ledger shape in examples/palletra-port-full,
+// (the derived-dispatch-claims-ledger shape in the full example corpus,
 // where the auto-run engine enqueues in one file and claims in another). A
 // same-file rule flags the assigning file and so condemns a package that is
 // correct; papering over that with a scope exclude would be a carve-out, not a
@@ -303,16 +303,16 @@ func TestPairConsistencyWholeTreeInvariantOnlyInSameDirMode(t *testing.T) {
 
 // --- where: same-func ------------------------------------------------------
 //
-// #9767: the retired shell gates walked function bodies with a brace-depth
+// The retired shell gates walked function bodies with a brace-depth
 // accumulator that closed on the first zero-depth line. A multi-line signature
 // has no `{` yet, so depth stayed 0 and evaluate() saw only the signature —
 // the body (and every invariant the gate claimed to guard) was invisible.
 // same-func uses go/parser function spans so multi-line signatures, brace-
 // bearing parameter types, and nested Memo closures are in scope by construction.
 
-const sameFuncParams = "trigger: 'projectMetricUnionSQL'\nrequires: 'projectreadscope\\.Memo\\('\nwhere: same-func\n"
+const sameFuncParams = "trigger: 'projectMetricUnionSQL'\nrequires: 'scopecache\\.Memo\\('\nwhere: same-func\n"
 
-// multiLineBare is the #9767 reproduction shape: multi-line signature, trigger
+// multiLineBare is the reproduction shape: multi-line signature, trigger
 // + Query in the body, no Memo. same-file would also catch a file that ONLY
 // contains this, but same-func is what keeps it caught when a sibling func
 // already has Memo (see greenwash below).
@@ -355,7 +355,7 @@ func TestPairConsistencySameFuncMultiLineSignatureFires(t *testing.T) {
 func TestPairConsistencySameFuncBraceBearingParamFires(t *testing.T) {
 	src := `package p
 
-func loadPageMetricsForCodesAndPages(
+func loadMetricsForCodesAndKeys(
 	ctx interface{},
 	opts struct{ A int },
 	tx interface{},
@@ -373,7 +373,7 @@ func loadPageMetricsForCodesAndPages(
 	if len(ms) != 1 {
 		t.Fatalf("brace-bearing param type must not swallow the body; got %+v", ms)
 	}
-	if !strings.Contains(ms[0].Message, "loadPageMetricsForCodesAndPages") {
+	if !strings.Contains(ms[0].Message, "loadMetricsForCodesAndKeys") {
 		t.Fatalf("message must name the offending func, got %q", ms[0].Message)
 	}
 }
@@ -385,7 +385,7 @@ func TestPairConsistencySameFuncGreenwashSiblingDoesNotSatisfy(t *testing.T) {
 	src := `package p
 
 func good(ctx, tx interface{}) error {
-	return projectreadscope.Memo(ctx, "k", func() error {
+	return scopecache.Memo(ctx, "k", func() error {
 		_ = projectMetricUnionSQL
 		tx.Query()
 		return nil
@@ -425,7 +425,7 @@ func load(
 	ctx interface{},
 	tx interface{},
 ) error {
-	return projectreadscope.Memo(ctx, "k", func() error {
+	return scopecache.Memo(ctx, "k", func() error {
 		_ = projectMetricUnionSQL
 		tx.Query()
 		return nil
@@ -534,7 +534,7 @@ var loadAnnotationMetrics = func(ctx interface{}, tx interface{}, projectID stri
 }
 
 var loadMemoized = func(ctx interface{}, tx interface{}, projectID string) error {
-	return projectreadscope.Memo(ctx, "k", func() error {
+	return scopecache.Memo(ctx, "k", func() error {
 		_, err := tx.Query(ctx, projectMetricUnionSQL, projectID)
 		return err
 	})

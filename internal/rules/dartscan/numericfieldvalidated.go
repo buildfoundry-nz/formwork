@@ -20,7 +20,7 @@ const (
 	// defaultValidatorSource is the shape of a NAMED predicate: an identifier
 	// path (`rule.validate`, `ServerValidationRules.validateOptionalFloorArea`,
 	// a bare `_gstRule`, a null-aware `field.validator?.validate`), optionally
-	// called to build one (`framingInputRule(input)`).
+	// called to build one (`sizingInputRule(input)`).
 	//
 	// A WHITELIST, not a blacklist of inert spellings. Naming the dodges only
 	// ever names the ones already thought of: `validator: null` and
@@ -44,7 +44,7 @@ type numericFieldValidatedParams struct {
 //
 // The invariant is a structural one over the argument list, not a lexical one
 // over the file: "a numeric text input routes through a validator". The
-// lexical version of this shape does not converge (#8677). `keyboardType` and
+// lexical version of this shape does not converge. `keyboardType` and
 // `validator` sit in the SAME argument list, arbitrarily far apart in the
 // source, interleaved with nested invocations that carry argument names of
 // their own — `TextInputType.numberWithOptions(decimal: true)` is itself an
@@ -65,7 +65,7 @@ type numericFieldValidatedParams struct {
 // is deliberate: `TextField` has no `validator` parameter at all, so the cure
 // for a numeric one is to become a `TextFormField`, and a rule keyed to a
 // closed set of widget names would be silent the moment a fifth site wrapped
-// its field in a new widget — the regrowth #9925 exists to prevent.
+// its field in a new widget — the regrowth this rule exists to prevent.
 type numericFieldValidated struct {
 	numericValue    *regexp.Regexp
 	keyboardArg     string

@@ -45,18 +45,18 @@ func TestParseGoRunShapeFingerprintsBuildArgsWithDashC(t *testing.T) {
 
 func TestParseGoRunShapeDashCPackageNotWholeModule(t *testing.T) {
 	shape, ok := parseGoRunShape([]string{
-		"go", "-C", "api-factory", "run", "./services/core-api/cmd/detailcatalogseed",
+		"go", "-C", "svc", "run", "./services/api/cmd/catalogseed",
 	})
 	if !ok {
 		t.Fatal("expected go-run shape")
 	}
-	want := "api-factory/services/core-api/cmd/detailcatalogseed"
+	want := "svc/services/api/cmd/catalogseed"
 	found := false
 	for _, p := range shape.treePaths {
 		if p == want {
 			found = true
 		}
-		if p == "api-factory" {
+		if p == "svc" {
 			t.Fatalf("treePaths must not hash the entire -C module root; got %v", shape.treePaths)
 		}
 	}

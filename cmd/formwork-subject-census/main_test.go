@@ -1,4 +1,4 @@
-// RED tests for #15714 — a call anchor that can no longer see its subject.
+// RED tests for a call anchor that can no longer see its subject.
 //
 // Every case here is a defect a prototype of this detector actually produced
 // against the live corpus, not a hypothetical. The three false-positive shapes
@@ -25,7 +25,7 @@ func writeFile(t *testing.T, root, rel, body string) {
 }
 
 // A call split across lines is the ORDINARY spelling of a call with more than
-// two arguments, and #15784 found four live violations invisible to their own
+// two arguments, and four live violations were found invisible to their own
 // rules for exactly this reason. go/ast sees the call whole; a line scan does
 // not, and would report this live subject as dead.
 func TestCallSelectorsSeesLineWrappedCall(t *testing.T) {
@@ -33,7 +33,7 @@ func TestCallSelectorsSeesLineWrappedCall(t *testing.T) {
 	writeFile(t, root, "pkg/a.go", `package pkg
 
 func caller() {
-	extractionruns.InsertOrAdoptActive(
+	jobruns.InsertOrAdoptActive(
 		ctx,
 		tx,
 		projectID,
@@ -44,7 +44,7 @@ func caller() {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !sel["extractionruns.InsertOrAdoptActive"] {
+	if !sel["jobruns.InsertOrAdoptActive"] {
 		t.Fatalf("line-wrapped call not seen; selectors=%v", sel)
 	}
 }
@@ -130,7 +130,7 @@ func TestDetectFlagsBlindAnchor(t *testing.T) {
 func caller() { metriclock.LockSQLRenamed() }
 `)
 	writeFile(t, root, ".formwork/rules/r.yaml", `rules:
-- id: page-metrics-lock-sql-confined
+- id: metrics-lock-sql-confined
   type: go/call-confined-to-func-name
   scope:
     include:
@@ -146,7 +146,7 @@ func caller() { metriclock.LockSQLRenamed() }
 	if len(flags) != 1 {
 		t.Fatalf("want 1 blind anchor, got %d: %+v", len(flags), flags)
 	}
-	if got := flags[0]; got.File != ".formwork/rules/r.yaml" || got.Arm != "page-metrics-lock-sql-confined" {
+	if got := flags[0]; got.File != ".formwork/rules/r.yaml" || got.Arm != "metrics-lock-sql-confined" {
 		t.Errorf("flag = %+v", got)
 	}
 }
@@ -157,13 +157,13 @@ func TestDetectDoesNotFlagBanIdiom(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "api/a.go", "package api\n\nfunc caller() { other() }\n")
 	writeFile(t, root, ".formwork/rules/r.yaml", `rules:
-- id: count-wall-height-helper-callers-confined
+- id: count-widget-helper-callers-confined
   type: go/call-confined-to-func-name
   scope:
     include:
     - api/**/*.go
   params:
-    symbol: '(^|\.)countWallHeightMetrics$'
+    symbol: '(^|\.)countWidgetMetrics$'
     allowed_func: '^$'
 `)
 	flags, st, err := detect(root)
@@ -212,7 +212,7 @@ func TestDetectIgnoresEngineProbedTypes(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "api/a.go", "package api\n\nfunc caller() { other() }\n")
 	writeFile(t, root, ".formwork/rules/r.yaml", `rules:
-- id: material-membership-prune-after-persist
+- id: membership-prune-after-persist
   type: go/call-order-in-func
   scope:
     include:

@@ -28,10 +28,10 @@ import "testing"
 // The reported shape, verbatim from the validating port's report: the required column
 // is named only in a comment in the gap between the table and the column list.
 func TestCommentBeforeColumnListDoesNotSatisfyRequire(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.bom_line_items'`+"\n"+
+	c := mustChecker(t, `table: 'app\.order_lines'`+"\n"+
 		`require:`+"\n"+
-		`  - 'INSERT\s+INTO\s+palletra\.bom_line_items[^)]*\bline_class\b'`+"\n")
-	body := "INSERT INTO palletra.bom_line_items -- line_class is set by a follow-up UPDATE\n" +
+		`  - 'INSERT\s+INTO\s+app\.order_lines[^)]*\bline_class\b'`+"\n")
+	body := "INSERT INTO app.order_lines -- line_class is set by a follow-up UPDATE\n" +
 		"  (project_id, bom_id, ordinal)\n" +
 		"VALUES (1, 2, 3);\n"
 	ms := check(t, c, file("q.sql", body))
@@ -43,10 +43,10 @@ func TestCommentBeforeColumnListDoesNotSatisfyRequire(t *testing.T) {
 // The half no anchor reaches: the comment sits INSIDE the column list, so even
 // the tightened `[^(;]*\([^)]*` anchor finds the token where it wants one.
 func TestCommentInsideColumnListDoesNotSatisfyRequire(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.bom_line_items'`+"\n"+
+	c := mustChecker(t, `table: 'app\.order_lines'`+"\n"+
 		`require:`+"\n"+
-		`  - 'INSERT\s+INTO\s+palletra\.bom_line_items[^(;]*\([^)]*\bline_class\b'`+"\n")
-	body := "INSERT INTO palletra.bom_line_items\n" +
+		`  - 'INSERT\s+INTO\s+app\.order_lines[^(;]*\([^)]*\bline_class\b'`+"\n")
+	body := "INSERT INTO app.order_lines\n" +
 		"  (project_id, bom_id /* line_class deliberately omitted */)\n" +
 		"VALUES (1, 2);\n"
 	ms := check(t, c, file("q.sql", body))
@@ -61,12 +61,12 @@ func TestCommentInsideColumnListDoesNotSatisfyRequire(t *testing.T) {
 func TestCommentInGoLiteralDoesNotSatisfyRequire(t *testing.T) {
 	src := "package db\n" +
 		"\n" +
-		"const insertLine = `INSERT INTO palletra.bom_line_items -- line_class set later\n" +
+		"const insertLine = `INSERT INTO app.order_lines -- line_class set later\n" +
 		"\t(project_id, bom_id)\n" +
 		"VALUES ($1, $2)`\n"
-	c := mustChecker(t, `table: 'palletra\.bom_line_items'`+"\n"+
+	c := mustChecker(t, `table: 'app\.order_lines'`+"\n"+
 		`require:`+"\n"+
-		`  - 'INSERT\s+INTO\s+palletra\.bom_line_items[^)]*\bline_class\b'`+"\n")
+		`  - 'INSERT\s+INTO\s+app\.order_lines[^)]*\bline_class\b'`+"\n")
 	ms := check(t, c, file("db.go", src))
 	if len(ms) != 1 {
 		t.Fatalf("a comment inside a Go SQL literal must not satisfy the requirement: %+v", ms)
@@ -139,9 +139,9 @@ func TestCommentStrippingPreservesFindingLine(t *testing.T) {
 // test passes whether or not the string is lexed correctly, which is how a
 // control quietly stops controlling anything.
 func TestCommentMarkerInsideStringLiteralIsNotAComment(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+`require:`+"\n"+`  - '\bline_class\b'`+"\n")
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+`require:`+"\n"+`  - '\bline_class\b'`+"\n")
 	ms := check(t, c, file("q.sql",
-		"INSERT INTO palletra.t (note) SELECT '-- not a comment' FROM src WHERE line_class IS NOT NULL;\n"))
+		"INSERT INTO app.t (note) SELECT '-- not a comment' FROM src WHERE line_class IS NOT NULL;\n"))
 	if len(ms) != 0 {
 		t.Fatalf("a '--' inside a string literal must not blank the rest of the line: %+v", ms)
 	}
@@ -149,9 +149,9 @@ func TestCommentMarkerInsideStringLiteralIsNotAComment(t *testing.T) {
 
 // Same trap through a dollar-quoted body, where there are no escapes at all.
 func TestCommentMarkerInsideDollarQuotedBodyIsNotAComment(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+`require:`+"\n"+`  - '\bline_class\b'`+"\n")
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+`require:`+"\n"+`  - '\bline_class\b'`+"\n")
 	ms := check(t, c, file("q.sql",
-		"INSERT INTO palletra.t (note) SELECT $fn$-- not a comment$fn$ FROM src WHERE line_class IS NOT NULL;\n"))
+		"INSERT INTO app.t (note) SELECT $fn$-- not a comment$fn$ FROM src WHERE line_class IS NOT NULL;\n"))
 	if len(ms) != 0 {
 		t.Fatalf("a '--' inside a dollar-quoted body must not blank the rest of the line: %+v", ms)
 	}
@@ -163,8 +163,8 @@ func TestCommentMarkerInsideDollarQuotedBodyIsNotAComment(t *testing.T) {
 // both directions. The comment is inside the statement, before the `;`, because
 // a comment in a segment of its own is dropped for a different reason.
 func TestPositionalParameterDoesNotOpenADollarQuote(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+`require:`+"\n"+`  - '\bline_class\b'`+"\n")
-	body := "INSERT INTO palletra.t (project_id) SELECT $1 -- line_class is set by a follow-up UPDATE\n" +
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+`require:`+"\n"+`  - '\bline_class\b'`+"\n")
+	body := "INSERT INTO app.t (project_id) SELECT $1 -- line_class is set by a follow-up UPDATE\n" +
 		"  FROM src;\n"
 	ms := check(t, c, file("q.sql", body))
 	if len(ms) != 1 {
@@ -175,9 +175,9 @@ func TestPositionalParameterDoesNotOpenADollarQuote(t *testing.T) {
 // PostgreSQL block comments NEST. A scanner that stops at the first `*/` treats
 // `line_class */` as live code and the requirement passes.
 func TestNestedBlockCommentIsFullyStripped(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+`require:`+"\n"+`  - '\bline_class\b'`+"\n")
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+`require:`+"\n"+`  - '\bline_class\b'`+"\n")
 	ms := check(t, c, file("q.sql",
-		"INSERT INTO palletra.t (project_id) /* outer /* inner */ line_class */ VALUES (1);\n"))
+		"INSERT INTO app.t (project_id) /* outer /* inner */ line_class */ VALUES (1);\n"))
 	if len(ms) != 1 {
 		t.Fatalf("a nested block comment must be stripped whole: %+v", ms)
 	}

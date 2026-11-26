@@ -1,4 +1,4 @@
-// passvacuous.go — PASS-FIXTURE-VACUOUS (#15986).
+// passvacuous.go — PASS-FIXTURE-VACUOUS.
 //
 // The census asks whether a FIRE fixture still trips its rule, and whether a
 // PASS fixture has started tripping it. It never asked the third question:
@@ -21,7 +21,7 @@ import (
 )
 
 // passVacuousVerdict answers, of a clean fixture that did NOT fire, whether it
-// could ever have fired (#15986).
+// could ever have fired.
 //
 // The census already asks the fire half of this — fireInScope is counted inside
 // `if isFire` — and asked nothing of the pass half, so a clean fixture with no
@@ -48,7 +48,7 @@ import (
 // is to hold an include glob's suffix in place by being an out-of-scope file
 // that legitimately lacks the pattern. Re-implementing the matcher here is also
 // the exact error that produced the false "133 of 200 rules match zero files"
-// result this census exists to correct (#10083).
+// result this census exists to correct.
 //
 // HEAVY RULES ARE OUT OF CLASS BY REASON, not by exception. A type:command or
 // git-diff checker runs its tool at the tree root and never consults scope for

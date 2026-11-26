@@ -84,9 +84,9 @@ func compileLine(pattern, syntax string) (lineMatcher, error) {
 // An explicit `n >= 2` is DELIBERATELY out of scope, and the distinction is the
 // whole correctness of this check. `exists` is a default — the author chose no
 // number, so the floor of one is an accident of the rule type. An explicit n is
-// a stated cardinality: tqs-package-consumers-tqs-core is `at-least 2` over 42
-// matching pubspec lines because the invariant IS "a tqs_* package earns its
-// prefix at >= 2 consumers" (#6858), and its cure says exactly that. Demanding
+// a stated cardinality: a shared-package consumers rule is `at-least 2` over 42
+// matching pubspec lines because the invariant IS "an app_* package earns its
+// prefix at >= 2 consumers", and its cure says exactly that. Demanding
 // n == 42 there would fail the build every time a package legitimately dropped
 // a dependency — a rule with that false-positive rate gets disabled, which is
 // worse than the vacuity it replaced. Flagging a stated design threshold as if

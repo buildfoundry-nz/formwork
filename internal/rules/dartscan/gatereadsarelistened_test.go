@@ -22,7 +22,7 @@ import (
 // through a seam adoption), and both times the omission was invisible: the
 // getter and the merge list are far apart, the read is one indirection deep
 // through a getter, and the code carried a comment asserting the gate
-// reflected live input. That is the #8677 shape — an "every X routes through
+// reflected live input. That is the shape of an "every X routes through
 // Y" invariant over source that no lexical pattern converges on.
 func newGateReadsChecker(t *testing.T, params string) rules.Checker {
 	t.Helper()
@@ -61,14 +61,14 @@ const panelCardOmitted = `
 class _S extends State<W> {
   bool get _complete =>
       _hasProfile &&
-      railSpacingRule.isValid(_railSpacing.text) &&
-      braceSpacingRule.isValid(_brace.text) &&
+      widthRule.isValid(_width.text) &&
+      depthRule.isValid(_depth.text) &&
       heightRule.isValid(_height.text);
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge(<Listenable>[_railSpacing, _brace]),
+      animation: Listenable.merge(<Listenable>[_width, _depth]),
       builder: (BuildContext context, _) => AsyncFilledButton(
         onPressed: _complete ? _save : null,
         child: const Text('Save'),
@@ -95,14 +95,14 @@ func TestGateReadsAreListened_CompleteMergeListPasses(t *testing.T) {
 class _S extends State<W> {
   bool get _complete =>
       _hasProfile &&
-      railSpacingRule.isValid(_railSpacing.text) &&
-      braceSpacingRule.isValid(_brace.text) &&
+      widthRule.isValid(_width.text) &&
+      depthRule.isValid(_depth.text) &&
       heightRule.isValid(_height.text);
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge(<Listenable>[_railSpacing, _brace, _height]),
+      animation: Listenable.merge(<Listenable>[_width, _depth, _height]),
       builder: (BuildContext context, _) => AsyncFilledButton(
         onPressed: _complete ? _save : null,
         child: const Text('Save'),

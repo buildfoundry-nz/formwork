@@ -1,6 +1,6 @@
 # generic — portable hygiene pack
 
-Rules that apply to any Go / Dart / SQL repo. They are the ones the TakeoffQS
+Rules that apply to any Go / Dart / SQL repo. They are the ones a downstream
 gate survey classified as **generic**: weak types, no `skip:` in tests, no
 TODO/FIXME/HACK markers, immutable migrations, no new JS/TS, and the rest of
 the portable set.
@@ -44,5 +44,5 @@ Not in this pack: `type: command` detectors that `go run` a product-local
 script, and CI-wiring pins that name a specific workflow job. Those stay in
 the adopting repo.
 
-Product-domain rules (the Palletra / TakeoffQS dump) are `examples/palletra-port-*`,
+Product-domain rules (the scale-corpus dump) are `examples/sample-corpus-*`,
 not this pack.

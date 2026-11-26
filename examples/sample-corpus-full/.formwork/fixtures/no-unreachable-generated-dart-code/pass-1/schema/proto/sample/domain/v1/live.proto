@@ -1,0 +1,4 @@
+syntax = "proto3";
+package sample.domain.v1;
+import "sample/domain/v1/dep.proto";
+message Live { Dep d = 1; }

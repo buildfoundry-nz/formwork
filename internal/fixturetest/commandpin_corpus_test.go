@@ -62,7 +62,7 @@ import (
 
 // pinnedCorpus is the corpus this runs over: the ported tree where the command
 // escape hatch is actually used. examples/quickstart carries no command rule.
-const pinnedCorpus = "examples/palletra-port-full"
+const pinnedCorpus = "examples/sample-corpus-full"
 
 // corpusRoot walks up to the directory holding go.mod and joins the corpus.
 // Failing closed rather than guessing: a proof that cannot find the tree it is

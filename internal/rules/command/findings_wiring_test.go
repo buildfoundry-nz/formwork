@@ -39,7 +39,7 @@ func findingsAt(t *testing.T, params, root string) []rules.Match {
 
 // A rule that DECLARES the contract gets located findings, so the journal
 // recording them can say which file each was about — the whole point of
-// TakeoffQS #18214.
+// the contract.
 func TestCommandOutput_DeclaredContractYieldsLocatedFindings(t *testing.T) {
 	root := rootWithFile(t, "pkg/thing.go")
 	got := findingsAt(t, `cmd: [sh, -c, "echo 'pkg/thing.go:12: holds a frozen symbol'; exit 1"]

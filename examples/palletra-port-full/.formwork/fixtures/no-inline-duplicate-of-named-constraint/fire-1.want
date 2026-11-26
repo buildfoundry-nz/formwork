@@ -1,1 +1,0 @@
-- FAIL freightworks/services/core-api/internal/detectqueue/dispatch.go:8: re-inlines named constraint `JobMessage` from the same package

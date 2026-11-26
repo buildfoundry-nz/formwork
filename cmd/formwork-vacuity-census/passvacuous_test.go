@@ -6,7 +6,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// #15986 (epic #14875) — the census asks of a FIRE fixture whether it still
+// PASS-FIXTURE-VACUOUS — the census asks of a FIRE fixture whether it still
 // trips its rule, and of a PASS fixture whether it has started tripping it. It
 // never asks of a PASS fixture whether it COULD have tripped it.
 //
@@ -26,7 +26,7 @@ import (
 // being hand-coded — a ban is violated by a match, a required-pattern by the
 // ABSENCE of one, and engine.Run already knows which is which. Re-implementing
 // the matcher here is the exact error that produced the false "133 of 200 rules
-// match zero files" result the census exists to correct (#10083).
+// match zero files" result the census exists to correct.
 // ---------------------------------------------------------------------------
 
 // The class. A ban's clean fixture sits at an excluded path AND carries no
@@ -88,8 +88,8 @@ func TestPassFixtureParkingARealViolationAtAnExcludedPathIsNotVacuous(t *testing
 // POLARITY, and the reason a re-implemented matcher gets this wrong. For a
 // required-pattern the violation is the pattern's ABSENCE, so an out-of-scope
 // file that legitimately LACKS it is the meaningful scope test — it is what
-// holds the include glob's suffix in place against scope creep. This is
-// desk-card-composes-frame/pass-2's shape, and the naive "does the fixture
+// holds the include glob's suffix in place against scope creep. This is a
+// measured pass fixture's shape, and the naive "does the fixture
 // contain the pattern" probe accused it.
 func TestOutOfScopeFileLackingARequiredPatternIsNotVacuous(t *testing.T) {
 	root := writeCorpus(t, `rules:

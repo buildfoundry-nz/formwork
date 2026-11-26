@@ -260,7 +260,7 @@ not affect `formwork scope`.
   origin: scripts/check-single-pool-constructor.sh   # optional traceability
   tags: [go, db]                       # lane/report selectors
   scope:
-    include: ["freightworks/**/*.go"]
+    include: ["appcore/**/*.go"]
     exclude: [go-tests]                # named presets: go-tests, dart-tests,
                                        # generated, vendor; plus raw globs
     min_files: 0                       # optional floor: fail if the scope
@@ -597,8 +597,8 @@ formwork check [--lane <name>] [--staged | --range A..B] [--rules id,…]
    unattributed runtime work such as background GC. Both are observability and
    never reach a verdict. File-set modes collect neither wall nor CPU timings.
 
-   **Across machines, `check --shard K/N` runs one of N shards** (TakeoffQS
-   #25657). One process can only spread a corpus over one machine's cores, and
+   **Across machines, `check --shard K/N` runs one of N shards** (downstream
+   issue #25657). One process can only spread a corpus over one machine's cores, and
    a downstream whole-corpus sweep measured 3–5x per-rule wall inflation from
    its own rules contending there. The shard is chosen after `--lane` and
    before `--skip-escapes`/`--cost-max`, over rule IDS (rules sharing an id
@@ -611,7 +611,7 @@ formwork check [--lane <name>] [--staged | --range A..B] [--rules id,…]
    report names the shard and its ids (`scan.shard`), because a shard's
    report is a part: the ids are what lets a merge of the N parts prove each
    rule ran exactly once. An empty shard is exit 2, like any empty selection.
-   `--shard-pin LANE=K` (TakeoffQS #26017) places every selected rule a lane
+   `--shard-pin LANE=K` (downstream issue #26017) places every selected rule a lane
    selects on shard K before the rest are balanced around that load, so the
    rules that need a toolchain run in the one job that installs it. The pins
    join the partition's inputs; a pin that places nothing, names a shard past
@@ -847,7 +847,7 @@ The validating target's synth-test discipline, built into the engine:
   defeated; a total ban and a `funcs`-filter assertion are exempt. Escape rules
   (any cost class other than fast) are `not-judged`: shown, never failed.
   **Fail by default**, decided by the maintainer: a gate that only warns is not
-  read, and the downstream consumer (TakeoffQS) already gates both codes with no
+  read, and a downstream consumer already gates both codes with no
   baseline. A probe that cannot run is exit 2. Kept quirk: a
   `guard-precedes-call` rule with `funcs` runs a second probe with the filter
   defeated. There is no excuse for a vacuous pass fixture: the config has no
@@ -1225,7 +1225,7 @@ skip:
 ```
 
 This exists because the example port corpora are fixture material — a handful of
-source files each, and in `examples/palletra-port-full` none at all — so checks
+source files each, and in `examples/sample-corpus-full` none at all — so checks
 that ask a question about a whole repository report hundreds of "problems" that
 are properties of the corpus rather than of any rule. Over a tree with no source
 files that is not most of the checkable rules but every one of them: the check
@@ -1381,7 +1381,7 @@ all-clear.
   are unchanged, because an empty scope is legitimate: fixture roots are small,
   and a rule scoped to a path a repo has not created yet is not a defect. That
   an unconditional failure is unaffordable is measurable —
-  `examples/palletra-port-full` carries 704 rules over a tree with **no source
+  `examples/sample-corpus-full` carries 704 rules over a tree with **no source
   files at all**, so all 570 of its non-external-tool rules are vacuous by
   construction — and by construction is the whole of it rather than most of it:
   with no files there is nothing for a scope to discriminate between, so the
@@ -1581,7 +1581,7 @@ mutation-checked against the fix it guards (see `AGENTS.md`):
   path exists, and it has been cited as real before, so treat any reference to
   it as a design name): for each ported rule, run the original
   shell script and the formwork rule against the same fixture trees
-  (adapted from `freightworks/internal/gatetests/`) and diff verdicts.
+  (adapted from `appcore/internal/gatetests/`) and diff verdicts.
   "Full parity" is measured, not asserted.
 
 ## 13. Phased delivery

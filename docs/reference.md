@@ -789,30 +789,33 @@ tallies.
     require_used: right
 ```
 
-#### `go/marked-single-home`
-Holds every top-level declaration whose doc comment carries `marker` to one
-declaration across the scope. The marker declares the home; any second func,
-method, type, const or var of the same identity in scope is a finding, marked
-or not. Identity is the kind and name, plus the receiver type for a method, so
-a var named like a marked func is a different declaration. A grouped `const` or
-`var` block's own doc covers none of its specs; mark the spec. A marker that
-documents no top-level declaration is itself a finding. Unmarked duplicates are
-not judged.
-
-It replaces a `pattern-count` rule per name (`'^func offerFor\('`, `n: 1`): a
-new home is one comment at its declaration.
+#### `go/declared-once`
+Holds each listed top-level declaration to one declaration of its identity
+across the scope. Each entry names the file that owns the declaration and its
+identity; any second func, method, type, const or var of that identity in scope
+is a finding that names the owner. Identity is the kind and name, plus the
+receiver type for a method, so a var named like a listed func is a different
+declaration. A listed declaration its file does not declare is itself a
+finding, so the list cannot go stale. Duplicates of unlisted names are not
+judged.
 
 | param | meaning |
 |---|---|
-| `marker` | required: the literal a declaration's doc comment carries |
+| `declarations` | required: the declarations held to one each |
+| `path` | per declaration: the repository path of the file that owns it |
+| `decl` | per declaration: its identity, `func Name`, `method Recv.Name`, `type Name`, `const Name` or `var Name` |
 
 ```yaml
-- id: go-single-homes
-  type: go/marked-single-home
+- id: go-declared-once
+  type: go/declared-once
   scope:
     include: ["internal/**/*.go"]
   params:
-    marker: 'formwork:single-home'
+    declarations:
+      - path: internal/render/render.go
+        decl: func render
+      - path: internal/client/client.go
+        decl: method Client.pump
 ```
 
 ### Go type analyzers (`internal/rules/gotypes`)
@@ -867,28 +870,30 @@ of the body.
     must_call: 'super\.dispose\('
 ```
 
-#### `dart/marked-single-home`
-The Dart form of `go/marked-single-home`. A top-level declaration whose
-`//` or `///` comment run, read upward past any annotations, carries `marker`
-is the one declaration of its identity across the scope. Any second
-declaration of it, marked or not, is a finding that names the home. A
-top-level declaration is a column-0 line outside every string and block
-comment, so members are never counted. Identity is the kind (type,
-function, getter, setter, variable) and the name; a library-private name
-(`_Body`) is also keyed on its file. A marker that reaches no top-level
-declaration is itself a finding.
+#### `dart/declared-once`
+The Dart form of `go/declared-once`. Each listed top-level declaration is the
+one declaration of its identity across the scope; any second declaration of it
+is a finding that names the owner, and a listed declaration its file does not
+declare is a finding too. A top-level declaration is a column-0 line outside
+every string and block comment, so members are never counted. Identity is the
+kind (type, function, getter, setter, variable) and the name; a
+library-private name (`_Body`) is also keyed on its file.
 
 | param | meaning |
 |---|---|
-| `marker` | required: the literal the declaration's comment run carries |
+| `declarations` | required: the declarations held to one each |
+| `path` | per declaration: the repository path of the file that owns it |
+| `decl` | per declaration: its identity, `type Name`, `function Name`, `getter Name`, `setter Name` or `variable Name` |
 
 ```yaml
-- id: dart-single-homes
-  type: dart/marked-single-home
+- id: dart-declared-once
+  type: dart/declared-once
   scope:
     include: ["lib/**/*.dart"]
   params:
-    marker: 'formwork:single-home'
+    declarations:
+      - path: lib/widgets/app_card.dart
+        decl: type AppCard
 ```
 
 #### `dart/ref-after-await`

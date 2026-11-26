@@ -1,4 +1,4 @@
-# Cross-arm locality (the api-factory-cmd-lifecycle-class shape): one arm is
+# Cross-arm locality (the cmd-lifecycle-class shape): one arm is
 # existential with an honest singular cure; a SECOND arm, more than ten lines
 # below, carries the universal word. A whole-file co-occurrence would fire
 # here; the windowed one must not, because no single ARM pairs the two.
@@ -7,7 +7,7 @@ rules:
   type: required-pattern
   severity: error
   scope:
-    include: [api-factory/cmd/**/main.go]
+    include: [svc/cmd/**/main.go]
   params:
     pattern: func main\(
     mode: exists
@@ -18,7 +18,7 @@ rules:
   type: required-pattern
   severity: error
   scope:
-    include: [api-factory/cmd/**/main.go]
+    include: [svc/cmd/**/main.go]
   params:
     pattern: ReadmeRow\(
     mode: every-file

@@ -258,7 +258,7 @@ func (s ScanSummary) headline() string {
 // detailListCap bounds how many rules each per-rule list — vacuous, then
 // not-run — names in the LINE-ORIENTED renderers. A mid-port corpus
 // legitimately has hundreds of vacuous rules — 572 of the 707 rules in
-// examples/palletra-port-full — and an unbounded list puts a wall of text
+// the full example corpus — and an unbounded list puts a wall of text
 // between the findings and the verdict line, burying both. JSON is uncapped:
 // a machine consumer has no readability problem, and handing it a silent prefix
 // of the list it asked for is exactly the quiet answer this type exists to

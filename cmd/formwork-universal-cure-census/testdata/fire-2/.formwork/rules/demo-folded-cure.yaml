@@ -7,7 +7,7 @@ rules:
   type: required-pattern
   severity: error
   scope:
-    include: [api-factory/**/*.go]
+    include: [svc/**/*.go]
   params:
     pattern: RegisterRoute\(
     mode: exists

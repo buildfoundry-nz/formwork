@@ -1,4 +1,4 @@
-# Comment-noise locality (the entitlements-audit-10001 shape): the arm is an
+# Comment-noise locality (the audit-each-entitlement shape): the arm is an
 # honest existential with a singular cure, but a COMMENT directly below it
 # says "each". A proximity-window detector fires here; the cure-block
 # detector must not, because the arm's cure never states the obligation.
@@ -7,7 +7,7 @@ rules:
   type: required-pattern
   severity: error
   scope:
-    include: [api-factory/**/*.go]
+    include: [svc/**/*.go]
   params:
     pattern: 'LimitReader|MaxBytesReader'
     mode: exists
@@ -21,7 +21,7 @@ rules:
   type: forbidden-pattern
   severity: error
   scope:
-    include: [api-factory/**/*.go]
+    include: [svc/**/*.go]
   params:
     pattern: 'SELECT SUM\(balance\)'
   cure: Consume must not recompute the balance with a raw SUM.

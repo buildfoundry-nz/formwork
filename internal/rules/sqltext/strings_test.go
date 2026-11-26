@@ -21,10 +21,10 @@ import (
 // The reported shape, verbatim from the issue (table name genericized): the
 // required token is named in the code AFTER a literal containing a ';'.
 func TestSemicolonInSingleQuotedLiteralDoesNotSplitStatement(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+
 		`require:`+"\n"+
 		`  - '\bline_class\b'`+"\n")
-	body := "INSERT INTO palletra.t (note) SELECT 'a;b' FROM src WHERE line_class IS NOT NULL;\n"
+	body := "INSERT INTO app.t (note) SELECT 'a;b' FROM src WHERE line_class IS NOT NULL;\n"
 	ms := check(t, c, file("q.sql", body))
 	if len(ms) != 0 {
 		t.Fatalf("a ';' inside a string literal must not terminate the statement: %+v", ms)
@@ -42,10 +42,10 @@ func TestSemicolonInSingleQuotedLiteralDoesNotSplitStatement(t *testing.T) {
 // this seam can observe it — said here so a later reader does not take this
 // test for coverage of it.
 func TestSemicolonAfterDoubledQuoteInsideLiteralDoesNotSplitStatement(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+
 		`require:`+"\n"+
 		`  - '\bline_class\b'`+"\n")
-	body := "INSERT INTO palletra.t (note) SELECT 'it''s a;b' FROM src WHERE line_class IS NOT NULL;\n"
+	body := "INSERT INTO app.t (note) SELECT 'it''s a;b' FROM src WHERE line_class IS NOT NULL;\n"
 	ms := check(t, c, file("q.sql", body))
 	if len(ms) != 0 {
 		t.Fatalf("'' is an escaped quote, so the ';' after it is still data: %+v", ms)
@@ -55,10 +55,10 @@ func TestSemicolonAfterDoubledQuoteInsideLiteralDoesNotSplitStatement(t *testing
 // An escape string E'…' takes backslash escapes, so E'a\';b' holds the ';'
 // too — the escaped quote does not close the literal.
 func TestSemicolonInEscapeStringDoesNotSplitStatement(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+
 		`require:`+"\n"+
 		`  - '\bline_class\b'`+"\n")
-	body := "INSERT INTO palletra.t (note) SELECT E'a\\';b' FROM src WHERE line_class IS NOT NULL;\n"
+	body := "INSERT INTO app.t (note) SELECT E'a\\';b' FROM src WHERE line_class IS NOT NULL;\n"
 	ms := check(t, c, file("q.sql", body))
 	if len(ms) != 0 {
 		t.Fatalf("a backslash-escaped quote in E'…' does not close the literal: %+v", ms)
@@ -67,10 +67,10 @@ func TestSemicolonInEscapeStringDoesNotSplitStatement(t *testing.T) {
 
 // A quoted identifier ("…") is not a comment and not a terminator either.
 func TestSemicolonInQuotedIdentifierDoesNotSplitStatement(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+
 		`require:`+"\n"+
 		`  - '\bline_class\b'`+"\n")
-	body := "INSERT INTO palletra.t (\"odd;name\") SELECT 1 FROM src WHERE line_class IS NOT NULL;\n"
+	body := "INSERT INTO app.t (\"odd;name\") SELECT 1 FROM src WHERE line_class IS NOT NULL;\n"
 	ms := check(t, c, file("q.sql", body))
 	if len(ms) != 0 {
 		t.Fatalf("a ';' inside a quoted identifier must not terminate the statement: %+v", ms)
@@ -80,13 +80,13 @@ func TestSemicolonInQuotedIdentifierDoesNotSplitStatement(t *testing.T) {
 // A dollar-quoted body is a string literal with no escapes at all — the whole
 // function body, semicolons included, is one statement's data.
 func TestSemicolonInDollarQuotedBodyDoesNotSplitStatement(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+
 		`require:`+"\n"+
 		`  - '\bline_class\b'`+"\n")
 	// The table name sits before the body's interior ';' and the required token
 	// after it, so a split at that ';' selects a truncated statement that is
 	// missing the token — while the real single statement carries both.
-	body := "CREATE FUNCTION f() RETURNS int AS $body$ SELECT 1 FROM palletra.t; SELECT line_class $body$ LANGUAGE plpgsql;\n"
+	body := "CREATE FUNCTION f() RETURNS int AS $body$ SELECT 1 FROM app.t; SELECT line_class $body$ LANGUAGE plpgsql;\n"
 	ms := check(t, c, file("q.sql", body))
 	if len(ms) != 0 {
 		t.Fatalf("a ';' inside $tag$…$tag$ must not terminate the statement: %+v", ms)
@@ -98,11 +98,11 @@ func TestSemicolonInDollarQuotedBodyDoesNotSplitStatement(t *testing.T) {
 // dollar-quoted body. Without the adjacency guard the second statement below
 // disappears and its violation is never reported.
 func TestGluedDollarDoesNotOpenAQuotedBody(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+
 		`require:`+"\n"+
 		`  - '\bline_class\b'`+"\n")
 	body := "SELECT col$a$name FROM src;\n" +
-		"INSERT INTO palletra.t (note) VALUES ('x');\n"
+		"INSERT INTO app.t (note) VALUES ('x');\n"
 	ms := check(t, c, file("q.sql", body))
 	if len(ms) != 1 {
 		t.Fatalf("a glued '$' opens no literal, so the second statement must still be judged: %+v", ms)
@@ -119,11 +119,11 @@ func TestGluedDollarDoesNotOpenAQuotedBody(t *testing.T) {
 // skipping literals must not skip the newlines inside them either, or every
 // line number after a multi-line literal drifts.
 func TestSemicolonInCodeStillSplitsAndKeepsLines(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+
 		`require:`+"\n"+
 		`  - '\bline_class\b'`+"\n")
-	body := "INSERT INTO palletra.t (note) VALUES ('multi\nline;literal') RETURNING line_class;\n" +
-		"INSERT INTO palletra.t (note) VALUES ('x');\n"
+	body := "INSERT INTO app.t (note) VALUES ('multi\nline;literal') RETURNING line_class;\n" +
+		"INSERT INTO app.t (note) VALUES ('x');\n"
 	ms := check(t, c, file("q.sql", body))
 	if len(ms) != 1 {
 		t.Fatalf("the second statement violates and must be reported once: %+v", ms)
@@ -157,12 +157,12 @@ func TestSemicolonInCodeStillSplitsAndKeepsLines(t *testing.T) {
 // Mutation: make sqlQuotedEnd return len(s) rather than -1 for an unterminated
 // literal (the swallowing direction) — both tests below go red.
 func TestUnterminatedLiteralDoesNotHideALaterStatement(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+
 		`require:`+"\n"+
 		`  - '\bline_class\b'`+"\n")
 	// The require is satisfied BEFORE the stray quote; the governed DELETE
 	// after it is not covered by it.
-	body := "SELECT line_class FROM src WHERE note = 'x; DELETE FROM palletra.t\n"
+	body := "SELECT line_class FROM src WHERE note = 'x; DELETE FROM app.t\n"
 	ms := check(t, c, file("q.sql", body))
 	if len(ms) != 1 {
 		t.Fatalf("the DELETE after an unterminated literal must still be judged: %+v", ms)
@@ -172,12 +172,12 @@ func TestUnterminatedLiteralDoesNotHideALaterStatement(t *testing.T) {
 // The same defect at file scale: one stray apostrophe near the top of a .sql
 // file disabled the rule for every statement below it.
 func TestUnterminatedLiteralDoesNotDisableTheRestOfTheFile(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+
 		`require:`+"\n"+
 		`  - '\bline_class\b'`+"\n")
 	body := "SELECT line_class FROM src WHERE a = 'x;\n" +
-		"INSERT INTO palletra.t (note) VALUES ('y');\n" +
-		"INSERT INTO palletra.t (note) VALUES ('z');\n"
+		"INSERT INTO app.t (note) VALUES ('y');\n" +
+		"INSERT INTO app.t (note) VALUES ('z');\n"
 	ms := check(t, c, file("q.sql", body))
 	if len(ms) != 2 {
 		t.Fatalf("both governed INSERTs must be judged, not swallowed: %+v", ms)
@@ -199,12 +199,12 @@ func TestUnterminatedLiteralDoesNotDisableTheRestOfTheFile(t *testing.T) {
 // governed UPDATE is swallowed into a statement whose require the SELECT
 // satisfies, one match instead of two, and this test goes red.
 func TestPartialFragmentDoesNotPairQuotesOutOfPhase(t *testing.T) {
-	c := mustChecker(t, `table: 'palletra\.t\b'`+"\n"+
+	c := mustChecker(t, `table: 'app\.t\b'`+"\n"+
 		`require:`+"\n"+
 		`  - '\bline_class\b'`+"\n")
 	src := "package p\n\nfunc f(v, w string) string {\n" +
-		"\treturn \"INSERT INTO palletra.t (note) VALUES ('\" + v +\n" +
-		"\t\t\"'); SELECT line_class FROM src; UPDATE palletra.t SET note = '\" + w + \"'\"\n}\n"
+		"\treturn \"INSERT INTO app.t (note) VALUES ('\" + v +\n" +
+		"\t\t\"'); SELECT line_class FROM src; UPDATE app.t SET note = '\" + w + \"'\"\n}\n"
 	var judged []string
 	for _, m := range check(t, c, file("q.go", src)) {
 		if !strings.Contains(m.Message, "could not be read") {
@@ -214,7 +214,7 @@ func TestPartialFragmentDoesNotPairQuotesOutOfPhase(t *testing.T) {
 	if len(judged) != 2 {
 		t.Fatalf("want the truncated INSERT and the governed UPDATE both judged, got %d: %+v", len(judged), judged)
 	}
-	if !strings.Contains(judged[1], "UPDATE palletra.t") {
+	if !strings.Contains(judged[1], "UPDATE app.t") {
 		t.Fatalf("the second match should be the UPDATE, got %s", judged[1])
 	}
 }

@@ -20,7 +20,7 @@ const (
 	aliasedWasi    = "\tpgquery \"github.com/wasilibs/go-pgquery\"\n"
 	parserDrivers  = "type DB struct{}\n\nfunc (DB) Exec(string) error { return nil }\n\nfunc (DB) Query(string) error { return nil }\n\n" +
 		"func (DB) QueryRow(string) error { return nil }\n\nvar pool DB\n\nvar tx DB\n\nvar db DB\n\n"
-	// plExprShape is TakeoffQS's find-zero-reader-columns PL/pgSQL read: a local
+	// plExprShape is a zero-reader-columns PL/pgSQL read: a local
 	// written on several branches and handed only to the parser.
 	plExprShape = "type plExpr struct {\n\tmode  int\n\tquery string\n}\n\n" +
 		"func read(e plExpr) error {\n\tvar sql string\n\tswitch {\n\tcase e.mode == 0:\n\t\tsql = e.query\n" +

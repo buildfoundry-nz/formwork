@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// #12494. The census gates a rule that cannot fail, and a rule keyed on a
+// DEAD-SYMBOL. The census gates a rule that cannot fail, and a rule keyed on a
 // SYMBOL that no longer exists is exactly that — yet none of the existing arms
 // can see one. The scope glob still matches thousands of files, so EMPTY-SCOPE
 // and EMPTY-GLOB stay silent; a confinement ban is not an existence obligation,
@@ -16,7 +16,7 @@ import (
 // rules.AnchorProbe was never wired into: go/call-confined-to-func-name
 // (params.symbol) and go/guard-precedes-call (params.sink, params.funcs).
 
-// DEAD-SYMBOL is #12494's own shape: the confined symbol matches no call
+// DEAD-SYMBOL's own shape: the confined symbol matches no call
 // anywhere in scope, so nothing anyone plants can trip the confinement.
 func TestDeadSymbolGatesCallConfined(t *testing.T) {
 	root := writeCorpus(t, `rules:
@@ -31,7 +31,7 @@ func TestDeadSymbolGatesCallConfined(t *testing.T) {
     tags: [always]
 `, map[string]string{
 		// The canonical reader moved on; the pinned name survives nowhere.
-		"src/a.go": "package a\n\nfunc snapshotOnce() {\n\tprojectfacts.Load()\n}\n",
+		"src/a.go": "package a\n\nfunc snapshotOnce() {\n\torderfacts.Load()\n}\n",
 	})
 
 	_, out := census(t, root)
@@ -81,7 +81,7 @@ func TestSymbolSurvivingOnlyInFixturesIsDead(t *testing.T) {
       allowed_func: '^snapshotOnce$'
     tags: [always]
 `, map[string]string{
-		"src/a.go": "package a\n\nfunc snapshotOnce() {\n\tprojectfacts.Load()\n}\n",
+		"src/a.go": "package a\n\nfunc snapshotOnce() {\n\torderfacts.Load()\n}\n",
 	})
 	// The last place the subject still exists.
 	writeFixture(t, root, "fixture-only-symbol", "pass-1", map[string]string{
@@ -210,11 +210,7 @@ func TestDeadGuardIsNotVacuous(t *testing.T) {
 // The three arms below are the false positives the first cut of this probe
 // produced against the real 1873-rule corpus. Every one of them names a symbol
 // that is STILL DECLARED AND REACHABLE, so a new call site would trip the rule
-// tomorrow: zero call sites today is not "cannot fail" for a BAN. Measured on
-// origin/develop at 98d8b1b4 — gemini-generate-content-chokepoint,
-// go-one-job-dispatch-body, pipeline-events-read-is-collapsed,
-// single-canonical-role-gate and primary-action-files-do-not-reach-per-section-
-// loads-indirectly. #12494 asked for a symbol with "no declaration AND no call
+// tomorrow: zero call sites today is not "cannot fail" for a BAN. The verdict wants a symbol with "no declaration AND no call
 // site"; the first cut implemented only the second half.
 
 // A QUALIFIED symbol names something from another package — stdlib, a module
@@ -248,10 +244,10 @@ func TestQualifiedSymbolIsNeverDead(t *testing.T) {
 
 // An unqualified symbol that is DECLARED in the tree is live even with no call
 // site in scope: the function exists, so a new caller can appear. Only a symbol
-// with no declaration anywhere — the #12494 shape, where the func was deleted —
-// is unfallible. single-canonical-role-gate is the measured case: FindRole is
-// declared in the addrole package and merely has no caller outside rolegate,
-// which is the rule being OBEYED.
+// with no declaration anywhere — the DEAD-SYMBOL shape, where the func was deleted —
+// is unfallible. The measured case: FindRole is declared in the addrole
+// package and merely has no caller outside rolegate, which is the rule being
+// OBEYED.
 func TestDeclaredSymbolWithNoCallSiteIsNotDead(t *testing.T) {
 	root := writeCorpus(t, `rules:
   - id: declared-uncalled
@@ -277,9 +273,8 @@ func TestDeclaredSymbolWithNoCallSiteIsNotDead(t *testing.T) {
 
 // A TOTAL BAN — allowed_func matching no Go identifier — is satisfied by having
 // no call sites at all. Zero hits is its compliant state, so the confinement
-// framing the DEAD-SYMBOL verdict uses does not even apply.
-// primary-action-files-do-not-reach-per-section-loads-indirectly is the
-// measured case, and its own comment says so: "^$ matches no Go identifier, so
+// view the DEAD-SYMBOL verdict uses does not even apply. The measured case
+// says so in its own comment: "^$ matches no Go identifier, so
 // this is a total ban rather than a confinement." It carves the legitimate
 // callers out through scope.exclude and bans the rest.
 func TestTotalBanWithNoCallSitesIsNotDead(t *testing.T) {
@@ -308,7 +303,7 @@ func TestTotalBanWithNoCallSitesIsNotDead(t *testing.T) {
 }
 
 // A rule this arm CANNOT decide must be counted out loud, never folded into the
-// class-2 zero. Measured on origin/develop at 98d8b1b4, 30 of the 41
+// class-2 zero. Measured on a real corpus, 30 of the 41
 // name-anchored Go rules carry a package selector, so a bare "class 2 — 0"
 // reports 41 rules cleared when 11 were examined. The census already binds
 // itself to this for set-relation and except.paths, in its own words: a hole

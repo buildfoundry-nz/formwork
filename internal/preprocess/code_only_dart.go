@@ -12,7 +12,7 @@ func init() { Register("code-only-dart", CodeOnlyDart) }
 // shape, including its two bounding decisions: block comments NEST, and a
 // single-/double-quoted string is closed at a newline as well as at its quote
 // so an unbalanced quote costs one line of projection rather than the rest of
-// the file (#9272).
+// the file.
 //
 // Blanking string contents is what makes DELIMITER COUNTING sound. Dart string
 // interpolation puts arbitrary code — including parentheses and braces — inside

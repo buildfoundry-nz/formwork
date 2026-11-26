@@ -33,7 +33,7 @@ type gateReadsParamsYAML struct {
 // places by construction: the merge list is an argument of the builder
 // invocation, the decision is usually a getter declared elsewhere in the class,
 // and the read is one indirection deep inside it. Nothing local to a line or a
-// window relates them, which is the #8677 shape.
+// window relates them.
 //
 // The scan is FILE-scoped, which is the granularity the language gives: a State
 // class and the getters its build method calls live in one file. A getter is

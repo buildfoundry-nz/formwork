@@ -101,7 +101,7 @@ func TestPairConsistencySameFuncDartCompanionInSameMethodPasses(t *testing.T) {
 }
 
 // A multi-line signature must not blind the unit: the header accumulates
-// until the body opens (the Dart analogue of the #9767 Go shape).
+// until the body opens (the Dart analogue of the Go multi-line signature shape).
 func TestPairConsistencySameFuncDartMultiLineSignatureFires(t *testing.T) {
 	src := `class Loader {
   Future<void> load(

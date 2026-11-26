@@ -38,7 +38,7 @@ func shardTestTiming(rls []*config.Rule) engine.Timing {
 	return prior
 }
 
-// TestShardPartitionCoversEveryRuleExactlyOnce is T1 of TakeoffQS#25657: for
+// TestShardPartitionCoversEveryRuleExactlyOnce is the partition's first pin: for
 // N in 1..8, with and without a durations hint, the union of shards 1..N is
 // the whole rule set, the shards are pairwise disjoint, an id never splits,
 // and a second computation gives the same partition.

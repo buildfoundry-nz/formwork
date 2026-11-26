@@ -1,7 +1,7 @@
 package main
 
 // fixtureinventory_registry_conformance_test.go — the same RENDER-NORMALISATION
-// obligation as the live-include registry, one level over (#13521, #15918).
+// obligation as the live-include registry, one level over.
 //
 // Same scope and same limit as its sibling, for the same reason: this test
 // reads each committed INVENTORY.tsv and re-renders WHAT IT JUST READ, so the
@@ -36,7 +36,7 @@ import (
 
 // TestFixtureManifestCorpusIsRenderNormalised pins every committed fixture
 // manifest to the renderer's output for the rows it already contains. Same
-// guarantee, same limit, same cure, same #13521 — see the file header.
+// guarantee, same limit, same cure — see the file header.
 func TestFixtureManifestCorpusIsRenderNormalised(t *testing.T) {
 	root := repoRoot(t)
 	fixturesRoot := filepath.Join(root, filepath.FromSlash(fixturesRootRel))
@@ -74,10 +74,10 @@ func TestFixtureManifestCorpusIsRenderNormalised(t *testing.T) {
 		drifted++
 		if drifted <= driftReportCap {
 			t.Errorf("%s is not RENDER-NORMALISED, so running the printed cure rewrites it for an "+
-				"author who never touched this rule (#13521). This is NOT a staleness check: a row "+
+				"author who never touched this rule. This is NOT a staleness check: a row "+
 				"whose directory is gone is FIXTURE-REMOVED at census time, and a directory with no "+
 				"row is FIXTURE-UNTRACKED. Re-render the corpus with:\n"+
-				"  go run -C tools/formwork-vacuity-census . --write-inventory <repo-root>", rel)
+				"  go run ./cmd/formwork-vacuity-census --write-inventory <repo-root>", rel)
 		}
 	}
 

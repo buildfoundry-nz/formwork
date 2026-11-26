@@ -30,7 +30,7 @@ func TestPrefilterImplied(t *testing.T) {
 		// substring comparison against the source text says "absent" and
 		// reports a rule that is in fact perfectly gated.
 		name:      "escaped metacharacter resolves to the literal it denotes",
-		params:    "pattern: 'platform\\.material_cat'\nprefilter: platform.material_cat\n",
+		params:    "pattern: 'platform\\.widget_cat'\nprefilter: platform.widget_cat\n",
 		implied:   true,
 		decidable: true,
 	}, {

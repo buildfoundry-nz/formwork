@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// The second arm on this detector (#15848): a NEW required-pattern arm may not
+// The second arm on this detector: a NEW required-pattern arm may not
 // combine `mode: exists` with a scope that can be satisfied by a file the author
 // did not mean.
 //
@@ -13,7 +13,7 @@ import (
 // single file that is the same question as `every-file`. Over a scope of two
 // hundred, one incidental hit anywhere satisfies the obligation for all of them,
 // and deleting the real thing is masked by a coincidence in a file nobody was
-// thinking about. #9992 diagnosed the class in July: four instances were
+// thinking about. The class was diagnosed in July: four instances were
 // repaired by hand — all four by MOVING TYPE — and the comparable set has since
 // grown from 54 to 63.
 //
@@ -34,9 +34,8 @@ import (
 // alone, stable across a refactor that adds or deletes files — which is what a
 // birth gate needs, as sw-inert2 argued themselves. Taking `declared-glob-count
 // > 1` in place of `files-matched > 1` keeps the measured coverage without the
-// tree dependency: it catches the two-literal-globs spelling
-// (annotated-pdf-export-cap-fail-loud, upload-pick-declares-busy) that no
-// wildcard test sees, and the seven wildcard-but-one-file-today arms that a
+// tree dependency: it catches the two-literal-globs spelling (two measured
+// rules) that no wildcard test sees, and the seven wildcard-but-one-file-today arms that a
 // file-count predicate is blind to at birth are caught by the wildcard half.
 //
 // WHY THE ESCAPE IS LOAD-BEARING, AND WHY IT IS NOT CHECKED. Measured over the
@@ -101,7 +100,7 @@ const ebTwoLiteralGlobs = `rules:
 // in-place declaration. The gate does not validate the reason and must not
 // pretend to — it records that a human wrote one.
 const ebDeclaredExists = `rules:
-  # exists-multi-file: every takeoff surface must have a live caller SOMEWHERE;
+  # exists-multi-file: every export surface must have a live caller SOMEWHERE;
   # narrowing this to one file would assert something the rule does not mean.
   - id: eb-declared-exists
     type: required-pattern

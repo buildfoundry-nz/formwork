@@ -20,7 +20,7 @@ var itemAndKitBranches = []string{
 
 // TestSatisfiedByEmbeddedOnlyFlagsTheItemBranchArm is the shipped defect.
 // `it\.Formula` is a substring of `kit.Formula`, so deleting the whole
-// root-item branch — the #8812 regression the arm exists to catch — left the
+// root-item branch — the regression the arm exists to catch — left the
 // arm green off the kit branch's text.
 func TestSatisfiedByEmbeddedOnlyFlagsTheItemBranchArm(t *testing.T) {
 	orig, stripped, yes, err := satisfiedByEmbeddedOnly(mustCompile(t, `it\.Formula`), itemAndKitBranches)
@@ -124,9 +124,9 @@ func TestTokenAlignedReadsBothSidesOfEachEnd(t *testing.T) {
 	}
 	// The other direction still holds: two identifier characters meeting IS a
 	// continued token, and that is the shipped defect.
-	const req = "	req := &apiv1.EnqueueUngroupedMaterialGroupingRequest{}"
-	r := strings.Index(req, "EnqueueUngroupedMaterialGrouping")
-	if tokenAligned(req, r, r+len("EnqueueUngroupedMaterialGrouping")) {
+	const req = "	req := &apiv1.EnqueueUngroupedItemGroupingRequest{}"
+	r := strings.Index(req, "EnqueueUngroupedItemGrouping")
+	if tokenAligned(req, r, r+len("EnqueueUngroupedItemGrouping")) {
 		t.Error("a name that continues into `Request` is not its own token")
 	}
 }
@@ -138,10 +138,10 @@ func TestTokenAlignedReadsBothSidesOfEachEnd(t *testing.T) {
 // corpus that gate is the difference between 2 flagged and 1.
 func TestSatisfiedByEmbeddedOnlySparesADifferentAlternative(t *testing.T) {
 	lines := []string{
-		"import 'package:tqs_core/testing/stub_dio.dart';",
-		"import 'package:takeoffqs_schema/takeoffqs/api/v1/account_service.pb.dart';",
+		"import 'package:app_core/testing/stub_dio.dart';",
+		"import 'package:example_schema/example/api/v1/account_service.pb.dart';",
 	}
-	_, _, yes, err := satisfiedByEmbeddedOnly(mustCompile(t, `(package:takeoffqs_schema|package:tqs_)`), lines)
+	_, _, yes, err := satisfiedByEmbeddedOnly(mustCompile(t, `(package:example_schema|package:app_)`), lines)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,16 +152,16 @@ func TestSatisfiedByEmbeddedOnlySparesADifferentAlternative(t *testing.T) {
 
 // TestSatisfiedByEmbeddedOnlyFlagsATypeLiteralStandIn is the corpus's own live
 // example, and the reason the same-text gate does not gut the check.
-// `settle-grouping-has-live-caller` requires a live CALLER of
-// EnqueueUngroupedMaterialGrouping; delete the call and the arm stays green off
+// A rule requiring a live CALLER of
+// EnqueueUngroupedItemGrouping; delete the call and the arm stays green off
 // the generated `...GroupingRequest` type literal, which is the same text
 // continuing into a longer identifier.
 func TestSatisfiedByEmbeddedOnlyFlagsATypeLiteralStandIn(t *testing.T) {
 	lines := []string{
-		"	n, err := extractionreaper.EnqueueUngroupedMaterialGrouping(",
-		"	req := &apiv1.EnqueueUngroupedMaterialGroupingRequest{}",
+		"	n, err := jobreaper.EnqueueUngroupedItemGrouping(",
+		"	req := &apiv1.EnqueueUngroupedItemGroupingRequest{}",
 	}
-	orig, _, yes, err := satisfiedByEmbeddedOnly(mustCompile(t, `EnqueueUngroupedMaterialGrouping`), lines)
+	orig, _, yes, err := satisfiedByEmbeddedOnly(mustCompile(t, `EnqueueUngroupedItemGrouping`), lines)
 	if err != nil {
 		t.Fatal(err)
 	}

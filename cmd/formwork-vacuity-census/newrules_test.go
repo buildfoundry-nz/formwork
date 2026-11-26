@@ -11,8 +11,8 @@ import (
 // set-relations it cannot probe, and symbol-anchored rules whose anchor names
 // another package. A declined verdict is currently indistinguishable from a
 // pass — the census exits 0 and nobody ever asked whether the rule can fire.
-// Measured on the corpus at 952de0fe4c that is 19 of 90 set-relation rules and
-// 38 of 49 symbol-anchored rules, 57 rules in all (#15837).
+// Measured on a real corpus that is 19 of 90 set-relation rules and
+// 38 of 49 symbol-anchored rules, 57 rules in all.
 //
 // These tests pin the arm that refuses to let a NEW one in: a rule this change
 // ADDS must be one the census can decide. They are deliberately scoped to the
@@ -223,7 +223,7 @@ func TestNewSymbolAnchoredRuleWithQualifiedAnchorGates(t *testing.T) {
 }
 
 // The arm is scoped to the ADDED set on purpose. An undecidable rule that was
-// already here is the #15837 backfill, not this author's doing, and gating it
+// already here is the backfill, not this author's doing, and gating it
 // would block every PR until the backfill is finished.
 func TestUndecidableRuleAlreadyInTheBaseIsNotRefused(t *testing.T) {
 	root := writeCorpus(t, baseRules, map[string]string{"src/base.go": baseFiles})

@@ -20,11 +20,11 @@ func TestDeadAlsoPresentGatesAsDeadTrigger(t *testing.T) {
       where: same-func
       trigger: 'projectMetricUnionSQL'
       also_present: 'tx\.(Query|QueryRow)\('
-      requires: 'projectreadscope\.Memo\('
+      requires: 'scopecache\.Memo\('
     tags: [always]
 `, map[string]string{
 		// Trigger lives; also_present (tx.Query) never appears → obligation never enters.
-		"src/a.go": "package a\n\nfunc Load() {\n\t_ = projectMetricUnionSQL\n\t_ = projectreadscope.Memo\n}\n",
+		"src/a.go": "package a\n\nfunc Load() {\n\t_ = projectMetricUnionSQL\n\t_ = scopecache.Memo\n}\n",
 	})
 
 	_, out := census(t, root)
@@ -82,7 +82,7 @@ func TestSameFuncOutOfFuncTriggerIsDead(t *testing.T) {
 	}
 }
 
-// #12195: same-func Dart/proto units live in the engine. Vacuity cannot parse
+// Same-func Dart/proto units live in the engine. Vacuity cannot parse
 // them (obligationLiveSameFunc is Go-only), so a live Dart trigger must not
 // be classified DEAD-TRIGGER just because this census cannot walk Dart
 // braces. Per-line appearance is the conservative liveness check.

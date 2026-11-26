@@ -139,6 +139,17 @@ func TestListedDeclarationMovedElsewhereFails(t *testing.T) {
 	}
 }
 
+func TestListedFileOutsideTheTreeIsNotJudged(t *testing.T) {
+	got := runAll(t, declaredOnce(t, "a/widgets.go", "func render", "z/absent.go", "func paint"), map[string]string{"a/widgets.go": owner})
+	if len(got) != 0 {
+		t.Fatalf("a listed file the tree does not hold says nothing about staleness: %+v", got)
+	}
+	got = runAll(t, declaredOnce(t, "z/absent.go", "func render"), map[string]string{"b/copy.go": "package copy\n\nfunc render() {}\n"})
+	if len(got) != 0 {
+		t.Fatalf("with its owner file absent there is no owner to duplicate: %+v", got)
+	}
+}
+
 func TestDeclaredOnceConfig(t *testing.T) {
 	for _, tc := range []struct{ name, yaml string }{
 		{"no declarations", ""},

@@ -21,8 +21,9 @@ with the reasoning.
 **Engine core.** `internal/scan` (one shared walk; skips `.git`/`.formwork` plus
 operator-declared `scan.ignore` globs, each census-enumerated with a reason and
 a live match count, plus — when `scan.gitignore` is declared — every path git
-reports ignored) → `internal/engine` (two-phase executor, worker pools) →
-`internal/finding` → `internal/report` (human, JSON, GitHub formats).
+reports ignored) → `internal/engine` (two-phase executor, worker pools, wall and
+CPU timing through `internal/cputime`) → `internal/finding` → `internal/report`
+(human, JSON, GitHub formats).
 `internal/config` decodes strictly and gates on the `engine:` semver constraint
 before parsing any rule file.
 
@@ -34,11 +35,12 @@ answering "nothing there" to "I cannot look" is a fail-open. Symlinks are never
 followed; refusing is the loud move. Skipped links are named in the census, with
 their reason.
 
-**Rule types — 26 registered** across `internal/rules/`: the declarative core
+**Rule types — 30 registered** across `internal/rules/`: the declarative core
 (`forbidden-pattern`, `required-pattern`, `pattern-count`, `ordering`,
 `file-size`, `file-naming`, `binary-content`, `doc-path-exists`,
 `pair-consistency`, `set-relation`, `baseline`), the built-in analyzers
-(`go/*` ×5 in `goast`, `dart/*` ×4 in `dartscan`, `sql/*` ×4 in `sqlparse` +
+(`go/*` ×7 in `goast`, `go/forbidden-type-in-position` in `gotypes` under
+`go vet`, `dart/*` ×5 in `dartscan`, `sql/*` ×4 in `sqlparse` +
 `sqltext`), and the heavy external-tool pair (`command`, `git-diff`).
 
 **SQL parse-tree path.** Real PostgreSQL grammar via `wasilibs/go-pgquery` (WASM
@@ -62,14 +64,23 @@ rule's scope — including the ones nobody declared.
 content from stdin and evaluates it through the ordinary engine over one
 in-memory file. Only checkers that explicitly implement path-aware
 `rules.ContentOnly` are eligible. Finalizers, whole-tree/cross-file readers,
-`scope.min_files`, `scope.not_declaring`, generated-only scopes, and unknown
-checkers are deferred with explicit reasons; `cost: fast` is not eligibility.
+`scope.not_declaring`, generated-only scopes, and unknown checkers are deferred
+with explicit reasons; a `scope.min_files` floor is not, because it is checked
+outside the rule's evaluation; `cost: fast` is not eligibility.
 The versioned JSON report distinguishes clean eligible rules from zero eligible
 rules and never claims whole-repository coverage. `--batch` reads strict
 `{path, content}` JSON objects one per stdin line, loads config once, and emits
 one independent result object per line in input order. Generated/reachability
 state is per record; empty input is exit 2. Lanes and cost classes do not select
 or filter these rules. Full `check` is unchanged.
+
+**MCP.** `formwork serve --mcp` exposes `check_file` over stdio through the
+official MCP Go SDK. Supplied content wins over disk; omitted content reads the
+confined on-disk file. The resident corpus is invalidated by filesystem events,
+and a watcher failure forces strict reloads instead of stale answers.
+`formwork serve --socket` keeps the same resident corpus for
+`check-content --server`, which answers exactly as local evaluation does and
+falls back to it when no server for that root and version answers.
 
 **Self-testing.** `formwork test` (fire/pass fixtures, `want:` markers, `.want`
 manifests) and `formwork lint` (rules-present, fixture coverage, empty scope,
@@ -189,10 +200,10 @@ they gate `make verify` exactly like this repo's own rules do.
 - **`examples/quickstart/`** — the teaching corpus: five rules, ten fixtures,
   each rule commented to introduce one concept. Keep it small enough to read end
   to end; new coverage belongs in the port corpora.
-- **`examples/palletra-port-*`** — five scale corpora set in a fictional
-  warehouse fit-out domain, each with its own `.formwork/`. 4 of the 5
-  palletra-port corpora carry a source tree to check those rules against; the
-  fifth, `examples/palletra-port-full`, carries none at all, so its board reads
+- **`examples/sample-corpus-*`** — five scale corpora set in a generic
+  service domain, each with its own `.formwork/`. 4 of the 5
+  sample-corpus corpora carry a source tree to check those rules against; the
+  fifth, `examples/sample-corpus-full`, carries none at all, so its board reads
   `formwork lint: 5/5 checks passed (2 skipped: empty-scope, exemption-hygiene —
   see .formwork/lint.yaml)` — over no files both of those skipped checks would
   report 100% of what they can see and discriminate nothing, and

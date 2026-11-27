@@ -8,13 +8,13 @@ wins by id.
 ## Why
 
 The engine is generic. Rule *instances* were repo-local only. The first
-validating configuration (TakeoffQS) contains ~55 gates that would apply to any
+validating configuration (a downstream repository) contains ~55 gates that would apply to any
 Go/Dart/SQL repo (gofmt, weak types, no `skip:` in tests, immutable migrations,
 no committed binaries, …) and ~188 more whose *logic* is generic but whose
 globs were product-specific.
 
 `formwork init` and `examples/quickstart/` shipped one-to-five teaching rules.
-`examples/palletra-port-full/` shipped hundreds of product-domain rules under
+`examples/sample-corpus-full/` shipped hundreds of product-domain rules under
 fictional names. Neither is a pack a second repo can opt into.
 
 ## Shape
@@ -49,7 +49,7 @@ fictional names. Neither is a pack a second repo can opt into.
    The pack corpus itself has no `library:` key; its rules are local to that tree
    and *do* require fixtures.
 
-6. **Command-type detectors that `go run` a TakeoffQS script are not in this
+6. **Command-type detectors that `go run` a downstream script are not in this
    pack.** They are not portable without shipping the script. Declarative types
    (forbidden-pattern, required-pattern, pair-consistency, set-relation,
    file-naming, go/*, dart/*, …) are. Product-named CI wiring pins (`b06-*`)
@@ -59,5 +59,5 @@ fictional names. Neither is a pack a second repo can opt into.
 
 - `from: <template-id>` parameterized mixed templates (GENERIC-VS-SPECIFIC item 2).
 - Auto-enabling the pack. Opt-in via `library:`.
-- Replacing `examples/palletra-port-*`. Those remain scale corpora.
+- Replacing `examples/sample-corpus-*`. Those remain scale corpora.
 - `formwork init` (still unbuilt).

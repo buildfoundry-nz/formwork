@@ -2,14 +2,205 @@
 
 ## Unreleased
 
-## 0.18.1
-
 ### Changed
 
 - **SQL rules share extraction of a walk's unchanged Go files.** Each extractor
   mode computes a file's candidates and unreadable sites once per walk, including
   errors. Masked or otherwise changed sources are extracted independently, and
   returned slices stay isolated between callers.
+
+- **`go/declared-once` and `dart/declared-once` replace the marked types.**
+  Each takes `declarations`, a list of `{path, decl}` naming the file that
+  owns a declaration and its identity, and holds that identity to one
+  declaration across the scope. Nothing is read from comments. A listed
+  declaration its file does not declare is a finding, so the list cannot go
+  stale. `go/marked-single-home` and `dart/marked-single-home` are removed;
+  list each marked declaration under the new type instead.
+
+### Added
+
+- **`check --shard-capacity C1,...,CN` sizes the shards.** A sharded run on
+  runners of different sizes can name each shard's relative capacity, such as
+  its vCPU. Ids go where load over capacity is lowest, so an 8-vCPU shard takes
+  twice the measured work of a 4-vCPU one. Equal capacities give the partition
+  without the flag. It needs `--shard` and `--durations` and one capacity per
+  shard.
+
+- **`sql/statement-predicate` takes an optional `prefilter`.** A Go file is
+  still parsed when it contains that literal, composes strings, or calls a SQL
+  template whose body contains it. Template indexing parses the files that
+  spell the template's name.
+
+### Fixed
+
+- **Text only the SQL parser reads is not an unread site.** A composition handed
+  only to pg_query's `Parse`, `ParseToJSON`, `ParsePlPgSqlToJSON`, `Scan`,
+  `Fingerprint`, `FingerprintToUInt64` or `IsUtilityStmt` was an unknown call, so
+  `sql/parses` and `sql/statement-predicate` reported it as SQL that could not be
+  read. Its result is a tree, tokens, a hash or a classification, so the text ends
+  there. `Normalize`, `NormalizeUtility`, `SplitWithParser` and `SplitWithScanner`
+  return statements, so text they return is still followed to wherever it goes. The
+  parser is known by import path (`github.com/pganalyze/pg_query_go`, any major
+  version, and `github.com/wasilibs/go-pgquery`), so it is known under any alias,
+  and another package imported under its name is not. `Parse` and `Deparse`
+  preserve the composition's provenance, so a tree that returns to SQL and reaches
+  a driver is still reported.
+
+## 0.24.0
+
+### Added
+
+- **`go/forbidden-type-in-position`, the first `go/types` rule.** It reports a
+  listed type wherever it is the type of a listed position (struct fields,
+  params, results, vars, slice, array, pointer and channel elements, map keys
+  and values, type arguments), resolved with `go/types`: written directly,
+  through an alias declared in another package, or inferred. `[T any]` is not a
+  finding. The rule runs under `go vet` with the formwork binary as the
+  vettool, once per module, so the go command builds and caches the type
+  information. A package that does not type-check is an engine error.
+  `check-content` defers the rule, as it does every finalizer. Design:
+  `docs/specs/2026-11-19-go-types-rule-family-design.md`.
+
+### Fixed
+
+- **`check-content` defers a `sql/locking-select-order` rule that reads
+  `params.schemas`.** Such a rule judges a `.sql` file against schema files
+  beside it, but it claimed a content-only verdict, so a single-content check of
+  any `.sql` file holding a statement stopped with an engine error ("… has no
+  tree to read them from") instead of judging the file. The rule now opts into
+  content-only evaluation only when it reads no schemas; with schemas it is
+  deferred as `content_only_not_supported`, and the file's other rules still
+  run.
+
+## 0.23.1
+
+### Changed
+
+- **A single-file check asks git its three questions at once.** Deciding
+  whether one path is gitignored took three git calls in turn — whether the root
+  is the top level, `core.ignorecase`, and the index entries at the path. They
+  do not depend on one another, so they now run concurrently, and the index is
+  listed case-insensitively and folded afterwards as before. On a downstream Go
+  file a resident `check-content` answer fell from 163-195 ms to 113-132 ms at a
+  load average of 44. The answer is unchanged.
+
+## 0.23.0
+
+### Added
+
+- **A resident `check-content` server.** `formwork serve --socket <path>` keeps one
+  compiled corpus for a root and answers each Unix-socket connection as one
+  `check-content --batch` run, reloading on `.formwork` changes as `serve --mcp`
+  does. `check-content --server <dir>` asks it and prints exactly what local
+  evaluation prints; when none answers it evaluates locally and starts one for
+  the next call. A per-edit hook stops paying for loading and compiling the
+  corpus on every call.
+
+## 0.22.1
+
+### Fixed
+
+- **`check-content` evaluates rules that declare `scope.min_files`.** It deferred
+  every one of them as `scope_min_files`, although the floor is checked outside
+  the rule's evaluation and one file's content cannot move it. On four downstream
+  files (a Go route, a Go tool, two Dart files) the rules evaluated went from 277
+  to 309, 50 to 55, 158 to 173 and 124 to 140; 295 files sampled from that tree
+  gave no finding. The per-file verdict is the one `check` gives. `check` still
+  reports the floor, and `scope_min_files` is no longer a `not_evaluated` reason.
+
+## 0.22.0
+
+### Added
+
+- **`formwork serve --mcp` exposes `check_file` over stdio.** The official MCP Go
+  SDK validates the typed input and carries the same structured report as
+  `check-content`, with supplied unsaved content or the confined on-disk file.
+  Filesystem events invalidate the resident compiled corpus, watcher failures
+  force strict reloads, and a short text summary avoids serializing the full
+  report twice. On a downstream corpus, 50 warm calls measured 186 ms p50 and
+  210 ms p95.
+
+## 0.21.1
+
+### Performance
+
+- **`check-content` and `rules-for` ask git about the paths they were given, not the
+  whole tree.** Both resolved `scan.gitignore` by listing every ignored path in the
+  working tree (`ls-files --others --ignored --directory`), about 7 s on an 83,000-file
+  checkout, to answer for one file. They now ask `check-ignore` and the index about the
+  queried paths and the directories above them, and reproduce the listing's own
+  decisions there: the `--directory` collapse, tracked files under an ignored
+  directory, nested `.gitignore` files, negations, symlinks, nested repositories and
+  gitlinks. The prune set holds exactly the records the whole listing held for those
+  paths. A nested repository that is not ignored, a `dir/*`-style pattern that matches
+  only the slash spelling of an untracked directory, and a root below the top level
+  still take the whole listing. A one-file `check-content` on a downstream repository went from
+  6.7 s to 0.4 s with an identical report. `check` and `lint` walk the whole tree and
+  keep the whole listing.
+
+## 0.21.0
+
+### Added
+
+- **`sql/locking-select-order` reads relation keys from schema files.** `params.schemas`
+  names SQL schemas in the repository, and their `PRIMARY KEY`, `UNIQUE` constraints and
+  unique indexes give each relation its own keys, composite, partial and expression ones
+  included. A locked relation is safe when the statement pins every column of a key, or
+  when every column of a key is pinned or ordered on. Pins come from `col = $1`, `col IS
+  NULL`, and inner-join equalities to a relation already pinned to one row. A partial
+  index counts only when the statement repeats its predicate. `unique_key_columns` still
+  applies alongside. A missing or unparseable schema is exit 2.
+
+## 0.20.0
+
+### Added
+
+- **`check --shard-pin LANE=K` runs every rule a lane selects on one shard.** A CI matrix
+  can now install a toolchain (a language SDK, a resolved package workspace) in one shard
+  job instead of all N: the pinned ids are placed on shard K first and count toward its
+  load, then the rest are balanced around them, heaviest first, as before. The partition
+  is a pure function of (rules, `--durations`, N, pins), so every shard job passes the same
+  pins, and the N shards still cover the selection exactly once. The flag repeats, one pin
+  per lane. A pin without `--shard`, a K past N, an unknown or repeated lane, a lane that
+  selects none of the selected rules, and an id two pins place on different shards are
+  exit 2. The JSON report is unchanged.
+
+## 0.19.2
+
+### Fixed
+
+- **A method call reaches its receiver type's method, not every method of its name.**
+  The unread-composition census followed text into a method by the method's name alone,
+  so every method of one name across the tree shared one node. Two same-named methods of
+  different arity on unrelated types, in unrelated packages, poisoned each other's
+  parameters, and generator text that only lands in a file was reported as SQL that
+  could not be read. A method's node is now its receiver type's (directory, type,
+  name). A call whose receiver is declared with, or is a literal of, a package-level type
+  that declares the method reaches that method only; any other call (an interface, a
+  promoted method, a receiver the walk cannot type) reaches every method of its name
+  whose parameters can take its arguments. Text that reaches a driver through any of
+  them is still reported.
+
+## 0.19.1
+
+### Fixed
+
+- **A capitalised clause word joined to the next word by a hyphen is not SQL.** The
+  unread-composition census read `fmt.Sprintf("SET-%d-%s", …)`, a product code, as a
+  `SET` clause and reported it as SQL it could not read. SQL separates a clause keyword
+  from what follows with whitespace or a parenthesis, so `SET-…`, `FOR-…` and the like
+  are now prose; `--` after a keyword still reads as a comment.
+
+## 0.19.0
+
+### Added
+
+- **Whole-tree `check --format json` reports CPU cost beside wall time.** `cpu_durations`
+  carries each rule's user+system CPU in milliseconds, with the same keys as `durations`;
+  `cpu_total` carries process CPU across the engine run, including waited-for children.
+  Wall `durations` remains the `--durations` scheduling hint. The CPU fields are
+  observability only and are omitted on unsupported platforms and in `--staged`/`--range`
+  reports. **Strict JSON readers must declare both new keys before upgrading.**
 
 ## 0.18.0
 
@@ -399,7 +590,7 @@
   credential now carries the literal gate `autoPrefilter` already derives for
   a pattern: a file holding none of the credential's guaranteed literals holds
   none of its lines, so it is skipped without changing the count. On
-  TakeoffQS's 243 home-carrying rules over the whole tree, CPU went from 128 s
+  a downstream repository's 243 home-carrying rules over the whole tree, CPU went from 128 s
   to 82 s.
 
 ## 0.14.2
@@ -812,7 +1003,7 @@
   failed first, and the ordering is a permutation — so verdicts, findings and
   error selection are byte-identical with and without a hint, under any hint.
   Proved over this repository's own corpora, including the 704-rule
-  `examples/palletra-port-full`, against an inverted hint
+  `examples/sample-corpus-full`, against an inverted hint
   (`TestDispatchOrderChangesNoVerdictOnTheRepoCorpora`). Without the flag,
   output is byte-identical to 0.6.3 across all seven corpora and all three
   formats. Pool widths, the heavy gate and the cost partition are unchanged

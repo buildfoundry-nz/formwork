@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/buildfoundry-nz/formwork/internal/cputime"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"gopkg.in/yaml.v3"
@@ -66,6 +67,7 @@ func (c censusParams) present() bool {
 }
 
 type forbidden struct {
+	*cputime.Meter
 	re             lineMatcher
 	allOf          []lineMatcher // whole-file co-occurrence (RE2, linear — no backtracking)
 	requirePresent []lineMatcher // whole-file guards on `pattern` mode (RE2, linear)
@@ -135,6 +137,7 @@ func newForbidden(params *yaml.Node) (rules.Checker, error) {
 		return nil, errors.New("forbidden-pattern: window applies to params.all_of")
 	}
 	c := &forbidden{
+		Meter:             new(cputime.Meter),
 		denial:            den,
 		multiline:         p.Multiline,
 		prefilter:         p.Prefilter,
@@ -150,20 +153,20 @@ func newForbidden(params *yaml.Node) (rules.Checker, error) {
 		// linear RE2 engine — the fast replacement for a backtracking regexp2
 		// lookahead conjunction like (?=[\s\S]*A)(?=[\s\S]*B)(?![\s\S]*C).
 		for _, pat := range p.AllOf {
-			m, err := compileMatcher("forbidden-pattern all_of", pat, p.Syntax)
+			m, err := compileMatcher("forbidden-pattern all_of", pat, p.Syntax, c.Meter)
 			if err != nil {
 				return nil, err
 			}
 			c.allOf = append(c.allOf, m)
 		}
-		ex, err := compileExcusals("none_of", p.NoneOf, p.Syntax)
+		ex, err := compileExcusals("none_of", p.NoneOf, p.Syntax, c.Meter)
 		if err != nil {
 			return nil, err
 		}
 		c.ex = ex
 		return withCredentials(c), nil
 	}
-	re, err := compileMatcher("forbidden-pattern", p.Pattern, p.Syntax)
+	re, err := compileMatcher("forbidden-pattern", p.Pattern, p.Syntax, c.Meter)
 	if err != nil {
 		return nil, err
 	}
@@ -172,13 +175,13 @@ func newForbidden(params *yaml.Node) (rules.Checker, error) {
 		c.autoLits = autoPrefilter(p.Pattern, p.Syntax)
 	}
 	for _, pat := range p.RequirePresent {
-		m, err := compileMatcher("forbidden-pattern require_present", pat, p.Syntax)
+		m, err := compileMatcher("forbidden-pattern require_present", pat, p.Syntax, c.Meter)
 		if err != nil {
 			return nil, err
 		}
 		c.requirePresent = append(c.requirePresent, m)
 	}
-	ex, err := compileExcusals("require_absent", p.RequireAbsent, p.Syntax)
+	ex, err := compileExcusals("require_absent", p.RequireAbsent, p.Syntax, c.Meter)
 	if err != nil {
 		return nil, err
 	}

@@ -19,7 +19,7 @@ import (
 // leaves it unsummarised. A function only calling summarised functions qualifies in a
 // later round, so the rounds are bounded and an unfinished one only reads less.
 //
-// Not summarised: a method, which shares its node with every method of its name; a
+// Not summarised: a method, which keeps its edges at every call; a
 // function with a builder or writer parameter, whose text goes out by that parameter;
 // and one with an unnamed parameter, which says nothing about what it would do.
 const maxSummaryRounds = 5

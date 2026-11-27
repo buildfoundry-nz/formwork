@@ -20,8 +20,12 @@ func (ff *flowFile) declare() {
 		if fd.Recv == nil {
 			ff.noteFuncRange(fd)
 		}
+		if fd.Recv != nil {
+			ff.g.noteMethod(fd.Name.Name, key)
+		}
 		if _, again := ff.g.funcs[key]; again && fd.Recv != nil {
-			// Methods of one name share a node, so their parameters must line up.
+			// A type's method declared twice, in files a build tag tells apart, is one
+			// node, so their parameters must line up.
 			if f := ff.g.funcs[key]; len(f.params) != paramCount(fd) {
 				ff.g.edge(retKey(key), badFlow)
 				for i := range f.params {
@@ -151,12 +155,11 @@ func stringResultsOf(ft *ast.FuncType) []int {
 	return results
 }
 
-// funcKeyOf is fd's node: its directory and name, or for a method, its name alone. A
-// call does not say which type's method it reaches, so every method of a name shares
-// one node, and a value reaching any of them reaches all of them.
+// funcKeyOf is fd's node: its directory and name, or for a method, its directory, its
+// receiver's type and its name. A method of one name on another type is another node.
 func (ff *flowFile) funcKeyOf(fd *ast.FuncDecl) string {
 	if fd.Recv != nil {
-		return "method." + fd.Name.Name
+		return methodKey(ff.cf.dir+"."+receiverTypeName(fd.Recv), fd.Name.Name)
 	}
 	return ff.cf.dir + "." + fd.Name.Name
 }

@@ -8,7 +8,7 @@ rules:
   type: go/call-order-in-func
   severity: error
   scope:
-    include: [api-factory/**/*.go]
+    include: [svc/**/*.go]
   params:
     funcs: ^Render$
     sequence: [r\.resolveDPI, r\.runGM]

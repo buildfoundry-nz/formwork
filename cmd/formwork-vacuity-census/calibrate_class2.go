@@ -1,4 +1,4 @@
-// Corpus-independent calibration for the class-2 verdict probes (#15917).
+// Corpus-independent calibration for the class-2 verdict probes.
 //
 // WHY THIS FILE EXISTS, and it is not tidiness. mutation-proof materialises a
 // scratch corpus PRUNED to the rule under test alone (rewriteRuleFileToSingleID
@@ -92,10 +92,10 @@ func class2SelfTest() error {
 		return fmt.Errorf("class-2 calibration: the temp corpus did not yield its own rule")
 	}
 
-	commentOnly := scan.NewMemFile("api-factory/a.go", []byte("// govulncheck runs in CI\npackage a\n"))
-	codeBacked := scan.NewMemFile("api-factory/b.go", []byte("// nothing to see here\nvar x = govulncheck\n"))
+	commentOnly := scan.NewMemFile("svc/a.go", []byte("// govulncheck runs in CI\npackage a\n"))
+	codeBacked := scan.NewMemFile("svc/b.go", []byte("// nothing to see here\nvar x = govulncheck\n"))
 	detector := scan.NewMemFile("scripts/dev/gate.go", []byte("var x = govulncheck\n"))
-	product := scan.NewMemFile("api-factory/p.go", []byte("package p\n"))
+	product := scan.NewMemFile("svc/p.go", []byte("package p\n"))
 
 	cases := []struct {
 		name    string

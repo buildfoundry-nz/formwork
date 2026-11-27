@@ -22,7 +22,7 @@ func sampleFindings() []finding.Finding {
 
 func TestJSONReport(t *testing.T) {
 	var buf bytes.Buffer
-	report.JSON(&buf, []*config.Rule{rule("a"), rule("b")}, sampleFindings(), report.ScanSummary{}, nil)
+	report.JSON(&buf, []*config.Rule{rule("a"), rule("b")}, sampleFindings(), report.ScanSummary{}, report.Timing{})
 
 	var rep struct {
 		Findings []struct {
@@ -74,7 +74,7 @@ func TestJSONCarriesCure(t *testing.T) {
 		{ID: "b", Cure: "should never surface"},
 	}
 	var buf bytes.Buffer
-	report.JSON(&buf, rls, sampleFindings(), report.ScanSummary{}, nil)
+	report.JSON(&buf, rls, sampleFindings(), report.ScanSummary{}, report.Timing{})
 
 	var rep struct {
 		Findings []struct {
@@ -374,16 +374,16 @@ func TestGitHubEmitsScanSummaryWithNoFindings(t *testing.T) {
 func TestRenderDispatch(t *testing.T) {
 	rls := []*config.Rule{rule("a")}
 	var h, j, g bytes.Buffer
-	if err := report.Render("", &h, rls, nil, report.ScanSummary{}, nil); err != nil || !strings.Contains(h.String(), "[a] OK") {
+	if err := report.Render("", &h, rls, nil, report.ScanSummary{}, report.Timing{}); err != nil || !strings.Contains(h.String(), "[a] OK") {
 		t.Fatalf("human default: %v %q", err, h.String())
 	}
-	if err := report.Render("json", &j, rls, nil, report.ScanSummary{}, nil); err != nil || !strings.Contains(j.String(), `"rules_total": 1`) {
+	if err := report.Render("json", &j, rls, nil, report.ScanSummary{}, report.Timing{}); err != nil || !strings.Contains(j.String(), `"rules_total": 1`) {
 		t.Fatalf("json: %v %q", err, j.String())
 	}
-	if err := report.Render("github", &g, rls, sampleFindings(), report.ScanSummary{}, nil); err != nil {
+	if err := report.Render("github", &g, rls, sampleFindings(), report.ScanSummary{}, report.Timing{}); err != nil {
 		t.Fatalf("github: %v", err)
 	}
-	if err := report.Render("xml", &bytes.Buffer{}, rls, nil, report.ScanSummary{}, nil); err == nil {
+	if err := report.Render("xml", &bytes.Buffer{}, rls, nil, report.ScanSummary{}, report.Timing{}); err == nil {
 		t.Fatal("unknown format must error")
 	}
 }

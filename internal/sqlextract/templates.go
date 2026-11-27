@@ -2,6 +2,7 @@ package sqlextract
 
 import (
 	"go/ast"
+	"go/parser"
 	"go/token"
 	"strconv"
 )
@@ -46,6 +47,24 @@ import (
 // more than a return is not a template, and a call to it is the operand it
 // always was. Without a walk (scan.NewMemFile) no call is indexed, so a
 // template's body is a site as before; calls within the file still read.
+
+// TemplateNames returns the names of the SQL template functions declared in
+// src. A parse error returns no names; the caller that checks the file still
+// reports that error.
+func TemplateNames(path string, src []byte) []string {
+	file, err := parser.ParseFile(token.NewFileSet(), path, src, 0)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, d := range file.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if ok && isTemplate(fd) && fd.Name != nil {
+			names = append(names, fd.Name.Name)
+		}
+	}
+	return names
+}
 
 func isTemplate(fd *ast.FuncDecl) bool {
 	if fd == nil || fd.Recv != nil || fd.Type.TypeParams != nil || fd.Body == nil || len(fd.Body.List) != 1 {

@@ -1,5 +1,5 @@
-// cli_shard_test.go — `check --shard K/N` runs one shard of the selected rules
-// (TakeoffQS#25657), so a CI matrix can spread one whole-corpus sweep over N
+// cli_shard_test.go — `check --shard K/N` runs one shard of the selected rules,
+// so a CI matrix can spread one whole-corpus sweep over N
 // machines. The partition itself is pinned in shard_internal_test.go; these
 // pin what the command does with it: every shard's report names the rules it
 // ran, the reports together cover the corpus exactly once, and a spec the run
@@ -124,5 +124,149 @@ func TestCheckEmptyShardIsRefused(t *testing.T) {
 	}
 	if !strings.Contains(errOut, "shard 7/7") {
 		t.Fatalf("the refusal must name the shard:\n%s", errOut)
+	}
+}
+
+// pinRepo is shardRepo with two of its rules tagged into a `pinned` lane, and
+// an `empty` lane that selects nothing.
+func pinRepo(t *testing.T) string {
+	t.Helper()
+	root := shardRepo(t)
+	mustWrite(t, filepath.Join(root, ".formwork", "formwork.yaml"),
+		"version: 1\nlanes:\n  ci: {all: true}\n  pinned: {tags: [pinned]}\n  empty: {tags: [nothing-has-this]}\n  some: {tags: [some]}\n")
+	var b strings.Builder
+	b.WriteString("rules:\n")
+	for _, id := range []string{"no-alpha", "no-beta", "no-gamma", "no-delta", "no-epsilon", "no-zeta"} {
+		tags := "[some]"
+		if id == "no-beta" || id == "no-zeta" {
+			tags = "[pinned]"
+		}
+		b.WriteString("  - id: " + id + "\n    type: forbidden-pattern\n    scope: {include: ['**/*.go']}\n    params: {pattern: " +
+			strings.ToUpper(strings.TrimPrefix(id, "no-")) + "}\n    tags: " + tags + "\n")
+	}
+	mustWrite(t, filepath.Join(root, ".formwork", "rules", "r.yaml"), b.String())
+	return root
+}
+
+// TestCheckShardPinRunsTheLaneOnItsShard: with --shard-pin pinned=K every
+// rule the lane selects is in shard K's report, and the N reports still cover
+// the corpus exactly once.
+func TestCheckShardPinRunsTheLaneOnItsShard(t *testing.T) {
+	root := pinRepo(t)
+	all := []string{"no-alpha", "no-beta", "no-delta", "no-epsilon", "no-gamma", "no-zeta"}
+	for n := 2; n <= 3; n++ {
+		for pinK := 1; pinK <= n; pinK++ {
+			var union []string
+			for k := 1; k <= n; k++ {
+				spec := strconv.Itoa(k) + "/" + strconv.Itoa(n)
+				code, out, errOut := runCLI(t, "check", "-C", root, "--lane", "ci", "--shard", spec,
+					"--shard-pin", "pinned="+strconv.Itoa(pinK), "-format", "json")
+				if code != 0 && code != 1 {
+					t.Fatalf("--shard %s --shard-pin pinned=%d: exit = %d\nstderr:\n%s", spec, pinK, code, errOut)
+				}
+				var rep shardReport
+				if err := json.Unmarshal([]byte(out), &rep); err != nil {
+					t.Fatalf("--shard %s: %v\n%s", spec, err, out)
+				}
+				for _, id := range []string{"no-beta", "no-zeta"} {
+					if got := slices.Contains(rep.Scan.Shard.Rules, id); got != (k == pinK) {
+						t.Fatalf("--shard %s --shard-pin pinned=%d: %s in this shard = %v, want %v", spec, pinK, id, got, k == pinK)
+					}
+				}
+				union = append(union, rep.Scan.Shard.Rules...)
+			}
+			slices.Sort(union)
+			if !slices.Equal(union, all) {
+				t.Fatalf("n=%d pin=%d: shards together ran %v, want each of %v exactly once", n, pinK, union, all)
+			}
+		}
+	}
+}
+
+// A pin the run cannot honour is refused, never dropped: a CI job that sets up
+// a toolchain for its pinned rules is only right while they are really there.
+func TestCheckShardPinRefusals(t *testing.T) {
+	root := pinRepo(t)
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no --shard", []string{"--shard-pin", "pinned=1"}, "without --shard"},
+		{"K beyond N", []string{"--shard", "1/2", "--shard-pin", "pinned=3"}, "pinned=3"},
+		{"unknown lane", []string{"--shard", "1/2", "--shard-pin", "nope=1"}, "nope"},
+		{"lane named twice", []string{"--shard", "1/2", "--shard-pin", "pinned=1", "--shard-pin", "pinned=2"}, "twice"},
+		{"lane pins nothing", []string{"--shard", "1/2", "--shard-pin", "empty=1"}, "pins no rule"},
+		{"lane outside the selection", []string{"--lane", "some", "--shard", "1/2", "--shard-pin", "pinned=1"}, "pins no rule"},
+		{"malformed", []string{"--shard", "1/2", "--shard-pin", "pinned"}, "--shard-pin"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, out, errOut := runCLI(t, append([]string{"check", "-C", root}, tc.args...)...)
+			if code != 2 {
+				t.Fatalf("exit = %d, want 2\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+			}
+			if !strings.Contains(errOut, tc.want) {
+				t.Fatalf("the refusal must name %q:\n%s", tc.want, errOut)
+			}
+		})
+	}
+}
+
+// TestCheckShardCapacityReportsCoverTheCorpusOnce: --shard-capacity moves ids
+// between shards, and the N reports still cover the corpus exactly once.
+func TestCheckShardCapacityReportsCoverTheCorpusOnce(t *testing.T) {
+	root := shardRepo(t)
+	hint := filepath.Join(t.TempDir(), "durations.json")
+	mustWrite(t, hint, `{"durations":{"no-alpha":60,"no-beta":50,"no-gamma":40,"no-delta":30,"no-epsilon":20,"no-zeta":10}}`)
+	all := []string{"no-alpha", "no-beta", "no-delta", "no-epsilon", "no-gamma", "no-zeta"}
+	var union []string
+	for k := 1; k <= 3; k++ {
+		spec := strconv.Itoa(k) + "/3"
+		code, out, errOut := runCLI(t, "check", "-C", root, "--lane", "ci", "--shard", spec,
+			"--durations", hint, "--shard-capacity", "4,1,1", "-format", "json")
+		if code != 0 && code != 1 {
+			t.Fatalf("--shard %s --shard-capacity 4,1,1: exit = %d\nstderr:\n%s", spec, code, errOut)
+		}
+		var rep shardReport
+		if err := json.Unmarshal([]byte(out), &rep); err != nil {
+			t.Fatalf("--shard %s: %v\n%s", spec, err, out)
+		}
+		if k == 1 && len(rep.Scan.Shard.Rules) < 3 {
+			t.Fatalf("shard 1 of capacity 4 ran %v; want at least half the measured work", rep.Scan.Shard.Rules)
+		}
+		union = append(union, rep.Scan.Shard.Rules...)
+	}
+	slices.Sort(union)
+	if !slices.Equal(union, all) {
+		t.Fatalf("shards together ran %v, want each of %v exactly once", union, all)
+	}
+}
+
+// A capacity list the run cannot apply the same way in every job is refused.
+func TestCheckShardCapacityRefusals(t *testing.T) {
+	root := shardRepo(t)
+	hint := filepath.Join(t.TempDir(), "durations.json")
+	mustWrite(t, hint, `{"durations":{"no-alpha":60}}`)
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no --shard", []string{"--durations", hint, "--shard-capacity", "2,1"}, "without --shard"},
+		{"no --durations", []string{"--shard", "1/2", "--shard-capacity", "2,1"}, "without --durations"},
+		{"too few", []string{"--shard", "1/3", "--durations", hint, "--shard-capacity", "2,1"}, "lists 2 capacities"},
+		{"too many", []string{"--shard", "1/2", "--durations", hint, "--shard-capacity", "2,1,1"}, "lists 3 capacities"},
+		{"given twice", []string{"--shard", "1/2", "--durations", hint, "--shard-capacity", "2,1", "--shard-capacity", "2,1"}, "twice"},
+		{"malformed", []string{"--shard", "1/2", "--durations", hint, "--shard-capacity", "2;1"}, "--shard-capacity"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, out, errOut := runCLI(t, append([]string{"check", "-C", root}, tc.args...)...)
+			if code != 2 {
+				t.Fatalf("exit = %d, want 2\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+			}
+			if !strings.Contains(errOut, tc.want) {
+				t.Fatalf("the refusal must name %q:\n%s", tc.want, errOut)
+			}
+		})
 	}
 }

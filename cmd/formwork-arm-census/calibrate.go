@@ -50,14 +50,14 @@ var tautologyCalibration = []calibrationCase{
 	{`WithTenantOrg\(`, "", false, "a real token must never be flagged"},
 	{`^CREATE TABLE`, "", false, "an anchored real token must never be flagged"},
 	{`^$`, "", false, "matches only an empty line — restrictive, not tautological"},
-	{`claddinggrouptotals\.(List|Queue)\((?![^()]*,\s*nil\))`, "regexp2", false,
+	{`grouptotals\.(List|Queue)\((?![^()]*,\s*nil\))`, "regexp2", false,
 		"a regexp2 lookaround pattern must never be flagged"},
 }
 
 // witnessCalibration pins isLastWitnessShape on the four shapes the check has
 // to tell apart. The `at-least 2` row is the load-bearing one: an explicit
-// n >= 2 is a STATED cardinality (tqs-package-consumers-tqs-core is at-least 2
-// over 42 witnesses because the invariant IS ">= 2 consumers", #6858), and
+// n >= 2 is a STATED cardinality (a shared-package consumers rule is at-least 2
+// over 42 witnesses because the invariant IS ">= 2 consumers"), and
 // flagging it would fail the build on every legitimate dependency drop — a rule
 // with that false-positive rate gets disabled, which is worse than the vacuity
 // it replaced.
@@ -68,7 +68,7 @@ var witnessCalibration = []struct {
 }{
 	{arm{Type: "required-pattern", Mode: "exists"}, true, "`mode: exists` is the accidental floor of one"},
 	{arm{Type: "pattern-count", Op: "at-least", N: 1}, true, "`at-least 1` is the same floor, spelled"},
-	{arm{Type: "pattern-count", Op: "at-least", N: 2}, false, "an explicit n >= 2 is a STATED cardinality (#6858)"},
+	{arm{Type: "pattern-count", Op: "at-least", N: 2}, false, "an explicit n >= 2 is a STATED cardinality"},
 	{arm{Type: "pattern-count", Op: "at-least", N: 517}, false, "a cured ratchet must not be flagged again"},
 	{arm{Type: "required-pattern", Mode: "every-file"}, false, "every-file is not an existence obligation"},
 	{arm{Type: "forbidden-pattern"}, false, "deleting the subject SATISFIES a forbidden arm"},
@@ -112,12 +112,12 @@ var narrowableCalibration = []struct {
 	{`jobTypesOnly\)`, calibrationDartLine, langDart, false,
 		"closing its own paren is a real terminator"},
 	{`jobTypesOnly`, calibrationDartWrappedLine, langDart, true,
-		"the spelling dart format EMITS — it breaks before the `in`, and reading only the one-line header misses it (#15721)"},
+		"the spelling dart format EMITS — it breaks before the `in`, and reading only the one-line header misses it"},
 	{`range spec\.Sections`, calibrationGoLine, langOther, false,
 		"a line in a language with no suffix narrowing is never a traversal"},
 }
 
-// The three probe lines. Real shapes: the #11934 spec walk, an ordinary token
+// The three probe lines. Real shapes: a spec walk, an ordinary token
 // sharing a line with a loop head, and a Dart job-type surface.
 const (
 	calibrationGoLine     = "\tfor _, sec := range spec.Sections {"
@@ -157,16 +157,16 @@ var embeddedCalibration = []struct {
 		"every witness stands as its own token, so deleting them all fails the arm"},
 	{`ref\.onDispose\(`, []string{"    ref.onDispose(authListenable.dispose);"}, false,
 		"a match ending at `(` is aligned however its neighbour reads — the one-sided test flagged 5 honest arms out of 7"},
-	{`(package:takeoffqs_schema|package:tqs_)`, calibrationImportLines, false,
+	{`(package:example_schema|package:app_)`, calibrationImportLines, false,
 		"an ALTERNATION with one alternative aligned and a DIFFERENT one surviving is two obligations, not one literal doing double duty — and has no cure in this class"},
 }
 
-// Two imports from a real test file. The `package:takeoffqs_schema`
-// alternative stands aligned and the `package:tqs_` alternative survives
-// inside `package:tqs_core` — different text, so nothing an author could bind.
+// Two imports from a real test file. The `package:example_schema`
+// alternative stands aligned and the `package:app_` alternative survives
+// inside `package:app_core` — different text, so nothing an author could bind.
 var calibrationImportLines = []string{
-	"import 'package:tqs_core/testing/stub_dio.dart';",
-	"import 'package:takeoffqs_schema/takeoffqs/api/v1/account_service.pb.dart';",
+	"import 'package:app_core/testing/stub_dio.dart';",
+	"import 'package:example_schema/example/api/v1/account_service.pb.dart';",
 }
 
 // The two branch lines the item-formula arm was measured on, from

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/buildfoundry-nz/formwork/internal/cputime"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"gopkg.in/yaml.v3"
@@ -30,6 +31,7 @@ const (
 )
 
 type required struct {
+	*cputime.Meter
 	re        lineMatcher
 	mode      string
 	when      []lineMatcher // empty: every in-scope file; else ALL must match
@@ -47,24 +49,24 @@ func newRequired(params *yaml.Node) (rules.Checker, error) {
 	if p.Pattern == "" {
 		return nil, errors.New("required-pattern: params.pattern is required")
 	}
-	re, err := compileMatcher("required-pattern", p.Pattern, p.Syntax)
+	c := &required{Meter: new(cputime.Meter), mode: p.Mode, multiline: p.Multiline}
+	re, err := compileMatcher("required-pattern", p.Pattern, p.Syntax, c.Meter)
 	if err != nil {
 		return nil, err
 	}
-	mode := p.Mode
-	if mode == "" {
-		mode = modeEveryFile
+	c.re = re
+	if c.mode == "" {
+		c.mode = modeEveryFile
 	}
-	if mode != modeEveryFile && mode != modeExists {
+	if c.mode != modeEveryFile && c.mode != modeExists {
 		return nil, fmt.Errorf("required-pattern: unknown mode %q (want %q or %q)", p.Mode, modeEveryFile, modeExists)
 	}
-	c := &required{re: re, mode: mode, multiline: p.Multiline}
 	if len(p.When) > 0 {
-		if mode != modeEveryFile {
+		if c.mode != modeEveryFile {
 			return nil, errors.New("required-pattern: when applies to every-file mode")
 		}
 		for _, w := range p.When {
-			m, err := compileMatcher("required-pattern when", w, p.Syntax)
+			m, err := compileMatcher("required-pattern when", w, p.Syntax, c.Meter)
 			if err != nil {
 				return nil, err
 			}

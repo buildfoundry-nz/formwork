@@ -3,7 +3,7 @@
 // gate that reports OK because it has gone blind, not because the invariant
 // holds.
 //
-// Usage: go run -C tools/formwork-subject-census . <repo-root>
+// Usage: go run ./cmd/formwork-subject-census <repo-root>
 //
 // Product enforcement is formwork type:command
 // (.formwork/rules/call-anchor-sees-a-subject.yaml) with origin on this file.
@@ -14,7 +14,7 @@
 //
 // Six formwork rule types select their subject by NAME, skip whatever the name
 // does not match, and then report nothing — so an empty anchor set is
-// indistinguishable from full compliance (#10517, #15714). The ENGINE closes
+// indistinguishable from full compliance. The ENGINE closes
 // three of them: formwork's internal/rules/anchor.go AnchorProbe is wired
 // into go/call-order-in-func, go/per-func-count-relation and
 // dart/method-delegates, and emits a scope-wide verdict when the anchor matches
@@ -24,11 +24,10 @@
 // go/call-confined-to-func-name and go/guard-precedes-call carry NO probe.
 // Verified by execution on develop: renaming `LockSQL` and
 // `InsertOrAdoptActive` in the real tree — an ordinary refactor — left
-// page-metrics-lock-sql-confined, page-metrics-advisory-after-page-row and
-// extraction-dispatch-requires-entitlement reporting OK on a whole-tree run,
-// with rules_matching_no_files: 0 confirming they had scanned and simply seen
-// nothing. The last of those three is the entitlement gate on extraction
-// dispatch, retired in total silence.
+// three such rules reporting OK on a whole-tree run, with
+// rules_matching_no_files: 0 confirming they had scanned and simply seen
+// nothing. One of them was an entitlement gate on job dispatch, retired in
+// total silence.
 //
 // # Why the question is "is there a CALL", not "is there a declaration"
 //

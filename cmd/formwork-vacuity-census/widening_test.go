@@ -14,7 +14,7 @@ import (
 // so it is not an addition and walks through on every future PR.
 //
 // That is not hypothetical for this class. Widening a glob is an ordinary
-// refactor edit — "this moved, broaden the scope" — and #9992's history has four
+// refactor edit — "this moved, broaden the scope" — and the class's history has four
 // instances repaired by MOVING TYPE, which is the same one-line edit in the
 // other direction. A rule can enter vacuity without ever being born.
 //
@@ -242,11 +242,11 @@ func gitOnlyPATH(t *testing.T) string {
 // exportPath must not need a `tar` binary.
 //
 // This repo closed the GNU/BSD CLI-divergence class deliberately: the last four
-// product shells were ported to Go and DELETED (#15103 / #14888), tracked *.sh
+// product shells were ported to Go and DELETED, tracked *.sh
 // is zero, and no-shell-files-anywhere plus tracked-sh-shrink-only hold it shut.
 // A `tar` invocation inside a .go file re-enters that class through a door none
 // of those rules watch, and BSD/GNU tar divergence presents as a macOS-only
-// failure — which is exactly the shape #16179 was reported as.
+// failure — which is exactly the shape the deadlock was reported as.
 //
 // Asserted by REMOVING tar from the environment rather than by grepping the
 // source for it: the test then pins the property (this runs anywhere git runs)

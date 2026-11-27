@@ -46,3 +46,12 @@ func SetRepoIdentityForTest(args []string, parts int) (restore func()) {
 	repoIdentity = identityQuestion{args: args, parts: parts}
 	return func() { repoIdentity = prev }
 }
+
+// SetMaxIndexPathspecsForTest replaces the argv bound past which IgnoredAmong
+// reads the whole index, and returns a function restoring it. The seam exists so
+// the whole-index branch is exercised on a fixture far smaller than the bound.
+func SetMaxIndexPathspecsForTest(n int) (restore func()) {
+	prev := maxIndexPathspecs
+	maxIndexPathspecs = n
+	return func() { maxIndexPathspecs = prev }
+}

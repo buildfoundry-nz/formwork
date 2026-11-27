@@ -1,7 +1,0 @@
-syntax = "proto3";
-
-package palletra.v1;
-
-message PipelineStatusResponse { // want: no-detection-status-route-or-proto
-  string status = 1;
-}

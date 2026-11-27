@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -21,8 +22,10 @@ const checkContentSchemaVersion = 1
 var checkContentLoadGated = loadGated
 
 // checkContentResolveGitIgnore resolves the worktree's gitignore snapshot for a
-// check-content run. A seam so a test can count how often a run asks git.
-var checkContentResolveGitIgnore = meta.ResolveGitIgnore
+// check-content run, for the paths the run will ask about and the directories
+// above them — every key evaluateCheckContent looks up (#126). A seam so a test
+// can count how often a run asks git, and with which paths.
+var checkContentResolveGitIgnore = meta.ResolveGitIgnoreFor
 
 type checkContentCoverage struct {
 	RulesTotal int `json:"rules_total"`
@@ -96,6 +99,7 @@ func runCheckContent(args []string, stdin io.Reader, stdout, stderr io.Writer) i
 	pathFlag := fs.String("path", "", "root-relative file path to evaluate (required with single-file stdin; the path need not exist)")
 	allFindings := fs.Bool("all-findings", false, "return every finding instead of the first three")
 	batch := fs.Bool("batch", false, "read one {path, content} JSON object per stdin line and emit one result per line")
+	server := fs.String("server", "", "directory of resident-server sockets: answer from the server for this root, starting one for the next call when none answers")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -107,21 +111,30 @@ func runCheckContent(args []string, stdin io.Reader, stdout, stderr io.Writer) i
 		}
 		return 2
 	}
+	if *server != "" {
+		input, err := io.ReadAll(stdin)
+		if err != nil {
+			fmt.Fprintln(stderr, "formwork: reading stdin:", err)
+			return 2
+		}
+		if code, ok := checkContentViaResident(*server, *root, *batch, *pathFlag, *allFindings, input, stdout, stderr); ok {
+			return code
+		}
+		stdin = bytes.NewReader(input)
+	}
 	cfg, ok := checkContentLoadGated(*root, stderr)
 	if !ok {
 		return 2
 	}
-	// The gitignore snapshot is the worktree's, not a record's: resolved once
-	// per run and shared by every record a batch carries.
-	gitIgnore := checkContentResolveGitIgnore(cfg, *root)
 	if *batch {
-		return runCheckContentBatch(cfg, gitIgnore, *root, stdin, stdout, stderr, *allFindings)
+		return runCheckContentBatch(cfg, *root, stdin, stdout, stderr, *allFindings)
 	}
 	content, err := io.ReadAll(stdin)
 	if err != nil {
 		fmt.Fprintln(stderr, "formwork: reading stdin:", err)
 		return 2
 	}
+	gitIgnore := checkContentResolveGitIgnore(cfg, *root, normalizedPaths(*root, []string{*pathFlag}))
 	doc, findings, err := evaluateCheckContent(cfg, gitIgnore, *root, *pathFlag, content, *allFindings, started)
 	if err != nil {
 		fmt.Fprintln(stderr, "formwork:", err)
@@ -136,6 +149,21 @@ func runCheckContent(args []string, stdin io.Reader, stdout, stderr io.Writer) i
 		}
 	}
 	return 0
+}
+
+// normalizedPaths is each path in the frame evaluateCheckContent judges it in,
+// which is the frame the gitignore snapshot is keyed by. A path that does not
+// normalize is left out: evaluateCheckContent refuses it with the normalizer's
+// own error before it reads the snapshot.
+func normalizedPaths(root string, paths []string) []string {
+	norm := newQueryNormalizer(root)
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if n, err := norm.normalize(p); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func evaluateCheckContent(cfg *config.Config, gitIgnore meta.GitIgnoreResult, root, path string, content []byte, allFindings bool, started time.Time) (checkContentDocument, []finding.Finding, error) {
@@ -230,9 +258,11 @@ func planCheckContent(rls []*config.Rule, path string, content []byte) (eligible
 			continue
 		}
 		inScope++
+		// scope.min_files is not a reason to defer. The floor is a claim about
+		// how many paths the scope selects, checked by ScopeFloorFindings
+		// outside engine.Run, and one file's content cannot move it: scope is
+		// decided by path. The per-file half is the same check `check` runs.
 		switch {
-		case r.MinFiles() > 0:
-			deferRule(r, "scope_min_files")
 		case len(r.NotDeclaringEntries()) > 0:
 			deferRule(r, "scope_not_declaring")
 		case r.JudgesGenerated():

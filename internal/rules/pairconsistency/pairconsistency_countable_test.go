@@ -16,7 +16,7 @@ import (
 // unit so a second trigger cannot free-ride on a single companion (V18).
 
 const countableSameFuncParams = "trigger: 'projectMetricUnionSQL'\n" +
-	"requires: 'projectreadscope\\.Memo\\('\n" +
+	"requires: 'scopecache\\.Memo\\('\n" +
 	"where: same-func\n" +
 	"obligation: countable\n"
 
@@ -27,7 +27,7 @@ func TestPairConsistencyCountableTwoTriggersOneCompanionFails(t *testing.T) {
 	src := `package p
 
 func load(ctx, tx interface{}) error {
-	return projectreadscope.Memo(ctx, "k", func() error {
+	return scopecache.Memo(ctx, "k", func() error {
 		_ = projectMetricUnionSQL // first
 		_ = projectMetricUnionSQL // second free-rides without a second Memo
 		tx.Query()
@@ -57,11 +57,11 @@ func TestPairConsistencyCountableMatchedCountsPass(t *testing.T) {
 	src := `package p
 
 func load(ctx, tx interface{}) error {
-	_ = projectreadscope.Memo(ctx, "k1", func() error {
+	_ = scopecache.Memo(ctx, "k1", func() error {
 		_ = projectMetricUnionSQL
 		return nil
 	})
-	_ = projectreadscope.Memo(ctx, "k2", func() error {
+	_ = scopecache.Memo(ctx, "k2", func() error {
 		_ = projectMetricUnionSQL
 		return nil
 	})
@@ -84,7 +84,7 @@ func TestPairConsistencyDefaultPresenceStillFreeRides(t *testing.T) {
 	src := `package p
 
 func load(ctx, tx interface{}) error {
-	return projectreadscope.Memo(ctx, "k", func() error {
+	return scopecache.Memo(ctx, "k", func() error {
 		_ = projectMetricUnionSQL
 		_ = projectMetricUnionSQL
 		return nil

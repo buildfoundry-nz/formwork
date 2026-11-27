@@ -1,6 +1,6 @@
 package main
 
-// inventory.go — the live-include-glob registry (#10876, #12398).
+// inventory.go — the live-include-glob registry.
 //
 // EMPTY-GLOB catches a declared glob that matches nothing. It cannot catch a
 // glob that was DELETED: once the line is gone from the rule, the per-glob arm
@@ -11,7 +11,7 @@ package main
 // The registry is the declared-sibling record that makes deletion leave a
 // trace. Rows are keyed by rule (`rule-id<TAB>glob`) inside one packed file —
 // tools/formwork-vacuity-census/live-include-globs.tsv — because one file per
-// rule exploded the tracked tree past 2,000 inventories (#12398). A second
+// rule exploded the tracked tree past 2,000 inventories. A second
 // rule landing adds its own rows and must not rewrite another rule's rows;
 // write-inventory only replaces a rule's block when that rule's live set
 // changed.
@@ -52,7 +52,7 @@ import (
 // that keeps it elsewhere passes --inventory; nothing here assumes a tools/
 // directory exists.
 var (
-	// liveIncludeInventoryRel is the packed live-include registry (#12398).
+	// liveIncludeInventoryRel is the packed live-include registry.
 	liveIncludeInventoryRel = filepath.Join(".formwork", "census", "live-include-globs.tsv")
 
 	// liveIncludeInventoryDirRel is the retired per-rule directory.
@@ -164,7 +164,7 @@ func inventoryVerdicts(gm *globMeasure, inv map[inventoryPair]bool, present, req
 				class:  class1Glob,
 				code:   "MISSING-INVENTORY",
 				gating: true,
-				why: fmt.Sprintf("%s is missing — that packed file is the declared-sibling record that makes live-glob deletion leave a trace (#10876, #12398). Generate it with: go run -C tools/formwork-vacuity-census . --write-inventory <repo-root>",
+				why: fmt.Sprintf("%s is missing — that packed file is the declared-sibling record that makes live-glob deletion leave a trace. Generate it with: go run ./cmd/formwork-vacuity-census --write-inventory <repo-root>",
 					liveIncludeInventoryRel),
 			}}
 		}
@@ -188,7 +188,7 @@ func inventoryVerdicts(gm *globMeasure, inv map[inventoryPair]bool, present, req
 			gating: true,
 			why: fmt.Sprintf("%s lists scope.include glob %q for rule %s but the rule no longer declares it — "+
 				"deletion of a live glob is the gaming move the dead-glob arm cannot see. Restore the glob, or remove this "+
-				"row in the same change (making the coverage loss reviewable) (#10876)", liveIncludeInventoryRel, p.glob, p.ruleID),
+				"row in the same change (making the coverage loss reviewable)", liveIncludeInventoryRel, p.glob, p.ruleID),
 		})
 	}
 
@@ -205,18 +205,18 @@ func inventoryVerdicts(gm *globMeasure, inv map[inventoryPair]bool, present, req
 			code:   "GLOB-UNTRACKED",
 			gating: true,
 			why: fmt.Sprintf("live scope.include glob %q on rule %s is not in %s — add the row (or regenerate with --write-inventory) "+
-				"so future deletion cannot go silent (#10876)", p.glob, p.ruleID, liveIncludeInventoryRel),
+				"so future deletion cannot go silent", p.glob, p.ruleID, liveIncludeInventoryRel),
 		})
 	}
 	return out
 }
 
 const includeRegistryHeader = "" +
-	"# Packed live scope.include inventory (#10876, #12398).\n" +
+	"# Packed live scope.include inventory.\n" +
 	"# One row per live glob: rule-id<TAB>glob. The per-glob vacuity census\n" +
 	"# fails if a row's glob is removed from its rule while still listed here\n" +
 	"# (GLOB-REMOVED). Regenerate:\n" +
-	"#   go run -C tools/formwork-vacuity-census . --write-inventory <repo-root>\n" +
+	"#   go run ./cmd/formwork-vacuity-census --write-inventory <repo-root>\n" +
 	"# Only LIVE globs (match count > 0) are listed; dead declared globs are\n" +
 	"# EMPTY-GLOB's job, and aspirational ones use `# glob-dead: <reason>`.\n"
 

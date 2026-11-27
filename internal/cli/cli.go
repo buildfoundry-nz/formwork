@@ -27,6 +27,7 @@ import (
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/filesize"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/gitdiff"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/goast"
+	_ "github.com/buildfoundry-nz/formwork/internal/rules/gotypes"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/ordering"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/pairconsistency"
 	_ "github.com/buildfoundry-nz/formwork/internal/rules/pattern"
@@ -66,6 +67,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runCheck(args[1:], stdout, stderr)
 	case "check-content":
 		return runCheckContent(args[1:], stdin, stdout, stderr)
+	case "serve":
+		return runServe(args[1:], stdin, stdout, stderr)
 	case "test":
 		return runTest(args[1:], stdout, stderr)
 	case "lint":
@@ -92,7 +95,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "usage: formwork <command> [flags]")
-	fmt.Fprintln(w, "commands: check, check-content, test, lint, scope, hooks, explain, list, rules-for, version")
+	fmt.Fprintln(w, "commands: check, check-content, serve, test, lint, scope, hooks, explain, list, rules-for, version")
 }
 
 // newFlagSet builds a FlagSet for a subcommand with the shared "-C" root
@@ -234,6 +237,16 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	progress := fs.Bool("progress", false, "stream one line per finalizer to stderr as it completes (rule id + cumulative ms) — liveness for long whole-corpus runs; never affects stdout or the verdict")
 	durations := fs.String("durations", "", durationsUsage)
 	shard := fs.String("shard", "", shardUsage)
+	var pins []shardPin
+	fs.Func("shard-pin", shardPinUsage, func(spec string) error {
+		p, err := parseShardPin(spec)
+		if err != nil {
+			return err
+		}
+		pins = append(pins, p)
+		return nil
+	})
+	capacity := shardCapacityFlag(fs)
 	cfg, ok := parseAndLoad(fs, args, root, stderr)
 	if !ok {
 		return 2
@@ -283,6 +296,17 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 	}
+	// A pin is part of the partition, so without --shard there is no
+	// partition for it to shape: a supplied flag that changes nothing is the
+	// shape the guards above refuse.
+	if len(pins) > 0 && !sharded {
+		fmt.Fprintln(stderr, "formwork: --shard-pin places rules on a shard of --shard K/N; without --shard it would change nothing")
+		return 2
+	}
+	if err := checkShardCapacity(*capacity, sharded, *durations != "", *shard, shardN); err != nil {
+		fmt.Fprintln(stderr, "formwork:", err)
+		return 2
+	}
 	// --cost-max and --skip-escapes both narrow by cost and would answer the
 	// same rule two ways; a supplied flag that is silently overridden is the
 	// shape the guards above refuse (#22).
@@ -330,7 +354,12 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	laneCount := len(rls)
 	var shardInfo *report.Shard
 	if sharded {
-		rls = shardRules(rls, prior, shardK, shardN)
+		pinned, err := pinnedHomes(cfg, rls, pins, shardN)
+		if err != nil {
+			fmt.Fprintln(stderr, "formwork:", err)
+			return 2
+		}
+		rls = shardRules(rls, prior, pinned, *capacity, shardK, shardN)
 		shardInfo = &report.Shard{Index: shardK, Count: shardN, Rules: shardedIDs(rls)}
 	}
 	selectedCount := len(rls)
@@ -467,10 +496,10 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		UnfollowedLinks: meta.UnfollowedLinks(fset.Ignored),
 	}
 	summary.Shard = shardInfo
-	// Per-rule wall-clock accounting for whole-tree runs, where a lane can hold
+	// Wall and CPU accounting for whole-tree runs, where a lane can hold
 	// thousands of rules and minutes of silence. File-set modes keep their
-	// 0.6.1 shape (no timing, no progress). Neither reaches stdout or the verdict.
-	timing := map[string]time.Duration{}
+	// 0.6.1 shape (no timing, no progress). Neither reaches a verdict.
+	timing := report.Timing{}
 	onProgress := func(string, time.Duration) {}
 	if *progress {
 		onProgress = func(id string, d time.Duration) {
@@ -606,13 +635,13 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		}
 	} else {
 		summary.RulesMatchingNoFiles = meta.RulesMatchingNoFiles(rls, fset.Files)
-		var runTiming engine.Timing
+		var runTiming engine.Timings
 		findings, runTiming, err = engine.RunTimedHinted(rls, fset, *workers, onProgress, prior)
 		if err != nil {
 			fmt.Fprintln(stderr, "formwork:", err)
 			return 2
 		}
-		timing = map[string]time.Duration(runTiming)
+		timing = report.Timing{Wall: runTiming.Wall, CPU: runTiming.CPU, CPUTotal: runTiming.CPUTotal}
 	}
 	// A rule that ARMED scope.min_files and matched fewer files than it declared
 	// fails the run (#23). This is the arming end of the vacuity RulesMatchingNoFiles

@@ -39,7 +39,7 @@ grammar), and enumerating those exceptions would be a list that itself rots.
 Prose accuracy inside an entry is likewise not mechanically checkable; a
 handful of facts too easy to get wrong are pinned individually.
 
-Counts at the time of writing: **29 rule types, 15 preprocessors.** If your
+Counts at the time of writing: **30 rule types, 15 preprocessors.** If your
 binary reports different numbers, believe your binary and file an issue against
 this document.
 
@@ -249,7 +249,7 @@ are enumerated by the escape-hatch census with their reason.
 
 ## Rule types
 
-29 registered rule types. Parameters below are the strictly-decoded set — an unknown one is
+30 registered rule types. Parameters below are the strictly-decoded set — an unknown one is
 exit 2. Each entry gives what the type asserts, every parameter it decodes, and
 a worked example.
 
@@ -789,30 +789,69 @@ tallies.
     require_used: right
 ```
 
-#### `go/marked-single-home`
-Holds every top-level declaration whose doc comment carries `marker` to one
-declaration across the scope. The marker declares the home; any second func,
-method, type, const or var of the same identity in scope is a finding, marked
-or not. Identity is the kind and name, plus the receiver type for a method, so
-a var named like a marked func is a different declaration. A grouped `const` or
-`var` block's own doc covers none of its specs; mark the spec. A marker that
-documents no top-level declaration is itself a finding. Unmarked duplicates are
-not judged.
-
-It replaces a `pattern-count` rule per name (`'^func offerFor\('`, `n: 1`): a
-new home is one comment at its declaration.
+#### `go/declared-once`
+Holds each listed top-level declaration to one declaration of its identity
+across the scope. Each entry names the file that owns the declaration and its
+identity; any second func, method, type, const or var of that identity in scope
+is a finding that names the owner. Identity is the kind and name, plus the
+receiver type for a method, so a var named like a listed func is a different
+declaration. A listed declaration its file does not declare is itself a
+finding, so the list cannot go stale; a listed file the scope does not hold is
+not judged, so a partial tree such as a fixture can leave it out. Duplicates of
+unlisted names are not judged.
 
 | param | meaning |
 |---|---|
-| `marker` | required: the literal a declaration's doc comment carries |
+| `declarations` | required: the declarations held to one each |
+| `path` | per declaration: the repository path of the file that owns it |
+| `decl` | per declaration: its identity, `func Name`, `method Recv.Name`, `type Name`, `const Name` or `var Name` |
 
 ```yaml
-- id: go-single-homes
-  type: go/marked-single-home
+- id: go-declared-once
+  type: go/declared-once
   scope:
     include: ["internal/**/*.go"]
   params:
-    marker: 'formwork:single-home'
+    declarations:
+      - path: internal/render/render.go
+        decl: func render
+      - path: internal/client/client.go
+        decl: method Client.pump
+```
+
+### Go type analyzers (`internal/rules/gotypes`)
+
+These rules know what a name refers to. They run under `go vet`, with the
+formwork binary itself as the vettool, so the go command builds every
+package's type information and caches the result. formwork vets the packages
+that hold an in-scope file, once per module, keeps only the diagnostics
+positioned in an in-scope file, and needs a `go.mod` above every such file
+inside the root. A package that does not build or type-check is an engine
+error (exit 2), never a clean result. `check-content` defers these rules, as
+it defers every finalizer. Design:
+`docs/specs/2026-11-19-go-types-rule-family-design.md`.
+
+#### `go/forbidden-type-in-position`
+Reports a listed type wherever it is the type of a listed position, resolved
+with `go/types`: written directly, through an alias declared in any package, or
+inferred. `any` is the empty interface by any spelling, including a defined
+type whose underlying type it is; a type parameter is never it, so `[T any]` is
+not a finding. Any other entry in `types` is compared with the type's qualified
+spelling, such as `encoding/json.RawMessage`. Generated files are skipped.
+
+| param | meaning |
+|---|---|
+| `types` | required: the forbidden types |
+| `positions` | required: any of `field`, `param` (variadic included), `result`, `var` (declared or inferred), `elem` (slice, array, pointer and channel elements, at any depth), `map` (keys and values, at any depth), `type-arg` (explicit or inferred) |
+
+```yaml
+- id: no-empty-interface
+  type: go/forbidden-type-in-position
+  scope:
+    include: ["**/*.go"]
+  params:
+    types: [any]
+    positions: [field, param, result, var, elem, map, type-arg]
 ```
 
 ### Dart analyzers (`internal/rules/dartscan`)
@@ -832,28 +871,31 @@ of the body.
     must_call: 'super\.dispose\('
 ```
 
-#### `dart/marked-single-home`
-The Dart form of `go/marked-single-home`. A top-level declaration whose
-`//` or `///` comment run, read upward past any annotations, carries `marker`
-is the one declaration of its identity across the scope. Any second
-declaration of it, marked or not, is a finding that names the home. A
-top-level declaration is a column-0 line outside every string and block
-comment, so members are never counted. Identity is the kind (type,
-function, getter, setter, variable) and the name; a library-private name
-(`_Body`) is also keyed on its file. A marker that reaches no top-level
-declaration is itself a finding.
+#### `dart/declared-once`
+The Dart form of `go/declared-once`. Each listed top-level declaration is the
+one declaration of its identity across the scope; any second declaration of it
+is a finding that names the owner, and a listed declaration its file does not
+declare is a finding too (a listed file the scope does not hold is not
+judged). A top-level declaration is a column-0 line outside
+every string and block comment, so members are never counted. Identity is the
+kind (type, function, getter, setter, variable) and the name; a
+library-private name (`_Body`) is also keyed on its file.
 
 | param | meaning |
 |---|---|
-| `marker` | required: the literal the declaration's comment run carries |
+| `declarations` | required: the declarations held to one each |
+| `path` | per declaration: the repository path of the file that owns it |
+| `decl` | per declaration: its identity, `type Name`, `function Name`, `getter Name`, `setter Name` or `variable Name` |
 
 ```yaml
-- id: dart-single-homes
-  type: dart/marked-single-home
+- id: dart-declared-once
+  type: dart/declared-once
   scope:
     include: ["lib/**/*.dart"]
   params:
-    marker: 'formwork:single-home'
+    declarations:
+      - path: lib/widgets/app_card.dart
+        decl: type AppCard
 ```
 
 #### `dart/ref-after-await`
@@ -980,6 +1022,33 @@ A locking `SELECT` without a deterministic `ORDER BY` is a deadlock shape.
     order_requires_unique_key: true
 ```
 
+`schemas` names SQL schema files in the repository (`pg_dump --schema-only`
+snapshots, say) whose `PRIMARY KEY`, `UNIQUE` constraints and unique indexes
+give every relation its own keys, composite ones included. A column list
+cannot say that `material_id` identifies a row of one table and not of
+another, that `(session_id, row_key)` is one key, or that `org_id` is unique
+only `WHERE site_id IS NULL`; the schemas say all three. With them, a locked
+relation is safe when the statement pins every column of one of its keys to a
+single value, or when every column of a key is either pinned or named by the
+`ORDER BY` (`WHERE project_id = $1 ORDER BY ordinal` is a total order on a
+`(project_id, ordinal)` key). A column is pinned by `col = $1` (or a constant,
+a cast of one, a function of them), by `col IS NULL`, or by a `WHERE` or
+`INNER JOIN` equality to a column of a relation that is itself pinned to one
+row. An index expression built from columns, constants, casts, `COALESCE` and
+function calls is a key column pinned when every column it reads is pinned, so
+`org_id = $1 AND site_id IS NULL` pins `(org_id, COALESCE(site_id, …))`; it
+never counts as an `ORDER BY` witness, and an index on any other expression is
+no key. A partial unique index counts only when the statement repeats its
+predicate. An outer join's condition and anything under a top-level `OR` pin
+nothing. The schemas add to `unique_key_columns`, never replace it. A listed
+file the tree does not hold, or one that does not parse, is exit 2, never an
+empty key set.
+
+```yaml
+  params:
+    schemas: [db/schema.snapshot.sql]
+```
+
 #### `sql/statement-predicate`
 Per-statement assertions scoped to a table. `require` and `forbid` are lists of
 regexes over the statement, and at least one of them is required. A `.go`
@@ -993,6 +1062,15 @@ schema-qualified `app\.projects` works here, and matches any statement
 mentioning it anywhere. `sql/locking-target`'s `table` is a different thing —
 see its entry below.
 
+`prefilter` is optional. With none, every in-scope file is parsed. With one, a
+`.sql` file is read only when its bytes contain that literal. A `.go` file is
+still parsed when its bytes contain the literal, when it composes strings (a
+`+`, a `Sprint`, or a `strings.Builder` / `WriteString`), or when it names a
+SQL template whose body contains the literal. Those template names are learned
+from files that contain the literal, and indexing parses the files that spell
+the names. A syntax error in a skipped file is not this rule's. The literal
+must not change a verdict: `formwork lint` checks that.
+
 ```yaml
 - id: deletes-name-the-tenant
   type: sql/statement-predicate
@@ -1002,6 +1080,7 @@ see its entry below.
     table: '(?i)\bDELETE\s+FROM\s+app\.orders\b'
     require: ['(?i)\bWHERE\b[^;]*\btenant_id\b']
     forbid: ['(?i)\bWHERE\s+true\b']
+    prefilter: app.orders
 ```
 
 #### `sql/locking-target`
@@ -1507,6 +1586,27 @@ unreadable or unparseable report, a report carrying no `durations` object (a
 `human`/`github` report, or one from a `--staged`/`--range` run, which collect
 no timings), or the flag combined with `--staged`/`--range`.
 
+### Cost: wall vs CPU
+
+A whole-tree `check --format json` report measures two different things, both in
+milliseconds. `durations` is wall time and remains the scheduling hint described
+above. `cpu_durations` has exactly the same rule-id keys and is the cost figure:
+each rule's user+system CPU on its evaluation threads, plus the metered
+goroutines and waited-for child processes it started. `cpu_total` is user+system
+CPU for the whole process across the engine run, including waited-for children.
+
+`cpu_total` is at least the sum of `cpu_durations`. The residual is real work no
+single rule owns: background garbage collection, git preflights and git-diff
+children, and `os/exec` output-copy goroutines. Both per-rule CPU and the total
+are lower bounds. In particular, a detached grandchild that the command does not
+wait for is charged
+to neither figure. CPU time is less sensitive to runner contention than wall
+time, not perfectly invariant under every workload.
+
+These fields are observability only: they never change a finding or an exit
+code. Platforms without thread/process CPU clocks omit both CPU fields.
+`--staged` and `--range` reports omit them just as they omit `durations`.
+
 ### Sharding: `--shard K/N`
 
 `check --shard K/N` runs shard K of N of the rules the lane selected, so one
@@ -1537,6 +1637,53 @@ field and is byte-identical to before.
 Refused with exit 2: a spec that is not canonical `K/N` with `1 <= K <= N`
 (`0/4`, `5/4`, `01/4`, an empty value), and a shard the partition leaves empty
 (more shards than selected rule ids).
+
+#### Pinning a lane to one shard: `--shard-pin LANE=K`
+
+Some rules need a toolchain that only one matrix job should pay to install — a
+language SDK, a resolved package workspace. `--shard-pin LANE=K` places every
+selected rule that lane `LANE` selects on shard K, so that job is the only one
+that needs the toolchain:
+
+```sh
+formwork check --lane ci --shard 2/8 --shard-pin dart=1 --durations prior.json -format json > shard-2.json
+```
+
+The pinned ids are placed first and count toward shard K's load; the rest are
+then placed heaviest first exactly as without a pin, so the other shards absorb
+the work the pinned shard is already carrying. The partition is still a pure
+function of its inputs — now (rules, `--durations`, N, pins) — so **every shard
+job must pass the same pins**, and the union of the N shards is still the whole
+selection, each id exactly once. The flag repeats, one pin per lane. The report
+is unchanged: `scan.shard.rules` already names what each shard ran.
+
+Refused with exit 2, never dropped: a pin without `--shard`; a spec that is not
+`LANE=K` with K canonical; K greater than N; an unknown lane, or one lane named
+twice; a lane that selects none of the selected rules (the job that set up for
+them would set up for nothing); and an id two pins place on different shards.
+
+#### Shards of different sizes: `--shard-capacity C1,...,CN`
+
+When the matrix jobs run on runners of different sizes, an even split of the
+measured work leaves the wide runners idle while the narrow ones finish.
+`--shard-capacity` gives each of the N shards a relative capacity, for example
+each job's vCPU:
+
+```sh
+formwork check --lane ci --shard 4/6 --durations prior.json --shard-capacity 8,8,8,4,4,4 -format json > shard-4.json
+```
+
+Each id, heaviest first, goes to the shard where its load plus the id, divided
+by that shard's capacity, is lowest. Ties go to the shard with fewer ids, then
+to the lower index. Pinned ids are placed first and count toward their shard's
+load. Equal capacities give exactly the partition without the flag. The list is
+part of the partition, so **every shard job must pass the same list**. The
+report is unchanged.
+
+Refused with exit 2: the flag without `--shard`; the flag without
+`--durations`, since every load is then zero; a list whose length is not N;
+the flag given twice; and a capacity that is not a canonical positive integer
+up to 1024.
 
 ---
 
@@ -1577,10 +1724,15 @@ current file-local families are:
   constants, and templates.
 
 Every `Finalizer`/`ErrFinalizer` is deferred, including a wrapped finalizer, as
-are whole-tree/cross-file rules, `scope.min_files`, `scope.not_declaring`,
-generated-only scopes, external commands, git-diff, census/credential forms,
-and other tree readers. Unknown checkers default to ineligible. Running only a
-finalizing rule's per-file half would not be its full-check verdict.
+are whole-tree/cross-file rules, `scope.not_declaring`, generated-only
+scopes, external commands, git-diff, census/credential forms, and other tree
+readers. Unknown checkers default to ineligible. Running only a finalizing
+rule's per-file half would not be its full-check verdict.
+
+A `scope.min_files` floor does not defer a rule. The floor counts the paths the
+scope selects and is checked outside the rule's own evaluation, and one file's
+content cannot change which paths a scope selects. The rest of the rule decides
+whether it is eligible, and `check` still reports the floor.
 
 `not_evaluated` gives each applicable but unevaluated rule a stable reason.
 Rules the path scope does not select are counted in `out_of_scope` without
@@ -1590,7 +1742,6 @@ than enumerating the whole corpus:
 | reason | meaning | counted as |
 |---|---|---|
 | `generated_excluded` | declared generated content is outside an ordinary rule's scope | `out_of_scope` |
-| `scope_min_files` | the floor is a repository-corpus assertion | `deferred` |
 | `scope_not_declaring` | holder counting/masking needs tree context | `deferred` |
 | `generated_only_scope` | generated-only evaluation depends on repository proof context | `deferred` |
 | `finalizer` | any finalization phase exists, even behind a wrapper | `deferred` |
@@ -1661,6 +1812,56 @@ later malformed record or engine error cannot leave a partial batch looking
 complete. JSON write errors are exit 2. The aggregate exit is 1 if any record
 has an error-severity finding, 0 otherwise, and 2 for input/config/engine/output
 failure. No batch-wide status replaces each record's `status` and `coverage`.
+
+### Resident server
+
+```sh
+formwork check-content [-C <root>] --server <dir> (--path P | --batch) [--all-findings]
+formwork serve --socket <path> [--idle <duration>] [-C <root>]
+```
+
+A hook that checks one file per edit pays for loading and compiling the whole
+corpus on every call. With `--server <dir>`, `check-content` asks a resident
+server instead. The socket is `<dir>/formwork-<version>-<root hash>.sock`, so
+two engine versions or two roots never share a corpus. When no server answers,
+the call evaluates locally as it would without the flag, and a server is started
+in the background for the next call. Its stdout, stderr and exit code are the
+local ones either way.
+
+`serve --socket` keeps one compiled corpus for `-C <root>`, reloads it on the
+same `.formwork` filesystem events as `serve --mcp`, and answers each connection
+as one `check-content --batch` run. A second server for a socket another holds
+exits 0. The socket is mode 0600, under a directory created 0700. The server
+exits after `--idle` without a request (default 15m) once every answer in flight
+is written. A request whose root or version differs from the server's is
+refused, and the client evaluates locally. The connection protocol between a
+client and the server it started is internal to one engine version and is not
+API.
+
+### MCP `check_file`
+
+```sh
+formwork serve --mcp [-C <root>]
+```
+
+This serves the Model Context Protocol over stdin/stdout using the official MCP
+Go SDK. It exposes one tool, `check_file`, with a required `path` and optional
+`content`. Supplied content is the complete candidate file, including `""`, and
+wins over disk. Omitted content reads the on-disk file after path normalization;
+a missing file is a tool error. Nonregular paths return `not_scanned` without
+following them outside the repository.
+
+The structured result is the same schema-1 document as `check-content`, with all
+findings included. A short text summary accompanies it for clients that do not
+consume structured content. Findings are ordinary tool results; malformed input,
+configuration failures, read failures, and engine failures are tool errors.
+Input is decoded and validated by the SDK. The server deliberately emits no
+output schema and does not serialize a second full JSON copy into text content.
+
+The compiled corpus is reused between calls. Filesystem write, create, remove,
+and rename events under `.formwork` invalidate it; a watcher failure disables
+reuse and every call goes through the strict loader. Thus performance does not
+depend on file mtimes or on retaining stale rules after an edit.
 
 ---
 

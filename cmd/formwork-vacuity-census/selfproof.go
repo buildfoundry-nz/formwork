@@ -15,7 +15,7 @@ import (
 )
 
 // selfProofVerdicts reports the rule whose only in-scope mutable subject is its
-// own detector, and which carries no mutation spec to prove it anyway (#15103).
+// own detector, and which carries no mutation spec to prove it anyway.
 //
 // THE SHAPE. tracked-sh-shrink-only was unprovable by construction and this
 // census said "OK: every rule can fail". Its scope held two globs — `**/*.sh`,
@@ -202,8 +202,8 @@ func linkedGatePackages(r *config.Rule, root string) (map[string]bool, bool) {
 //
 // The `run .` form names a DIRECTORY, and the machinery it pulls in is that
 // package's own files plus the module files beside them — not the whole tree
-// beneath the -C directory. `go -C api-factory run ./internal/cdpdrive/
-// checkwalkmapbounds` compiles one package; reading it as all of api-factory
+// beneath the -C directory. `go -C svc run ./internal/tools/
+// checkwalkmapbounds` compiles one package; reading it as all of svc
 // would sweep every product file the rule guards into "machinery" and silence
 // the arm on precisely the rules it is for.
 func ownMachinery(r *config.Rule, root string) map[string]bool {

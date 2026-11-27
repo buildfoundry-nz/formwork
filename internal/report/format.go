@@ -33,6 +33,14 @@ func ValidFormat(format string) error {
 	return fmt.Errorf("unknown format %q (want human, json, or github)", format)
 }
 
+// Timing carries per-rule wall and CPU durations plus whole-process CPU. Wall
+// feeds --durations scheduling; CPU fields are cost observability only.
+type Timing struct {
+	Wall     map[string]time.Duration
+	CPU      map[string]time.Duration
+	CPUTotal time.Duration
+}
+
 // Render writes findings in the named format (spec §6): "human" (default),
 // "json", or "github". An unknown format is an error (the caller exits 2).
 //
@@ -40,7 +48,7 @@ func ValidFormat(format string) error {
 // that drops it (#151). -format github used to write zero bytes for a run with
 // no findings, which made it the surface where a scan that looked at nothing
 // was most invisible and the surface adopters most often read.
-func Render(format string, w io.Writer, rls []*config.Rule, findings []finding.Finding, scan ScanSummary, timing map[string]time.Duration) error {
+func Render(format string, w io.Writer, rls []*config.Rule, findings []finding.Finding, scan ScanSummary, timing Timing) error {
 	if err := ValidFormat(format); err != nil {
 		return err
 	}
@@ -115,6 +123,17 @@ type jsonReport struct {
 	// never input to a verdict. Omitted when the caller passed nil (callers
 	// that never asked for timing keep their old bytes exactly).
 	Durations map[string]int64 `json:"durations,omitempty"`
+	// CPUDurations is each rule's user+system CPU in milliseconds: thread CPU
+	// on its evaluation windows plus child processes and metered goroutines it
+	// started. Like durations, it is observability and never reaches a finding
+	// or an exit code.
+	CPUDurations map[string]int64 `json:"cpu_durations,omitempty"`
+	// CPUTotal is user+system CPU across the engine run for the process and
+	// waited-for children. It is at least the sum of CPUDurations; the difference
+	// is unattributed runtime work such as GC background marking, vcs git
+	// preflights and os/exec copy goroutines. It is observability and never
+	// reaches a finding or an exit code.
+	CPUTotal int64 `json:"cpu_total,omitempty"`
 }
 
 // JSON emits a stable machine-readable report: the findings and a summary.
@@ -124,9 +143,9 @@ type jsonReport struct {
 // each finding's cure joins from it by rule id (#107), so a nil or
 // filtered rls silently drops declared cures (and skews rules_total/passed).
 //
-// timing (may be nil) renders as the report's durations map; Go marshals map
-// keys sorted, so the output stays deterministic run to run.
-func JSON(w io.Writer, rls []*config.Rule, findings []finding.Finding, scan ScanSummary, timing map[string]time.Duration) {
+// Wall timing renders as durations and CPU timing as cpu_durations/cpu_total;
+// Go marshals map keys sorted, so the output stays deterministic run to run.
+func JSON(w io.Writer, rls []*config.Rule, findings []finding.Finding, scan ScanSummary, timing Timing) {
 	rep := jsonReport{Findings: make([]jsonFinding, 0, len(findings))} // non-nil: empty encodes []
 	cures := curesByRule(rls)
 	for _, f := range findings {
@@ -135,11 +154,20 @@ func JSON(w io.Writer, rls []*config.Rule, findings []finding.Finding, scan Scan
 			Message: f.Message, Cure: cures[f.RuleID],
 		})
 	}
-	if len(timing) > 0 {
-		rep.Durations = make(map[string]int64, len(timing))
-		for id, d := range timing {
+	if len(timing.Wall) > 0 {
+		rep.Durations = make(map[string]int64, len(timing.Wall))
+		for id, d := range timing.Wall {
 			rep.Durations[id] = d.Milliseconds()
 		}
+	}
+	if timing.CPU != nil {
+		if len(timing.CPU) > 0 {
+			rep.CPUDurations = make(map[string]int64, len(timing.CPU))
+			for id, d := range timing.CPU {
+				rep.CPUDurations[id] = d.Milliseconds()
+			}
+		}
+		rep.CPUTotal = timing.CPUTotal.Milliseconds()
 	}
 	rep.Scan = scan.toJSON()
 	rep.Summary = jsonSummary{

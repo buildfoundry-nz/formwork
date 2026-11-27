@@ -1,4 +1,4 @@
-# Ported from TakeoffQS scripts/check-no-unbounded-children-in-virtualized-rows.sh
+# Ported from a downstream repository's scripts/check-no-unbounded-children-in-virtualized-rows.sh
 # (#7487 lockdown).
 #
 # A Dart library file that builds a viewport-virtualized list via

@@ -1,0 +1,22 @@
+# Ported from Sample scripts/check-bom-draft-single-source.sh (#2960) — Rule B.
+# The draft-creation `INSERT INTO sample.boms` is single-sourced: it may appear
+# only in internal/bomdraft/bomdraft.go, which owns the recomputed-totals + draft CTE
+# guarantees. Every other non-test, non-testsupport Go file is banned. The only other
+# boms STOREs are test/seeder ones (*_test.go and //go:build integration
+# testsupport), both carved out, so the ban is exact.
+rules:
+  - id: bom-draft-single-source-insert
+    type: forbidden-pattern
+    severity: error
+    scope:
+      include:
+        - "appcore/**/*.go"
+      exclude:
+        - "appcore/services/core-api/internal/bomdraft/bomdraft.go"
+        - "**/testsupport/**"
+        - "**/*_test.go"
+    preprocess: decomment-go
+    params:
+      pattern: 'INSERT INTO sample\.boms\b'
+    cure: "Call bomdraft.EnsureActiveDraftBom(ctx, tx, projectID, draftedBy) instead of inlining INSERT INTO sample.boms (#2960)."
+    origin: scripts/check-bom-draft-single-source.sh

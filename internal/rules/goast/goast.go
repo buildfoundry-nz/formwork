@@ -22,16 +22,16 @@ import (
 // callInfo is one call expression inside a function body, in source order.
 //
 // selector is the canonical package-base form after import resolution
-// (qs.Redeem → quoteshare.Redeem; bare Redeem under a dot-import of
-// quoteshare → quoteshare.Redeem; a local func-value alias of the same →
-// quoteshare.Redeem). Without resolution, a security count-relation that
-// keys on `quoteshare\.Redeem` is spelling-convention, not a gate.
+// (qs.Redeem → sharelink.Redeem; bare Redeem under a dot-import of
+// sharelink → sharelink.Redeem; a local func-value alias of the same →
+// sharelink.Redeem). Without resolution, a security count-relation that
+// keys on `sharelink\.Redeem` is spelling-convention, not a gate.
 //
 // resultUsed is false when the call is a bare expression statement or its
 // results are all assigned to `_`. A rule that counts a gate call cannot tell
 // a discarded `RequireEnabled(...)` from an enforced one without this bit.
 type callInfo struct {
-	selector   string    // canonical rendered selector, e.g. "quoteshare.Redeem"
+	selector   string    // canonical rendered selector, e.g. "sharelink.Redeem"
 	line       int       // 1-based source line of the call
 	pos        token.Pos // token position, used to order calls deterministically
 	resultUsed bool      // false when every result is discarded
@@ -49,7 +49,7 @@ type funcInfo struct {
 // (the last path segment Go uses as the default name) and records which
 // packages are dot-imported. Built once per file; shared by every func.
 type importBindings struct {
-	// localName → package path base. Covers default imports (quoteshare),
+	// localName → package path base. Covers default imports (sharelink),
 	// aliases (qs), and excludes blank imports.
 	aliasToBase map[string]string
 	// package path bases brought in with `import . "…"`.
@@ -97,7 +97,7 @@ func parseGoWithComments(f *scan.File) (*token.FileSet, *ast.File, bool, error) 
 
 // buildImportBindings reads file.Imports into an alias→base map and a list of
 // dot-imported package bases. The path base is path.Base of the import path
-// (Go's default local name), so `…/internal/quoteshare` binds as "quoteshare"
+// (Go's default local name), so `…/internal/sharelink` binds as "sharelink"
 // regardless of the full module path.
 func buildImportBindings(file *ast.File) importBindings {
 	ib := importBindings{aliasToBase: make(map[string]string, len(file.Imports))}
@@ -164,7 +164,7 @@ func renderSelector(fun ast.Expr, ib importBindings, localFuncs map[string]strin
 
 // collectFuncValues walks body once and records local names bound to a
 // package selector (or to another already-resolved local name) as a func
-// value — `redeemFn := quoteshare.Redeem`, `var f = qs.Redeem`, `f = Redeem`
+// value — `redeemFn := sharelink.Redeem`, `var f = qs.Redeem`, `f = Redeem`
 // under a dot-import. Call sites through those names then render as the
 // underlying canonical selector. Only same-func, direct bindings: no
 // cross-func flow, no returns of func values (documented residual).
@@ -239,8 +239,8 @@ func resultIsUsed(parent ast.Node) bool {
 //
 // Import aliases, a single-package dot-import, and same-func func-value
 // aliases are resolved into the package-base form before a call is recorded,
-// so a rule matching `quoteshare\.Redeem` sees `qs.Redeem` and a bare
-// `Redeem` under `import . "…/quoteshare"` the same way. Each call also
+// so a rule matching `sharelink\.Redeem` sees `qs.Redeem` and a bare
+// `Redeem` under `import . "…/sharelink"` the same way. Each call also
 // records whether its results are used, so a count-relation can refuse to
 // count a discarded gate call as enforcement.
 func extractFuncs(fset *token.FileSet, file *ast.File) []funcInfo {

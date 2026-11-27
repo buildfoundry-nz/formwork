@@ -19,10 +19,10 @@ import (
 func TestJSONCarriesDurations(t *testing.T) {
 	rules := []*config.Rule{{ID: "slow-rule"}, {ID: "fast-rule"}}
 	var with bytes.Buffer
-	report.JSON(&with, rules, nil, report.ScanSummary{}, map[string]time.Duration{
+	report.JSON(&with, rules, nil, report.ScanSummary{}, report.Timing{Wall: map[string]time.Duration{
 		"slow-rule": 1500 * time.Millisecond,
 		"fast-rule": 2 * time.Millisecond,
-	})
+	}})
 	var rep struct {
 		Durations map[string]int64 `json:"durations"`
 	}
@@ -37,7 +37,7 @@ func TestJSONCarriesDurations(t *testing.T) {
 	}
 
 	var without bytes.Buffer
-	report.JSON(&without, rules, nil, report.ScanSummary{}, nil)
+	report.JSON(&without, rules, nil, report.ScanSummary{}, report.Timing{})
 	if strings.Contains(without.String(), `"durations"`) {
 		t.Fatalf("nil timing must omit the key entirely: %s", without.String())
 	}

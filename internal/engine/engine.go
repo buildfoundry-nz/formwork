@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/buildfoundry-nz/formwork/internal/config"
+	"github.com/buildfoundry-nz/formwork/internal/cputime"
 	"github.com/buildfoundry-nz/formwork/internal/declspan"
 	"github.com/buildfoundry-nz/formwork/internal/finding"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
@@ -107,13 +108,24 @@ func earlierVisit(aFile, aRule, bFile, bRule int) bool {
 	return aRule < bRule
 }
 
-// Run evaluates every rule against every in-scope file, then finalizers.
-// workers <= 0 means GOMAXPROCS. Findings come back deterministically sorted.
-// Every finding is a violation: there is no suppression channel.
-// Timing records per-rule total evaluation wall time: phase 1 sums the rule's
-// per-file evaluations, phase 2 adds its finalizer. It is observability, never
-// input to a verdict — no finding, sort order, or exit code reads it.
+// Timing records per-rule evaluation time: phase 1 sums the rule's per-file
+// evaluations, phase 2 adds its finalizer. It is observability, never input to
+// a verdict — no finding, sort order, or exit code reads it.
 type Timing map[string]time.Duration
+
+// Timings carries wall time for scheduling and CPU for cost accounting. CPU is
+// nil and CPUTotal zero on unsupported platforms or when a test disables
+// measurement; otherwise CPU has exactly the keys Wall has.
+type Timings struct {
+	Wall     Timing
+	CPU      Timing
+	CPUTotal time.Duration
+}
+
+var (
+	measureCPU        = cputime.Supported
+	cpuEvaluationHook func()
+)
 
 // Run evaluates every rule against every in-scope file, then finalizers.
 // workers <= 0 means GOMAXPROCS. Findings come back deterministically sorted.
@@ -123,16 +135,16 @@ func Run(rls []*config.Rule, fset *scan.FileSet, workers int) ([]finding.Finding
 	return findings, err
 }
 
-// RunTimed is Run plus per-rule wall-clock accounting, and an optional
+// RunTimed is Run plus per-rule wall and CPU accounting, and an optional
 // completion callback: progress (may be nil) is invoked under the findings
 // mutex as each finalizer finishes, with the rule's ID and its accumulated
-// total — the hook behind `check -progress`. That flag exists because a
+// wall total — the hook behind `check -progress`. That flag exists because a
 // whole-corpus lane can run for minutes with no output (every report format
 // writes at the end), and an operator staring at a silent job cannot tell a
 // slow rule from a hung one. Phase 1 cannot report per-rule completion the
 // same way (a rule is complete only once every file has been visited), so the
-// callback is finalizer-only; Timing covers both phases either way.
-func RunTimed(rls []*config.Rule, fset *scan.FileSet, workers int, progress func(ruleID string, elapsed time.Duration)) ([]finding.Finding, Timing, error) {
+// callback is finalizer-only; Timings covers both phases either way.
+func RunTimed(rls []*config.Rule, fset *scan.FileSet, workers int, progress func(ruleID string, elapsed time.Duration)) ([]finding.Finding, Timings, error) {
 	return RunTimedHinted(rls, fset, workers, progress, nil)
 }
 
@@ -153,8 +165,25 @@ func RunTimed(rls []*config.Rule, fset *scan.FileSet, workers int, progress func
 // phase 1's pools dispatch FILE indices, and a worker evaluates every
 // applicable rule against the file it took, so a rule's position in that inner
 // loop does not decide when it starts.
-func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progress func(ruleID string, elapsed time.Duration), prior Timing) ([]finding.Finding, Timing, error) {
+func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progress func(ruleID string, elapsed time.Duration), prior Timing) ([]finding.Finding, Timings, error) {
 	timing := make(Timing, len(rls))
+	measure := measureCPU
+	var cpuTiming Timing
+	var processStart time.Duration
+	processOK := false
+	if measure {
+		cpuTiming = make(Timing, len(rls))
+		processStart, processOK = cputime.Process()
+	}
+	finish := func() Timings {
+		out := Timings{Wall: timing, CPU: cpuTiming}
+		if processOK {
+			if processEnd, ok := cputime.Process(); ok {
+				out.CPUTotal = processEnd - processStart
+			}
+		}
+		return out
+	}
 	if workers <= 0 {
 		workers = runtime.GOMAXPROCS(0)
 	}
@@ -237,6 +266,16 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 						if gen != nil && !pr.rule.JudgesGenerated() && generated(fi) {
 							continue
 						}
+						if cpuEvaluationHook != nil {
+							cpuEvaluationHook()
+						}
+						t0 := time.Now()
+						var threadStart time.Duration
+						threadOK := false
+						if measure {
+							runtime.LockOSThread()
+							threadStart, threadOK = cputime.Thread()
+						}
 						// scope.not_declaring is the one scope test a path
 						// cannot answer, so it is asked here where the bytes
 						// are: each marker occurrence opens a home
@@ -259,10 +298,21 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 								}
 							}
 						}
-						t0 := time.Now()
 						fds, err := evalFile(pr.rule, f, homes)
+						elapsed := time.Since(t0)
+						var cpuElapsed time.Duration
+						if measure {
+							threadEnd, endOK := cputime.Thread()
+							runtime.UnlockOSThread()
+							if threadOK && endOK {
+								cpuElapsed = threadEnd - threadStart
+							}
+						}
 						mu.Lock()
-						timing[pr.rule.ID] += time.Since(t0)
+						timing[pr.rule.ID] += elapsed
+						if measure {
+							cpuTiming[pr.rule.ID] += cpuElapsed
+						}
 						if err != nil {
 							if firstErr == nil || earlierVisit(fi, pr.idx, firstErrFile, firstErrRule) {
 								firstErr, firstErrFile, firstErrRule = err, fi, pr.idx
@@ -348,7 +398,7 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 		phase1.Wait()
 	}
 	if firstErr != nil {
-		return nil, timing, firstErr
+		return nil, finish(), firstErr
 	}
 
 	// Phase 2: finalizers (cross-file joins plus the command/git-diff escapes).
@@ -402,14 +452,32 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 			err     error
 		)
 		t0 := time.Now()
+		var threadStart time.Duration
+		threadOK := false
+		if measure {
+			runtime.LockOSThread()
+			threadStart, threadOK = cputime.Thread()
+		}
 		switch fin := r.Checker.(type) {
 		case rules.ErrFinalizer:
 			matches, err = finalizeErr(r, fin, rules.FinalizeContext{Root: fset.Root, Repo: fset.Repo, Fixture: fset.Fixture, Changeset: fset.Changeset})
 		case rules.Finalizer:
 			matches, err = finalize(r, fin)
 		}
+		elapsed := time.Since(t0)
+		var cpuElapsed time.Duration
+		if measure {
+			threadEnd, endOK := cputime.Thread()
+			runtime.UnlockOSThread()
+			if threadOK && endOK {
+				cpuElapsed = threadEnd - threadStart
+			}
+		}
 		mu.Lock()
-		timing[r.ID] += time.Since(t0)
+		timing[r.ID] += elapsed
+		if measure {
+			cpuTiming[r.ID] += cpuElapsed
+		}
 		if progress != nil {
 			progress(r.ID, timing[r.ID])
 		}
@@ -502,8 +570,15 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 		go func() { defer finWg.Done(); runPool(boundHeavyIdx, boundW) }()
 	}
 	finWg.Wait()
+	if measure {
+		for _, r := range rls {
+			if _, timed := timing[r.ID]; timed {
+				cpuTiming[r.ID] += rules.OffThreadCPUOf(r.Checker)
+			}
+		}
+	}
 	if finErr != nil {
-		return nil, timing, finErr
+		return nil, finish(), finErr
 	}
 
 	// The not_declaring holder counts, judged on a live tree only: a fixture
@@ -529,7 +604,7 @@ func RunTimedHinted(rls []*config.Rule, fset *scan.FileSet, workers int, progres
 		}
 	}
 	finding.Sort(findings)
-	return findings, timing, nil
+	return findings, finish(), nil
 }
 
 // heavyPoolWidths shares --workers across the analyzer-class pool and the

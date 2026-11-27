@@ -267,7 +267,7 @@ The trivial-but-real check that proves the wiring end to end.
   type: sql/locking-select-order
   severity: error
   scope:
-    include: [freightworks/**/*.go]
+    include: [appcore/**/*.go]
     exclude: ['**/*_test.go']
   params:
     unique_key_columns: [id]         # default ["id"]; the exemption's boundary
@@ -326,6 +326,35 @@ exemption holds iff **all** of:
 - The binding is **conjunctive** — no `OR` reachable from the top of the
   predicate (`BoolExpr` `OR`/`NOT` nesting breaks the exemption).
 
+**Schema keys (`params.schemas`, 2026-11-16).** The heuristic above exists
+because the parser cannot see which columns are unique. When `schemas` names
+SQL schema files in the repository, that fact is no longer out of reach, and a
+selected node is ALSO compliant when every locked relation is either:
+
+- **reduced to one row**: the statement pins every column of one of the
+  relation's keys (its `PRIMARY KEY`, a `UNIQUE` constraint, or a unique index)
+  to a single value. A column is pinned by the equality criterion above, by
+  `col IS NULL`, or by an equality to a column of another relation that is
+  itself reduced to one row, read from `WHERE` and `INNER JOIN` quals only and
+  iterated to a fixpoint; or
+- **totally ordered**: every column of one of its keys is pinned or named by
+  the `ORDER BY`.
+
+A partial unique index is a key only where the statement's conditions repeat
+each conjunct of its predicate. An index expression built from columns,
+constants, casts, `COALESCE` and function calls is a key column pinned when
+every column it reads is pinned; any other expression makes the index no key.
+More than one locked relation is compliant when each one is reduced or ordered:
+the hazard here is siblings visited in two orders, and a relation reduced to one
+row has none. The order BETWEEN relations is a repository's lock-order
+discipline, not this rule's. The schemas are read from the walk, once per run;
+a listed file the walk does not hold, or one that does not parse, is a rule
+error (exit 2), because an empty key set would turn every keyed statement into
+a finding with no word about why. A constant `LIMIT 1` is deliberately NOT
+read as one row. It bounds the rows returned, not the rows `LockRows` tried
+to lock on the way, and this design does not rest a deadlock verdict on what
+the executor does when a recheck fails.
+
 **Unparseable input is not this rule's concern.** A statement that fails to
 parse has no tree to walk, so `sql/locking-select-order` silently skips it — the
 rule ran fine; the input simply was not analyzable (not a rule crash). Surfacing
@@ -376,7 +405,7 @@ notes, which are not part of this repo).
   `ORDER BY` while the same query without `SKIP LOCKED` fires, and `NOWAIT`
   still fires **[#41]**.
 - **Optional end-to-end:** an `examples/` fixture tree exercises the types
-  through `formwork test` if desired (as the `palletra-port-*` examples do).
+  through `formwork test` if desired (as the `sample-corpus-*` examples do).
 - **Self-host:** `make verify` green — test + vet + fmt + `make check` +
   `make selftest` + `make lint` **(d)**.
 
@@ -456,8 +485,8 @@ Constant folding was the extractors' boundary from the start (`stringValue`
 folds a `+` chain of literals), and it stopped at the literal. A query composed
 from a named constant — a shared CTE, a column list, a status predicate kept in
 one place — was a composition neither extractor could read, so `sqltext` judged
-its literal fragments and the parse-tree rules skipped it. Measured on the
-TakeoffQS corpus (buildfoundry-nz/TakeoffQS#24467): of 2,040 SQL compositions in
+its literal fragments and the parse-tree rules skipped it. Measured on
+a downstream corpus (issue #24467): of 2,040 SQL compositions in
 the files its 71 SQL rules govern, 900 were made of nothing but literals and
 constants, 501 from constants of their own package and the rest from constants
 another package of the module exports.
@@ -491,8 +520,8 @@ shrinks by every composition that was constant all along.
 behavior change must not ride across on a refactor", and #75 later listed them
 in the lint census instead. A census line is not a verdict. A statement the
 rule could not read passed `formwork check` unjudged, and a `require` held only
-for SQL that happened to be written readably — on TakeoffQS
-(buildfoundry-nz/TakeoffQS#24467), 1,025 compositions in the files its 71 SQL
+for SQL that happened to be written readably — on a downstream repository
+(issue #24467), 1,025 compositions in the files its 71 SQL
 rules govern after §11.
 
 **Decision.** `sql/parses` and `sql/statement-predicate`, which read only what
@@ -537,7 +566,7 @@ its composition's site when it is a `+` operand.
 
 **Why both ends.** A rule scoped to the package that writes a predicate
 expects to judge it, and judging only at calls would let a store-package rule
-miss every instance built from a route. Measured on TakeoffQS: 41 fewer unread
+miss every instance built from a route. Measured on a downstream repository: 41 fewer unread
 compositions, no new findings, and the index costs one parse of the walk's Go
 files per run.
 

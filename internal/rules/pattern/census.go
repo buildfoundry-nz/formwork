@@ -3,6 +3,7 @@ package pattern
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/rules/command"
@@ -15,9 +16,9 @@ import (
 // promote Cost() and --skip-escapes would drop the rule. CostOf therefore
 // stays fast, which is what keeps the detector at pre-commit.
 //
-// CheckFile, SkipReason, Argv, and TriggerGlobs are forwarded. A when: gate
-// whose CheckFile is not forwarded never sets sawTrigger, and FinalizeErr then
-// returns no finding — a silent pass. Argv and TriggerGlobs are what
+// CheckFile, SkipReason, OffThreadCPU, Argv, and TriggerGlobs are forwarded. A
+// when: gate whose CheckFile is not forwarded never sets sawTrigger, and
+// FinalizeErr then returns no finding — a silent pass. Argv and TriggerGlobs are what
 // formwork lint already asks, so a parent segment and a dead when: stay
 // visible without a second lint check.
 type censusPattern struct {
@@ -75,6 +76,10 @@ func (c *censusPattern) SubjectScoped() bool { return true }
 
 func (c *censusPattern) SkipReason() (string, bool) {
 	return rules.SkipReasonOf(c.inner)
+}
+
+func (c *censusPattern) OffThreadCPU() time.Duration {
+	return rules.OffThreadCPUOf(c.inner)
 }
 
 func (c *censusPattern) Argv() []string {

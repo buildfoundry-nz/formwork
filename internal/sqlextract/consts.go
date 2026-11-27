@@ -67,8 +67,11 @@ type constEnv struct {
 	mods  map[string]*goMod // by module root dir
 	names map[string]string // package name by dir, "" when none
 
-	usesOnce sync.Once
-	uses     map[templateKey]*templateUse // template_index.go
+	usesMu      sync.Mutex
+	uses        map[templateKey]*templateUse // template_index.go
+	usesIndexed map[string]bool
+	usesParsed  map[string]bool
+	nested      []nestedCall
 
 	flowOnce        sync.Once
 	flow            *flowGraph // inert_flow.go, with the tests

@@ -313,10 +313,6 @@ func TestCheckContentDefersTreeDependentFamilies(t *testing.T) {
     type: forbidden-pattern
     scope: {include: ['**']}
     params: {pattern: NEVER}
-  - id: min-files
-    type: forbidden-pattern
-    scope: {include: ['**'], min_files: 1}
-    params: {pattern: TODO}
   - id: not-declaring
     type: forbidden-pattern
     scope:
@@ -369,7 +365,7 @@ func TestCheckContentDefersTreeDependentFamilies(t *testing.T) {
 		t.Fatalf("evaluated = %v, want only plain file-local rule; doc=%+v", doc.EvaluatedRuleIDs, doc)
 	}
 	want := map[string]string{
-		"min-files": "scope_min_files", "not-declaring": "scope_not_declaring",
+		"not-declaring":  "scope_not_declaring",
 		"generated-only": "generated_only_scope", "whole-tree": "finalizer",
 		"census-fast": "finalizer", "credential": "finalizer", "command": "finalizer",
 		"git-diff": "finalizer", "tree-reader": "finalizer",
@@ -383,7 +379,7 @@ func TestCheckContentDefersTreeDependentFamilies(t *testing.T) {
 	if _, present := got["out-of-scope"]; present {
 		t.Errorf("out-of-scope rule must not carry guidance detail: %+v", doc.NotEvaluated)
 	}
-	if doc.Coverage.Deferred != 9 || doc.Coverage.OutOfScope != 1 {
+	if doc.Coverage.Deferred != 8 || doc.Coverage.OutOfScope != 1 {
 		t.Fatalf("deferred/out-of-scope coverage = %+v", doc.Coverage)
 	}
 	if strings.Contains(errOut, "must-not-run") || doc.FindingsTotal != 0 {

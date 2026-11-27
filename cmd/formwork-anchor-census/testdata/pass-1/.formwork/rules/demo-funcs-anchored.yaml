@@ -5,7 +5,7 @@ rules:
   type: go/per-func-count-relation
   severity: error
   scope:
-    include: [api-factory/**/*.go]
+    include: [svc/**/*.go]
   params:
     funcs: ^DetectionTaskName$
     left: \b(time\.Now|rand\.)\b

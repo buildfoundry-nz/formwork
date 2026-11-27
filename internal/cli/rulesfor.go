@@ -120,8 +120,11 @@ func runRulesFor(args []string, stdout, stderr io.Writer) int {
 			externalTools = append(externalTools, r.ID)
 		}
 	}
-	// The walk's third hiding channel (#100): resolved through the same seam
-	// check and lint use, never re-derived. check may degrade softly when git
+	// The walk's third hiding channel (#100): resolved through the meta seam
+	// check and lint use, never re-derived — ResolveGitIgnoreFor, which holds
+	// the records ResolveGitIgnore's walk snapshot holds for the queried paths
+	// and their ancestors, the only keys answered below, without listing the
+	// rest of the tree (#126). check may degrade softly when git
 	// cannot answer — pruning nothing only WIDENS its scan — but a governance
 	// ANSWER that silently dropped a declared prune channel could assert
 	// scanning the enforcing environment never performs, so here unanswerable
@@ -132,7 +135,7 @@ func runRulesFor(args []string, stdout, stderr io.Writer) int {
 	// decidable without git still answers, and only a query whose verdict
 	// depends on the channel refuses (#125 round-3 finding 2; a blanket
 	// refusal dropped glob/builtin answers main gave without touching git).
-	gitIgnore := meta.ResolveGitIgnore(cfg, *root)
+	gitIgnore := meta.ResolveGitIgnoreFor(cfg, *root, normalizedPaths(*root, fs.Args()))
 	norm := newQueryNormalizer(*root)
 	// Pass 1: normalize and classify every argument, collecting the ghost
 	// candidates the whole invocation needs — one check-ignore batch serves
@@ -367,7 +370,7 @@ func gitignoreUnanswerable(stderr io.Writer, err error) int {
 }
 
 // notScannedAnswer renders a hidden verdict as the displayed answer — one
-// construction site for every channel, so the snapshot and ghost frames
+// place that builds every channel, so the snapshot and ghost frames
 // cannot drift apart. Every channel is an EXPLICIT arm: a verdict claiming a
 // channel this switch does not know is an internal error, never a silent
 // fall-through to the builtin-skip wording (#125 review — the next channel

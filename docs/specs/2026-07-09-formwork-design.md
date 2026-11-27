@@ -114,8 +114,8 @@ Go ≥ 1.24 (pin exact toolchain at scaffold time).
 ```
 formwork/
   cmd/formwork/            CLI entry point (subcommands: check, check-content,
-                           test, lint, scope, hooks, explain, list, rules-for,
-                           version;
+                           serve, test, lint, scope, hooks, explain, list,
+                           rules-for, version;
                            init is designed in §10 but deferred — not built,
                            deliberately, until the open-source quickstart
                            arc (#110) decides its shape)
@@ -260,7 +260,7 @@ not affect `formwork scope`.
   origin: scripts/check-single-pool-constructor.sh   # optional traceability
   tags: [go, db]                       # lane/report selectors
   scope:
-    include: ["freightworks/**/*.go"]
+    include: ["appcore/**/*.go"]
     exclude: [go-tests]                # named presets: go-tests, dart-tests,
                                        # generated, vendor; plus raw globs
     min_files: 0                       # optional floor: fail if the scope
@@ -589,8 +589,16 @@ formwork check [--lane <name>] [--staged | --range A..B] [--rules id,…]
    file it took, so a rule's position in that loop does not decide when it
    starts.
 
-   **Across machines, `check --shard K/N` runs one of N shards** (TakeoffQS
-   #25657). One process can only spread a corpus over one machine's cores, and
+   **Whole-tree timing separates scheduling from cost.** Wall `durations` remains
+   the scheduling hint above. On Linux and macOS the engine also reports
+   `cpu_durations`, with the same rule-id keys, and `cpu_total` in JSON. Per-rule
+   CPU covers locked evaluation threads plus goroutines and child processes
+   charged through `internal/cputime`; the process total also exposes
+   unattributed runtime work such as background GC. Both are observability and
+   never reach a verdict. File-set modes collect neither wall nor CPU timings.
+
+   **Across machines, `check --shard K/N` runs one of N shards** (downstream
+   issue #25657). One process can only spread a corpus over one machine's cores, and
    a downstream whole-corpus sweep measured 3–5x per-rule wall inflation from
    its own rules contending there. The shard is chosen after `--lane` and
    before `--skip-escapes`/`--cost-max`, over rule IDS (rules sharing an id
@@ -603,6 +611,12 @@ formwork check [--lane <name>] [--staged | --range A..B] [--rules id,…]
    report names the shard and its ids (`scan.shard`), because a shard's
    report is a part: the ids are what lets a merge of the N parts prove each
    rule ran exactly once. An empty shard is exit 2, like any empty selection.
+   `--shard-pin LANE=K` (downstream issue #26017) places every selected rule a lane
+   selects on shard K before the rest are balanced around that load, so the
+   rules that need a toolchain run in the one job that installs it. The pins
+   join the partition's inputs; a pin that places nothing, names a shard past
+   N, or conflicts with another pin is exit 2 rather than a silent unpinned
+   partition.
 5. **Report + exit**: findings sorted by (rule id, path, line) for
    determinism.
 
@@ -669,7 +683,7 @@ This is a planning mode over the existing engine, not a second evaluator. The
 planner constructs one `scan.NewMemFile`, selects eligible rules, and calls
 `engine.Run` over a singleton `FileSet` with one worker. Preprocessors, finding
 order, cures, and engine errors are therefore the ordinary implementations.
-There is no MCP, daemon, or stored result service.
+The `serve --mcp` transport below reuses this evaluator; it stores no verdicts.
 
 Eligibility is a path-aware `rules.ContentOnly` opt-in, false by default for an
 unknown checker and independent of `cost:`. The planner independently defers
@@ -701,7 +715,7 @@ Totals and error-severity exit status use the untruncated result. `status` is
 `clean`, `findings`, `no_eligible_rules`, or `not_scanned`, and `coverage`
 carries `rules_total`, `in_scope`, `eligible`, `evaluated`, `deferred`, and
 `out_of_scope`; there is deliberately no vacuous `rules_passed`. Not-evaluated
-reasons are `generated_excluded`, `scope_min_files`, `scope_not_declaring`,
+reasons are `generated_excluded`, `scope_not_declaring`,
 `generated_only_scope`, `finalizer`, `whole_tree_invariant`, and
 `content_only_not_supported`. Generated exclusion is a scope exclusion, not a
 deferral. Rules outside the path scope contribute only to `out_of_scope`, and a
@@ -732,6 +746,37 @@ exit 2. Exit 1 means any record has an error-severity finding; otherwise exit 0.
 Lanes and cost classes do not select or filter rules in either single-content
 mode: `ContentOnly` and the independent deferral guards are the only additional
 planning filter.
+
+#### MCP single-file evaluation
+
+`formwork serve --mcp -C <root>` serves the Model Context Protocol over
+stdin/stdout through the official MCP Go SDK. Its `check_file` tool takes a
+required `path` and optional `content`. Supplied content is the complete
+candidate file, including the empty string, and wins over disk. Omitted content
+reads the normalized on-disk file; a missing file is a tool error, and a
+nonregular path produces `not_scanned` without reading through it. The tool
+returns the schema-1 single-content document as structured content with all
+findings, plus a short text summary. Findings are data, not tool errors. Invalid
+input, configuration, path, read, and engine failures are tool errors.
+
+The SDK owns JSON-RPC, input-schema inference and validation, and structured
+content encoding. There is no output schema or duplicate full-document text
+serialization. The resident process reuses its compiled corpus until a
+filesystem write, create, remove, or rename under `.formwork` invalidates it.
+Watcher failure disables reuse, so every subsequent call uses the strict loader
+rather than stale rules. No verdict cache is stored. Warm `check_file` calls on
+the validating target have a p95 target under 300 ms.
+
+#### Resident single-content server
+
+`formwork serve --socket <path> -C <root>` keeps the same resident corpus and
+answers each Unix-socket connection as one `check-content --batch` run, so a
+per-edit hook does not reload the corpus. `check-content --server <dir>` asks
+the server for its root and version and returns exactly what local evaluation
+would; when none answers it evaluates locally and starts one for the next call.
+A second server for a held socket exits; an idle server exits after its last
+answer. A request for another root or version is refused, never answered from
+the wrong corpus.
 
 Performance target: full-tree evaluation of all fast rules on a repo the size
 of the validating target in low single-digit seconds (vs ~30s today), single
@@ -802,7 +847,7 @@ The validating target's synth-test discipline, built into the engine:
   defeated; a total ban and a `funcs`-filter assertion are exempt. Escape rules
   (any cost class other than fast) are `not-judged`: shown, never failed.
   **Fail by default**, decided by the maintainer: a gate that only warns is not
-  read, and the downstream consumer (TakeoffQS) already gates both codes with no
+  read, and a downstream consumer already gates both codes with no
   baseline. A probe that cannot run is exit 2. Kept quirk: a
   `guard-precedes-call` rule with `funcs` runs a second probe with the filter
   defeated. There is no excuse for a vacuous pass fixture: the config has no
@@ -1180,7 +1225,7 @@ skip:
 ```
 
 This exists because the example port corpora are fixture material — a handful of
-source files each, and in `examples/palletra-port-full` none at all — so checks
+source files each, and in `examples/sample-corpus-full` none at all — so checks
 that ask a question about a whole repository report hundreds of "problems" that
 are properties of the corpus rather than of any rule. Over a tree with no source
 files that is not most of the checkable rules but every one of them: the check
@@ -1253,8 +1298,11 @@ all-clear.
   ANCESTOR — the built-in set prunes directories only, so a regular file
   *named* `.git`, the linked-worktree gitdir-pointer shape, is scanned and
   reported governed; a `scan.ignore` glob; a git-ignored path when
-  `scan.gitignore` is declared, resolved through the same
-  `meta.ResolveGitIgnore` seam the walk uses and attributed to the deciding
+  `scan.gitignore` is declared, resolved through the meta seam the walk
+  uses — `meta.ResolveGitIgnoreFor`, which holds exactly the records the
+  walk's `meta.ResolveGitIgnore` snapshot holds for the queried paths and
+  their ancestor directories, the only keys a query looks up, and asks git
+  about those paths alone (`vcs.IgnoredAmong`, #126) — and attributed to the deciding
   `.gitignore` line in the census's `<file>:<line>:<pattern>` shape (#122 —
   a tracked file under an ignored directory keeps its governed answer, git's
   own carve-out; and because that snapshot holds only paths that exist, a
@@ -1333,7 +1381,7 @@ all-clear.
   are unchanged, because an empty scope is legitimate: fixture roots are small,
   and a rule scoped to a path a repo has not created yet is not a defect. That
   an unconditional failure is unaffordable is measurable —
-  `examples/palletra-port-full` carries 704 rules over a tree with **no source
+  `examples/sample-corpus-full` carries 704 rules over a tree with **no source
   files at all**, so all 570 of its non-external-tool rules are vacuous by
   construction — and by construction is the whole of it rather than most of it:
   with no files there is nothing for a scope to discriminate between, so the
@@ -1533,7 +1581,7 @@ mutation-checked against the fix it guards (see `AGENTS.md`):
   path exists, and it has been cited as real before, so treat any reference to
   it as a design name): for each ported rule, run the original
   shell script and the formwork rule against the same fixture trees
-  (adapted from `freightworks/internal/gatetests/`) and diff verdicts.
+  (adapted from `appcore/internal/gatetests/`) and diff verdicts.
   "Full parity" is measured, not asserted.
 
 ## 13. Phased delivery

@@ -1,7 +1,7 @@
 // narrowable.go — the third way a rule ARM can be written so that it cannot
 // fail: a `required-pattern` whose pattern is a PREFIX of its own narrowing.
 //
-// #11934. `defaulttemplates-formula-validate-walks-sections-items` pinned the
+// An arm pinned the
 // literal `range spec\.Sections` over formula_validate.go. That literal is a
 // prefix of every legal way to reduce the collection: `range spec.Sections`
 // still matches `range spec.Sections[:1]`. Measured on develop — narrowing all
@@ -90,8 +90,7 @@ func (l lang) narrowing() string {
 // with `in` is what keeps prose out: Dart has no statement that starts with
 // the `in` keyword, so a leading `in` at the head of a line is a wrapped
 // for-in and nothing else. Reading only the single-line form would catch the
-// shape a fixture author writes and miss the shape the formatter produces
-// (#15721).
+// shape a fixture author writes and miss the shape the formatter produces.
 var (
 	goRangeHead      = regexp.MustCompile(`(^|[^\p{L}\p{Nd}_.\-])range[ \t]+`)
 	dartForInHead    = regexp.MustCompile(`\bfor\s*\(\s*[^;()]*?\s+in\s+`)

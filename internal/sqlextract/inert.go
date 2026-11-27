@@ -3,6 +3,9 @@ package sqlextract
 import (
 	"go/ast"
 	"go/token"
+	"path"
+	"strconv"
+	"strings"
 )
 
 // inert.go — TEXT CONSUMED WHERE IT IS BUILT REACHES NO DRIVER.
@@ -30,6 +33,65 @@ var consumingFuncs = map[string]map[string]bool{
 	"slog":   {"Debug": true, "Info": true, "Warn": true, "Error": true},
 }
 
+// sqlParsers are the PostgreSQL parsers, by import path without a major version. They
+// are known by path, never by the name a file calls them: both are declared package
+// pg_query and are often imported under an alias, so a table keyed by spelling would
+// miss every aliased import and would credit any other package an alias collides with.
+var sqlParsers = map[string]bool{
+	"github.com/pganalyze/pg_query_go": true,
+	"github.com/wasilibs/go-pgquery":   true,
+}
+
+// sqlParserName is what both sqlParsers are called where they are imported plainly.
+const sqlParserName = "pg_query"
+
+// parserConsuming are the parsers' entry points whose result cannot carry their
+// input into a driver. parserTransparent preserve provenance: Parse carries it
+// into the tree, Deparse carries it back into SQL, and the other transforms
+// return statements of their text. Any other parser function is an unknown call.
+var (
+	parserConsuming = map[string]bool{"ParseToJSON": true, "ParsePlPgSqlToJSON": true, "Scan": true,
+		"Fingerprint": true, "FingerprintToUInt64": true, "IsUtilityStmt": true}
+	parserTransparent = map[string]bool{"Parse": true, "Deparse": true, "Normalize": true, "NormalizeUtility": true,
+		"SplitWithParser": true, "SplitWithScanner": true}
+)
+
+// parserCall is the entry point call names when it calls one of sqlParsers under
+// whatever name file imports it by, or "".
+func parserCall(file *ast.File, call *ast.CallExpr) string {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return ""
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	if !ok || pkg.Obj != nil {
+		return "" // a local shadowing the import is no package
+	}
+	for _, is := range file.Imports {
+		ip, err := strconv.Unquote(is.Path.Value)
+		if err != nil || !sqlParsers[withoutMajor(ip)] {
+			continue
+		}
+		local := sqlParserName
+		if is.Name != nil {
+			local = is.Name.Name
+		}
+		if local == pkg.Name {
+			return sel.Sel.Name
+		}
+	}
+	return ""
+}
+
+// withoutMajor is ip without a trailing major-version element such as /v6.
+func withoutMajor(ip string) string {
+	base := path.Base(ip)
+	if len(base) > 1 && base[0] == 'v' && strings.Trim(base[1:], "0123456789") == "" {
+		return path.Dir(ip)
+	}
+	return ip
+}
+
 // messageMethods report a message on whatever they are called on. None is a driver's.
 var messageMethods = map[string]bool{
 	"Errorf": true, "Error": true, "Fatalf": true, "Fatal": true, "Logf": true, "Log": true, "Skipf": true, "Skip": true,
@@ -43,6 +105,9 @@ func inertSpans(file *ast.File) []span {
 	consumed := map[*ast.Object]int{}
 	values := map[*ast.Object]ast.Expr{}
 	writes := map[*ast.Object]int{}
+	parseCalls := map[*ast.CallExpr]bool{}
+	parseResults := map[*ast.CallExpr][]*ast.Object{}
+	parseIgnored := map[*ast.CallExpr]bool{}
 	consume := func(x ast.Expr) {
 		if id, ok := x.(*ast.Ident); ok && id.Obj != nil {
 			consumed[id.Obj]++
@@ -58,7 +123,12 @@ func inertSpans(file *ast.File) []span {
 				consume(v.Y)
 			}
 		case *ast.CallExpr:
-			if !isConsumingCall(v) {
+			entry := parserCall(file, v)
+			if entry == "Parse" {
+				parseCalls[v] = true
+				return true
+			}
+			if !isConsumingCall(v) && !parserConsuming[entry] {
 				return true
 			}
 			for _, a := range v.Args {
@@ -71,9 +141,18 @@ func inertSpans(file *ast.File) []span {
 					continue
 				}
 				writes[id.Obj]++
+				if v.Tok == token.DEFINE && len(v.Rhs) == 1 {
+					if call, ok := v.Rhs[0].(*ast.CallExpr); ok && parserCall(file, call) == "Parse" {
+						parseResults[call] = append(parseResults[call], id.Obj)
+					}
+				}
 				if v.Tok == token.DEFINE && len(v.Lhs) == len(v.Rhs) {
 					values[id.Obj] = v.Rhs[i]
 				}
+			}
+		case *ast.ExprStmt:
+			if call, ok := v.X.(*ast.CallExpr); ok && parserCall(file, call) == "Parse" {
+				parseIgnored[call] = true
 			}
 		case *ast.UnaryExpr:
 			if v.Op == token.AND {
@@ -88,6 +167,24 @@ func inertSpans(file *ast.File) []span {
 		}
 		return true
 	})
+	for call := range parseCalls {
+		results := parseResults[call]
+		safe := parseIgnored[call]
+		if len(results) > 0 {
+			safe = true
+			for _, obj := range results {
+				if writes[obj] != 1 || uses[obj]-1 != consumed[obj] {
+					safe = false
+					break
+				}
+			}
+		}
+		if safe {
+			for _, a := range call.Args {
+				consume(a)
+			}
+		}
+	}
 	for obj, value := range values {
 		// Its uses are the declaration plus the reads; each read must be consumed.
 		if writes[obj] == 1 && consumed[obj] > 0 && uses[obj]-1 == consumed[obj] {

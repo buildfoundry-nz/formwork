@@ -21,7 +21,7 @@ func TestOpenGenericReturnsYAML(t *testing.T) {
 }
 
 func TestOpenUnknownNamesTheRoster(t *testing.T) {
-	_, err := Open("takeoffqs")
+	_, err := Open("not-a-pack")
 	if err == nil {
 		t.Fatal("expected unknown library to fail")
 	}

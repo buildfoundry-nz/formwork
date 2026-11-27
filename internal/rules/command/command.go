@@ -36,6 +36,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/buildfoundry-nz/formwork/internal/cputime"
 	"github.com/buildfoundry-nz/formwork/internal/rules"
 	"github.com/buildfoundry-nz/formwork/internal/scan"
 	"github.com/buildfoundry-nz/formwork/internal/vcs"
@@ -70,6 +71,7 @@ type expectSpec struct {
 }
 
 type command struct {
+	*cputime.Meter
 	cmd          []string
 	whenGlobs    []string // non-nil ⇒ run only if a scanned file matched one
 	expectExit   int
@@ -125,7 +127,7 @@ func newCommand(params *yaml.Node) (rules.Checker, error) {
 	if len(p.Cmd) == 0 {
 		return nil, errors.New("command: params.cmd must be a non-empty argv list")
 	}
-	c := &command{cmd: p.Cmd, expectExit: 0, cost: rules.CostHeavy}
+	c := &command{Meter: new(cputime.Meter), cmd: p.Cmd, expectExit: 0, cost: rules.CostHeavy}
 	if p.Expect.Exit != nil {
 		c.expectExit = *p.Expect.Exit
 	}
@@ -204,7 +206,7 @@ var launchers = map[string]bool{
 }
 
 // shells take a script body after -c, which is the spelling 110 of the 135
-// command rules in examples/palletra-port-full use.
+// command rules in the full example corpus use.
 var shells = map[string]bool{
 	"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true,
 }
@@ -216,7 +218,7 @@ var shells = map[string]bool{
 //
 // IT MATCHES SPELLINGS, NOT argv0, and that is #81's residual. This used to
 // compare argv0 against the literal strings "dart" and "flutter". Measured
-// against examples/palletra-port-full that bound 0 of 135 command rules, and
+// against the full example corpus that bound 0 of 135 command rules, and
 // against the validating target at its pinned SHA 2 of 86 — because 110 of
 // those 135 are `bash -c '...'` and 84 of those 86 are `go run`, so the
 // analyzer, where there is one, is reached THROUGH a wrapper. Five of six real
@@ -247,7 +249,7 @@ var shells = map[string]bool{
 //
 // IT IS DELIBERATELY LEFT OPEN, on two measurements rather than on preference:
 //
-//   - Cost. `formwork check` over examples/palletra-port-full (135 command
+//   - Cost. `formwork check` over the full example corpus (135 command
 //     rules), 6 samples each: 1.81s median with argv detection, 2.72s with
 //     ProcessBound forced true for every command rule — +50%, with no overlap
 //     between the two ranges (max 1.92 < min 2.67). Every non-analyzer rule
@@ -370,7 +372,7 @@ func (c *command) FinalizeErr(ctx rules.FinalizeContext) ([]rules.Match, error) 
 	if c.workDir != "" {
 		cmd.Dir = c.workDir
 	}
-	out, err := cmd.CombinedOutput()
+	out, err := cputime.CombinedOutput(c.Meter, cmd)
 	exit := 0
 	if err != nil {
 		var ee *exec.ExitError
@@ -568,7 +570,7 @@ func snippet(out []byte) string {
 	// 800 bytes keeps the first ~400 of detector output (finding names land
 	// early; the original pure-head budget was 400) plus a ~400-byte cure tail.
 	// Pure-head cut loses the cure; pure-tail cut loses finding names
-	// (lockdown-synth fallout on the asadmin / supplier-collaboration gates).
+	// (seen on gates whose detectors print long finding headers).
 	const max = 800
 	if len(s) <= max {
 		return ": " + s
@@ -630,6 +632,7 @@ func WithCompiledBinary(c rules.Checker, binary string, progArgs []string, workD
 	// replay quietly does not. params.output was lost exactly that way, which
 	// is why compiled_carries_output_test.go pins it.
 	return &command{
+		Meter:                 new(cputime.Meter),
 		cmd:                   append([]string{binary}, progArgs...),
 		whenGlobs:             orig.whenGlobs,
 		expectExit:            orig.expectExit,

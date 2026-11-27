@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A panicked SQL extraction stays a failure for every other rule on that file.**
+  The walk memo used `sync.Once`, which treats a panic as completion and leaves
+  a nil error, so the next rule on the same unchanged file saw no candidates
+  and no error. The panic is still raised for the caller that hit it, and every
+  other caller receives that failure.
+
 ## 0.24.4
 
 ### Changed

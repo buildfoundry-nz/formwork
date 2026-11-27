@@ -71,6 +71,53 @@ func TestWalkExtractionKeepsSourcesPathsAndWalksDistinct(t *testing.T) {
 	if _, _, err := sqlextract.FromGoIn(fs, "one/q.go", []byte("package db\nfunc Q(")); err == nil {
 		t.Fatal("changed invalid source reused a successful extraction")
 	}
+	cands, _, err = sqlextract.FromGoIn(fs, "one/q.go", []byte(source))
+	if err != nil || !hasCandidate(cands, "SELECT id FROM one") {
+		t.Fatalf("canonical after variant: candidates=%+v err=%v", cands, err)
+	}
+}
+
+func TestWalkExtractionKeepsExtractorModesDistinct(t *testing.T) {
+	src := "package db\n\nfunc q(tbl string) string {\n\treturn \"SELECT * FROM \" + tbl + \" WHERE status='x' FOR UPDATE\"\n}\n"
+	reassembled := "SELECT * FROM " + sqlextract.Placeholder + " WHERE status='x' FOR UPDATE"
+	for _, tc := range []struct {
+		name             string
+		firstReassembled bool
+	}{
+		{"constant then reassembled", false},
+		{"reassembled then constant", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := walkTree(t, map[string]string{"q.go": src})
+			f := fs.File("q.go")
+			body, err := f.Content()
+			if err != nil {
+				t.Fatal(err)
+			}
+			first, second := sqlextract.FromGoIn, sqlextract.FromGoReassembledIn
+			if tc.firstReassembled {
+				first, second = second, first
+			}
+			a, _, err := first(fs, f.Path(), body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, _, err := second(fs, f.Path(), body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			constant, reassembledCands := a, b
+			if tc.firstReassembled {
+				constant, reassembledCands = b, a
+			}
+			if !hasCandidate(reassembledCands, reassembled) {
+				t.Fatalf("reassembled lost its candidate: %+v", reassembledCands)
+			}
+			if hasCandidate(constant, reassembled) {
+				t.Fatalf("constant extractor returned the reassembled text: %+v", constant)
+			}
+		})
+	}
 }
 
 func TestWalkExtractionReturnsDetachedCandidatesAndSites(t *testing.T) {

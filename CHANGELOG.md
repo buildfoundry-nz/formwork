@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.24.4
+
 ### Changed
 
 - **SQL rules share extraction of a walk's unchanged Go files.** Each extractor

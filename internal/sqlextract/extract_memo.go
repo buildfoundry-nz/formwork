@@ -2,6 +2,7 @@ package sqlextract
 
 import (
 	"bytes"
+	"fmt"
 	"slices"
 	"sync"
 
@@ -40,6 +41,18 @@ func memoExtraction(tree *scan.FileSet, path string, src []byte, reassembled boo
 	entry := tree.Memo(extractionKey{path, reassembled}, func() any { return &extractionEntry{} }).(*extractionEntry)
 	// FileSet.Memo may race its builder. It only constructs the entry here;
 	// the winner's Once owns the expensive extraction, including any error.
-	entry.once.Do(func() { entry.candidates, entry.sites, entry.err = extract() })
+	// Once treats a panic as completion and would leave a nil error, so the
+	// next rule on this file would see no SQL. The panic is stored and
+	// re-raised for the caller that hit it; every other caller gets the error.
+	entry.once.Do(func() {
+		defer func() {
+			if p := recover(); p != nil {
+				entry.candidates, entry.sites = nil, nil
+				entry.err = fmt.Errorf("extraction panicked: %v", p)
+				panic(p)
+			}
+		}()
+		entry.candidates, entry.sites, entry.err = extract()
+	})
 	return slices.Clone(entry.candidates), slices.Clone(entry.sites), entry.err
 }

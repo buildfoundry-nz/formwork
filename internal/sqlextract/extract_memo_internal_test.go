@@ -2,6 +2,8 @@ package sqlextract
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -69,6 +71,7 @@ func TestMemoExtractionDoesNotRetainVariantOrUnwalkedSources(t *testing.T) {
 		{"no walk", nil, "q.go", src},
 		{"outside walk", fs, "other.go", src},
 		{"unreadable canonical", &scan.FileSet{Files: []*scan.File{new(scan.File)}}, "", src},
+		{"empty unreadable", &scan.FileSet{Files: []*scan.File{new(scan.File)}}, "", nil},
 		{"masked source", fs, "q.go", []byte("package db\n// masked\n")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -86,5 +89,32 @@ func TestMemoExtractionDoesNotRetainVariantOrUnwalkedSources(t *testing.T) {
 				t.Fatalf("retained an unbounded variant source: built %d times, want 2", calls)
 			}
 		})
+	}
+}
+
+func TestMemoExtractionPanicStaysAFailure(t *testing.T) {
+	src := []byte("package db\n")
+	fs := &scan.FileSet{Files: []*scan.File{scan.NewMemFile("q.go", src)}}
+	calls := 0
+	extract := func() ([]Candidate, []Site, error) {
+		calls++
+		panic("distinctive extraction panic")
+	}
+	func() {
+		defer func() {
+			p := recover()
+			if p == nil || !strings.Contains(fmt.Sprint(p), "distinctive extraction panic") {
+				t.Fatalf("first caller lost the panic: %v", p)
+			}
+		}()
+		cands, sites, err := memoExtraction(fs, "q.go", src, false, extract)
+		t.Fatalf("first caller returned candidates=%+v sites=%+v err=%v", cands, sites, err)
+	}()
+	cands, sites, err := memoExtraction(fs, "q.go", src, false, extract)
+	if err == nil || len(cands) != 0 || len(sites) != 0 || !strings.Contains(err.Error(), "distinctive extraction panic") {
+		t.Fatalf("other caller fail-open: candidates=%+v sites=%+v err=%v", cands, sites, err)
+	}
+	if calls != 1 {
+		t.Fatalf("panicked extraction ran %d times, want 1", calls)
 	}
 }

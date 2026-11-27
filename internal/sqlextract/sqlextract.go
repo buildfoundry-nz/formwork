@@ -164,8 +164,10 @@ func FromGo(path string, src []byte) (resolved []Candidate, unresolved []Site, e
 // from tree, the walk path was found by (consts.go). A nil tree reads the
 // file's own constants only.
 func FromGoIn(tree *scan.FileSet, path string, src []byte) ([]Candidate, []Site, error) {
-	return withClosedWorlds(func(pass *closedPass) ([]Candidate, []Site, error) {
-		return fromGoWorld(tree, path, src, pass)
+	return memoExtraction(tree, path, src, false, func() ([]Candidate, []Site, error) {
+		return withClosedWorlds(func(pass *closedPass) ([]Candidate, []Site, error) {
+			return fromGoWorld(tree, path, src, pass)
+		})
 	})
 }
 
@@ -389,8 +391,10 @@ func FromGoReassembled(path string, src []byte) ([]Candidate, []Site, error) {
 // FromGoReassembledIn is FromGoReassembled reading the Go string constants a
 // composition is made of from tree, as FromGoIn does.
 func FromGoReassembledIn(tree *scan.FileSet, path string, src []byte) ([]Candidate, []Site, error) {
-	return withClosedWorlds(func(pass *closedPass) ([]Candidate, []Site, error) {
-		return fromGoReassembledWorld(tree, path, src, pass)
+	return memoExtraction(tree, path, src, true, func() ([]Candidate, []Site, error) {
+		return withClosedWorlds(func(pass *closedPass) ([]Candidate, []Site, error) {
+			return fromGoReassembledWorld(tree, path, src, pass)
+		})
 	})
 }
 

@@ -4,6 +4,11 @@
 
 ### Changed
 
+- **SQL rules share extraction of a walk's unchanged Go files.** Each extractor
+  mode computes a file's candidates and unreadable sites once per walk, including
+  errors. Masked or otherwise changed sources are extracted independently, and
+  returned slices stay isolated between callers.
+
 - **`go/declared-once` and `dart/declared-once` replace the marked types.**
   Each takes `declarations`, a list of `{path, decl}` naming the file that
   owns a declaration and its identity, and holds that identity to one
